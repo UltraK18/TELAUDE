@@ -297,6 +297,13 @@ function queueOrLaunch(
   }
 
   const ready = getOrCreateUp(userId);
+
+  // Prepend interrupt context if previous task was stopped by user
+  if (ready.interrupted) {
+    text = `[The user interrupted the previous task. The tool use was rejected — do not continue or retry it.]\n${text}`;
+    ready.interrupted = false;
+  }
+
   ready.isProcessing = true;
   const resumeId = ready.sessionId ?? undefined;
 

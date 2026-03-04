@@ -31,6 +31,8 @@ export interface UserProcess {
   lastReportText: string | null;
   /** Deferred turn deletion — JSONL cleaned after process exits to avoid race condition */
   pendingTurnDelete: 'heartbeat' | 'cron' | null;
+  /** Set by /stop — stream_end keeps tool message with ❌ instead of deleting */
+  interrupted: boolean;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -63,6 +65,7 @@ export function createUserProcess(
     lastResponseText: null,
     lastReportText: null,
     pendingTurnDelete: null,
+    interrupted: false,
   };
   processes.set(userId, up);
   return up;

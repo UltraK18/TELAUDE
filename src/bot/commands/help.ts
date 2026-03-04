@@ -12,7 +12,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 /projects - Allowed project paths
 
 <b>Sessions</b>
-/session - Current session info
+/stats - Session stats &amp; tokens
 /resume - Resume session
 /new - New session
 /stop - Stop current task
@@ -20,10 +20,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 
 <b>Settings</b>
 /model [name] - View/change model
-/token - Session token usage
-/budget [amount] - View/set budget
-/status - Bot status
-/cost - Total cost`;
+/budget [amount] - View/set budget`;
 
 export async function helpCommand(ctx: Context): Promise<void> {
   await ctx.reply(HELP_TEXT, { parse_mode: 'HTML' });

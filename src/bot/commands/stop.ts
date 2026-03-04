@@ -11,6 +11,6 @@ export async function stopCommand(ctx: Context): Promise<void> {
     return;
   }
 
+  up.interrupted = true;
   killProcess(userId);
-  await ctx.reply('Task stopped.');
 }

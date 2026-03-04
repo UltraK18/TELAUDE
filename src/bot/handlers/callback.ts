@@ -1,9 +1,9 @@
-import { type Context, InlineKeyboard } from 'grammy';
-import { resumeSession, getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
+import { type Context } from 'grammy';
+import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
-import { upsertUserConfig } from '../../db/config-repo.js';
+import { upsertUserConfig, getUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { logger } from '../../utils/logger.js';
@@ -114,9 +114,9 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     return;
   }
 
-  // Session buttons use hash prefix: {hash}:resume:{id} / {hash}:ds:{id}
+  // Session buttons use hash prefix: {hash}:resume:{id} / {hash}:ds:{id} / {hash}:sess:{mode}
   // Reject buttons from previous bot instances
-  if (data.includes(':resume:') || data.includes(':ds:')) {
+  if (data.includes(':resume:') || data.includes(':ds:') || data.includes(':sess:')) {
     const firstColon = data.indexOf(':');
     const hash = data.slice(0, firstColon);
 
@@ -126,7 +126,7 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       return;
     }
 
-    const rest = data.slice(firstColon + 1); // "resume:{id}" or "ds:{id}"
+    const rest = data.slice(firstColon + 1); // "resume:{id}" or "ds:{id}" or "sess:all/dir"
 
     if (rest.startsWith('resume:')) {
       const sessionId = rest.slice(7);
@@ -155,35 +155,45 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       }
 
       await ctx.answerCallbackQuery({ text: 'Session deleted' });
+      await refreshSessionList(ctx, userId, false);
+      return;
+    }
 
-      // Refresh the sessions list in-place
-      const sessions = getRecentSessions(userId, 10);
-      if (sessions.length === 0) {
-        await ctx.editMessageText('No session history.');
-        return;
-      }
-
-      const keyboard = new InlineKeyboard();
-      const lines: string[] = [];
-      for (const s of sessions) {
-        const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
-        const shortId = s.session_id.slice(0, 8);
-        lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
-        keyboard
-          .text(`${active} ${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.session_id}`)
-          .text('\u274C', `${botInstanceHash}:ds:${s.session_id}`)
-          .row();
-      }
-
-      try {
-        await ctx.editMessageText(
-          `<b>Recent Sessions (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume a session.`,
-          { parse_mode: 'HTML', reply_markup: keyboard },
-        );
-      } catch { /* message not modified — ignore */ }
+    // Toggle show all / current dir
+    if (rest === 'sess:all') {
+      await ctx.answerCallbackQuery();
+      await refreshSessionList(ctx, userId, true);
+      return;
+    }
+    if (rest === 'sess:dir') {
+      await ctx.answerCallbackQuery();
+      await refreshSessionList(ctx, userId, false);
       return;
     }
   }
 
   await ctx.answerCallbackQuery();
+}
+
+async function refreshSessionList(ctx: Context, userId: number, showAll: boolean): Promise<void> {
+  const up = getUserProcess(userId);
+  const cfg = getUserConfig(userId);
+  const currentDir = up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+
+  const dirSessions = getRecentSessions(userId, 10, currentDir);
+  const allSessions = getRecentSessions(userId, 10);
+  const hasOtherDirSessions = allSessions.length > dirSessions.length;
+
+  const sessions = showAll ? allSessions : dirSessions;
+  if (sessions.length === 0) {
+    try { await ctx.editMessageText('No session history.'); } catch { /* ignore */ }
+    return;
+  }
+
+  const list = buildSessionList(sessions, showAll, hasOtherDirSessions);
+  if (!list) return;
+
+  try {
+    await ctx.editMessageText(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
+  } catch { /* message not modified — ignore */ }
 }

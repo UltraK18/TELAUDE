@@ -79,17 +79,14 @@ Claude CLI `--output-format stream-json --verbose` 출력은 NDJSON:
 | `/auth <pw>` | 비밀번호 인증 (bcrypt 해시 저장) |
 | `/help` | 명령어 목록 |
 | `/new` | 새 세션 시작 |
-| `/session` | 현재 세션 정보 |
-| `/sessions` | 최근 세션 목록 (인라인 키보드: resume + 삭제) |
-| `/resume [id]` | 세션 이어가기 |
+| `/stats` | 세션 정보 + 토큰 사용량 |
+| `/resume` | 최근 세션 목록 (인라인 키보드: resume + 삭제) |
 | `/clear` | 프로세스 + 세션 완전 초기화 |
 | `/stop` | 현재 처리 중단 |
 | `/cd <path>` | 작업 디렉토리 변경 |
 | `/pwd` | 현재 디렉토리 |
 | `/model <name>` | 모델 변경 |
 | `/budget <usd>` | 예산 설정 |
-| `/status` | 프로세스 상태 |
-| `/cost` | 현재 세션 비용 |
 
 ## File Responsibilities
 

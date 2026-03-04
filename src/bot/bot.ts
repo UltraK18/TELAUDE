@@ -60,14 +60,11 @@ export function createBot(): Bot {
   bot.api.setMyCommands([
     { command: 'new', description: 'New session' },
     { command: 'resume', description: 'Resume session' },
-    { command: 'session', description: 'Current session info' },
+    { command: 'stats', description: 'Session stats & tokens' },
     { command: 'stop', description: 'Stop current task' },
     { command: 'cd', description: 'Change working directory' },
     { command: 'pwd', description: 'Current directory' },
     { command: 'model', description: 'View/change model' },
-    { command: 'status', description: 'Bot status' },
-    { command: 'token', description: 'Session token usage' },
-    { command: 'cost', description: 'Total cost' },
     { command: 'help', description: 'Command list' },
   ]).catch(err => logger.error({ err }, 'Failed to set bot commands'));
 

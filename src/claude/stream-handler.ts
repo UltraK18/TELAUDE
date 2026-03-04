@@ -142,8 +142,23 @@ export class StreamHandler {
 
       parser.on('stream_end', () => {
         this.enqueue(async () => {
-          await this.flushToolLog();
-          await this.deleteToolMessage();
+          if (this.up.interrupted) {
+            // Keep tool message visible with ❌ marker
+            if (this.toolMessageId && this.toolLines.length > 0) {
+              this.toolLines.push('\n❌ Interrupted');
+              this.toolDirty = true;
+              await this.flushToolLog();
+            } else if (!this.toolMessageId && !this.silent) {
+              // No tool message visible — send standalone notice
+              try {
+                await this.api.sendMessage(this.chatId, '❌ Interrupted');
+              } catch { /* ignore */ }
+            }
+            // Don't reset up.interrupted here — message.ts reads it on next send
+          } else {
+            await this.flushToolLog();
+            await this.deleteToolMessage();
+          }
           await this.flushText();
           // isProcessing cleared by exit handler in message.ts (not here)
           this.complete();

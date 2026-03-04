@@ -16,46 +16,13 @@ export function clearSessionsMessage(userId: number) {
   sessionsMessages.delete(userId);
 }
 
-export async function sessionCommand(ctx: Context): Promise<void> {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-
-  const up = getUserProcess(userId);
-  const dbSession = getActiveSession(userId);
-
-  if (!up?.sessionId && !dbSession) {
-    await ctx.reply('No active session. Send a message to start one.');
-    return;
-  }
-
-  const sessionId = up?.sessionId ?? dbSession?.session_id ?? '(none)';
-  const model = up?.model ?? dbSession?.model ?? 'unknown';
-  const dir = up?.workingDir ?? dbSession?.working_dir ?? 'unknown';
-  const cost = dbSession?.total_cost_usd ?? 0;
-  const turns = dbSession?.total_turns ?? 0;
-  const processing = up?.isProcessing ? 'processing' : 'idle';
-
-  await ctx.reply(
-    `<b>Current Session</b>\n` +
-    `Session ID: <code>${sessionId}</code>\n` +
-    `Model: ${model}\n` +
-    `Directory: <code>${dir}</code>\n` +
-    `Cost: $${cost.toFixed(4)}\n` +
-    `Turns: ${turns}\n` +
-    `Status: ${processing}`,
-    { parse_mode: 'HTML' },
-  );
-}
-
-export async function sessionsCommand(ctx: Context): Promise<void> {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-
-  const sessions = getRecentSessions(userId, 10);
-  if (sessions.length === 0) {
-    await ctx.reply('No session history.');
-    return;
-  }
+/** Build session list text + keyboard. Returns null if no sessions. */
+export function buildSessionList(
+  sessions: import('../../db/session-repo.js').SessionRecord[],
+  showAll: boolean,
+  hasOtherDirSessions: boolean,
+): { text: string; keyboard: InlineKeyboard } | null {
+  if (sessions.length === 0) return null;
 
   const keyboard = new InlineKeyboard();
   const lines: string[] = [];
@@ -63,19 +30,56 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   for (const s of sessions) {
     const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
     const shortId = s.session_id.slice(0, 8);
-    lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+    if (showAll) {
+      // Show dir path in all-sessions view
+      const dirName = s.working_dir.split(/[\\/]/).pop() ?? s.working_dir;
+      lines.push(`${active} <code>${shortId}...</code> ${s.model} | ${dirName}`);
+    } else {
+      lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+    }
     keyboard
       .text(`${active} ${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.session_id}`)
       .text('\u274C', `${botInstanceHash}:ds:${s.session_id}`)
       .row();
   }
 
-  const msg = await ctx.reply(
-    `<b>Recent Sessions (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume a session.`,
-    { parse_mode: 'HTML', reply_markup: keyboard },
-  );
+  // Show toggle button
+  if (showAll) {
+    keyboard.text('\uD83D\uDCC2 Current dir only', `${botInstanceHash}:sess:dir`).row();
+  } else if (hasOtherDirSessions) {
+    keyboard.text('\uD83D\uDCCB Show all dirs', `${botInstanceHash}:sess:all`).row();
+  }
 
-  // Track message ID so it can be deleted on resume or next chat
+  const title = showAll ? 'All Sessions' : 'Sessions';
+  const text = `<b>${title} (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume.`;
+  return { text, keyboard };
+}
+
+export async function sessionsCommand(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const up = getUserProcess(userId);
+  const cfg = getUserConfig(userId);
+  const currentDir = up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+
+  const dirSessions = getRecentSessions(userId, 10, currentDir);
+  const allSessions = getRecentSessions(userId, 10);
+  const hasOtherDirSessions = allSessions.length > dirSessions.length;
+
+  // If no sessions in current dir but exist elsewhere, show all
+  const showAll = dirSessions.length === 0 && allSessions.length > 0;
+  const sessions = showAll ? allSessions : dirSessions;
+
+  if (sessions.length === 0) {
+    await ctx.reply('No session history.');
+    return;
+  }
+
+  const list = buildSessionList(sessions, showAll, hasOtherDirSessions);
+  if (!list) return;
+
+  const msg = await ctx.reply(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
   sessionsMessages.set(userId, { messageId: msg.message_id, chatId: ctx.chat!.id });
 }
 

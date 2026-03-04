@@ -44,7 +44,18 @@ export function getActiveSession(userId: number): SessionRecord | undefined {
     .get(userId) as SessionRecord | undefined;
 }
 
-export function getRecentSessions(userId: number, limit = 10): SessionRecord[] {
+export function getRecentSessions(userId: number, limit = 10, workingDir?: string): SessionRecord[] {
+  if (workingDir) {
+    return getDb()
+      .prepare(`
+        SELECT * FROM sessions
+        WHERE telegram_user_id = ? AND working_dir = ?
+        GROUP BY session_id
+        ORDER BY MAX(id) DESC
+        LIMIT ?
+      `)
+      .all(userId, workingDir, limit) as SessionRecord[];
+  }
   return getDb()
     .prepare(`
       SELECT * FROM sessions

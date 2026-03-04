@@ -171,17 +171,7 @@ function launchAndSend(
     return false;
   }
 
-  // Flush any queued messages into the same stdin write
-  const pendingQ = messageQueues.get(userId);
-  let appendText: string | undefined;
-  if (pendingQ && pendingQ.texts.length > 0) {
-    appendText = pendingQ.texts.join('\n\n');
-    pendingQ.texts = [];
-    messageQueues.delete(userId);
-    logger.info({ userId, appendLen: appendText.length }, 'Flushing queued messages into stdin');
-  }
-
-  const sent = sendMessage(up, text, appendText);
+  const sent = sendMessage(up, text);
   if (!sent) {
     if (up.process) {
       try { up.process.kill(); } catch { /* ignore */ }
@@ -311,13 +301,13 @@ function queueOrLaunch(
     ready.interrupted = false;
   }
 
-  // Drain any queued messages (e.g. interrupt context + messages queued during /stop)
+  // Drain any queued messages (e.g. messages queued during /stop)
   const pendingQueue = messageQueues.get(userId);
   if (pendingQueue && pendingQueue.texts.length > 0) {
-    const combined = [...pendingQueue.texts, text].join('\n\n');
+    const queued = pendingQueue.texts.join('\n\n');
     pendingQueue.texts = [];
     messageQueues.delete(userId);
-    text = combined;
+    text = `${text}\n\n[The user sent additional messages while you were working. After completing your current task, address these messages.]\n${queued}\n[End of queued messages]`;
     logger.info({ userId, textLen: text.length }, 'Merged queued messages with new message');
   }
 

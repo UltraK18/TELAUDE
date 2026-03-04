@@ -183,17 +183,13 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   return { process: child, parser };
 }
 
-export function sendMessage(up: UserProcess, text: string, appendText?: string): boolean {
+export function sendMessage(up: UserProcess, text: string): boolean {
   if (!up.process || !up.process.stdin || up.process.stdin.destroyed) {
     return false;
   }
 
   try {
-    if (appendText) {
-      up.process.stdin.write(`${text}\n\n[The user sent additional messages while you were working. After completing your current task, address these messages.]\n${appendText}\n[End of queued messages]`);
-    } else {
-      up.process.stdin.write(text);
-    }
+    up.process.stdin.write(text);
     up.process.stdin.end();
     up.isProcessing = true;
     up.lastActivity = Date.now();

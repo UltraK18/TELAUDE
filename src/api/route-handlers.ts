@@ -251,8 +251,8 @@ export function registerAllRoutes(api: Api): void {
     const userId = body._userId as number;
     const up = getUserProcess(userId);
     if (up) {
-      // Mark that ok was called — silent exit won't send response to Telegram
       up.silentOkCalled = true;
+      up.lastResponseText = null; // Clear any buffered response — ok means nothing to report
     }
     if (up?.sessionId && up?.workingDir) {
       await deleteTurn(up.sessionId, up.workingDir, body.type);

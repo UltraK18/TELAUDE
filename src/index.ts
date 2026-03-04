@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[SCHEDULED TASK] Your text response will be sent to the user as a report. After responding, call cron_ok() to clean up this turn from history. Only skip responding and call cron_ok() directly if there is truly nothing to report.\n${job.message}`;
+    const wrappedMessage = `[SCHEDULED TASK] Respond with your report first, then call cron_ok() as the very last action. Do NOT output text after calling cron_ok(). If truly nothing to report, call cron_ok() directly without responding.\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');

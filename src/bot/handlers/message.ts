@@ -254,7 +254,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
   });
 
   const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
-  const wrappedText = `[SCHEDULED TASK] Your text response will be sent to the user as a report. After responding, call ${okTool} to clean up this turn from history. Only skip responding and call ${okTool} directly if there is truly nothing to report.\n${task.text}`;
+  const wrappedText = `[SCHEDULED TASK] Respond with your report first, then call ${okTool} as the very last action. Do NOT output text after calling ${okTool}. If truly nothing to report, call ${okTool} directly without responding.\n${task.text}`;
   if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');

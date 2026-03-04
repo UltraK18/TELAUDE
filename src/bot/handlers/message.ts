@@ -313,7 +313,15 @@ function queueOrLaunch(
   ready.isProcessing = true;
   const resumeId = ready.sessionId ?? undefined;
 
+  // Show "typing..." indicator while processing
+  api.sendChatAction(chatId, 'typing').catch(() => {});
+  const typingInterval = setInterval(() => {
+    if (!ready.isProcessing) { clearInterval(typingInterval); return; }
+    api.sendChatAction(chatId, 'typing').catch(() => {});
+  }, 4500);
+
   if (!launchAndSend(ready, text, chatId, userId, api, resumeId)) {
+    clearInterval(typingInterval);
     ready.isProcessing = false;
     api.sendMessage(chatId, '\u274C Failed to start Claude CLI. Check your settings.')
       .catch(() => {});

@@ -10,6 +10,8 @@ import { StreamHandler } from '../../claude/stream-handler.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
+import { extractMediaInfo, buildMediaText } from './media-types.js';
+import { MediaGroupCollector } from './media-group-collector.js';
 import { logger } from '../../utils/logger.js';
 
 // Per-user message queue: messages sent while processing are queued
@@ -133,20 +135,19 @@ function launchAndSend(
   return true;
 }
 
-export async function messageHandler(ctx: Context): Promise<void> {
-  const userId = ctx.from?.id;
-  const chatId = ctx.chat?.id;
-  const text = ctx.message?.text;
+/**
+ * Shared: queue text if Claude is processing, otherwise launch new process.
+ * Used by messageHandler, mediaHandler, and MediaGroupCollector callback.
+ */
+function queueOrLaunch(
+  userId: number,
+  chatId: number,
+  text: string,
+  api: Api,
+): void {
+  const currentUp = getUserProcess(userId);
 
-  if (!userId || !chatId || !text) return;
-
-  // Ignore commands (handled by command handlers)
-  if (text.startsWith('/')) return;
-
-  const up = getUserProcess(userId);
-
-  // If processing, queue the message
-  if (up?.isProcessing) {
+  if (currentUp?.isProcessing) {
     let queue = messageQueues.get(userId);
     if (!queue) {
       queue = { chatId, texts: [] };
@@ -157,73 +158,81 @@ export async function messageHandler(ctx: Context): Promise<void> {
     return;
   }
 
-  // Direct send — not processing
   const ready = getOrCreateUp(userId);
   ready.isProcessing = true;
-
   const resumeId = ready.sessionId ?? undefined;
 
-  if (!launchAndSend(ready, text, chatId, userId, ctx.api, resumeId)) {
+  if (!launchAndSend(ready, text, chatId, userId, api, resumeId)) {
     ready.isProcessing = false;
-    await ctx.reply('\u274C Failed to start Claude CLI. Check your settings.');
+    api.sendMessage(chatId, '\u274C Failed to start Claude CLI. Check your settings.')
+      .catch(() => {});
   }
 }
 
-export async function fileHandler(ctx: Context): Promise<void> {
+// Media group collector — batches files with same media_group_id
+const mediaGroupCollector = new MediaGroupCollector(
+  (userId, chatId, text, api) => queueOrLaunch(userId, chatId, text, api),
+);
+
+export async function messageHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
+  const text = ctx.message?.text;
 
+  if (!userId || !chatId || !text) return;
+
+  // Ignore commands (handled by command handlers)
+  if (text.startsWith('/')) return;
+
+  queueOrLaunch(userId, chatId, text, ctx.api);
+}
+
+export async function mediaHandler(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat?.id;
   if (!userId || !chatId) return;
 
-  // Determine file_id and whether it's a photo or document
-  const isPhoto = !!ctx.message?.photo;
-  const fileId = ctx.message?.document?.file_id
-    ?? ctx.message?.photo?.[ctx.message.photo.length - 1]?.file_id;
+  const media = extractMediaInfo(ctx);
+  if (!media) return;
 
-  if (!fileId) return;
-
-  const originalFileName = ctx.message?.document?.file_name;
   const caption = ctx.message?.caption ?? '';
-
+  const mediaGroupId = ctx.message?.media_group_id;
   const up = getOrCreateUp(userId);
 
-  // Download the file
+  // Media group → delegate to collector for batching
+  if (mediaGroupId) {
+    mediaGroupCollector.add(
+      mediaGroupId,
+      {
+        fileId: media.fileId,
+        mediaType: media.mediaType,
+        originalFileName: media.originalFileName,
+      },
+      caption || undefined,
+      userId,
+      chatId,
+      ctx.api,
+      up.workingDir,
+    );
+    return;
+  }
+
+  // Single file → download immediately
   let savedPath: string;
   try {
-    savedPath = await downloadTelegramFile(ctx.api, fileId, up.workingDir, originalFileName);
+    savedPath = await downloadTelegramFile(
+      ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType,
+    );
   } catch (err) {
-    logger.error({ err, userId }, 'Failed to download file');
-    await ctx.reply('\u274C Failed to download file.');
+    logger.error({ err, userId, mediaType: media.mediaType }, 'Failed to download file');
+    await ctx.reply('\u274C 파일 다운로드에 실패했습니다.');
     return;
   }
 
-  // Construct text message for Claude
-  const label = isPhoto ? '사진 수신' : '파일 수신';
-  const text = caption
-    ? `[${label}: ${savedPath}]\n${caption}`
-    : `[${label}: ${savedPath}]`;
+  const text = buildMediaText(
+    [{ mediaType: media.mediaType, savedPath }],
+    caption,
+  );
 
-  // If processing, queue the message
-  const currentUp = getUserProcess(userId);
-  if (currentUp?.isProcessing) {
-    let queue = messageQueues.get(userId);
-    if (!queue) {
-      queue = { chatId, texts: [] };
-      messageQueues.set(userId, queue);
-    }
-    queue.texts.push(text);
-    logger.info({ userId, queueSize: queue.texts.length }, 'File message queued');
-    return;
-  }
-
-  // Direct send
-  const ready = getOrCreateUp(userId);
-  ready.isProcessing = true;
-
-  const resumeId = ready.sessionId ?? undefined;
-
-  if (!launchAndSend(ready, text, chatId, userId, ctx.api, resumeId)) {
-    ready.isProcessing = false;
-    await ctx.reply('\u274C Failed to start Claude CLI. Check your settings.');
-  }
+  queueOrLaunch(userId, chatId, text, ctx.api);
 }

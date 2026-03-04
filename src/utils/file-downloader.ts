@@ -3,12 +3,24 @@ import path from 'path';
 import { writeFile } from 'fs/promises';
 import { config } from '../config.js';
 import { logger } from './logger.js';
+import { type MediaType } from '../bot/handlers/media-types.js';
+
+const DEFAULT_EXTENSIONS: Partial<Record<MediaType, string>> = {
+  photo: '.jpg',
+  voice: '.ogg',
+  audio: '.ogg',
+  video: '.mp4',
+  video_note: '.mp4',
+  sticker: '.webp',
+  animation: '.mp4',
+};
 
 export async function downloadTelegramFile(
   api: Api,
   fileId: string,
   workingDir: string,
   originalFileName?: string,
+  mediaType?: MediaType,
 ): Promise<string> {
   const file = await api.getFile(fileId);
   if (!file.file_path) {
@@ -27,9 +39,15 @@ export async function downloadTelegramFile(
   const buffer = Buffer.from(await response.arrayBuffer());
 
   const timestamp = Date.now();
-  const fileName = originalFileName
-    ? `tg_${timestamp}_${originalFileName}`
-    : `tg_${timestamp}_${path.basename(file.file_path)}`;
+  let fileName: string;
+  if (originalFileName) {
+    fileName = `tg_${timestamp}_${originalFileName}`;
+  } else if (mediaType) {
+    const ext = DEFAULT_EXTENSIONS[mediaType] ?? (path.extname(file.file_path) || '');
+    fileName = `tg_${timestamp}_${mediaType}${ext}`;
+  } else {
+    fileName = `tg_${timestamp}_${path.basename(file.file_path)}`;
+  }
 
   const savePath = path.join(workingDir, fileName);
 

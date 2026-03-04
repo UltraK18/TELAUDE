@@ -192,7 +192,7 @@ async function main(): Promise<void> {
     up.currentMode = 'poke';
 
     const { process: childProc, parser } = spawnClaudeProcess(up, {
-      resumeSessionId: up.sessionId ?? undefined,
+      // No --resume: poke uses recent conversation excerpt in stdin instead of full context
       mode: 'poke',
     });
 

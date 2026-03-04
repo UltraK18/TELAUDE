@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { logger } from '../utils/logger.js';
 import { getLastUserMessageTime, getLastClaudeMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
 
@@ -217,7 +218,7 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
     return;
   }
 
-  const stdin = buildPokeStdin(userId, state.config, state.workingDir, state.lastPokeTime);
+  const stdin = buildPokeStdin(userId, state.config, state.workingDir, state.lastPokeTime, state.sessionId);
 
   try {
     state.count++;
@@ -381,7 +382,71 @@ function estimateUserState(userId: number, timezone: string, tracks: string[]): 
   return 'unknown';
 }
 
-function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, lastPokeTime: number | null): string {
+function getRecentConversation(sessionId: string | null, workingDir: string, maxTurns = 10): string {
+  if (!sessionId) return '';
+
+  // Find session JSONL: ~/.claude/projects/{encoded-path}/{sessionId}.jsonl
+  const homeDir = os.homedir();
+  const encoded = workingDir.replace(/[:\\\/\s]/g, '-').replace(/^-+/, '');
+  const projectDir = path.join(homeDir, '.claude', 'projects', encoded);
+  const jsonlPath = path.join(projectDir, `${sessionId}.jsonl`);
+
+  if (!fs.existsSync(jsonlPath)) {
+    // Try finding by listing directory
+    try {
+      const dirs = fs.readdirSync(path.join(homeDir, '.claude', 'projects'));
+      const match = dirs.find(d => fs.existsSync(path.join(homeDir, '.claude', 'projects', d, `${sessionId}.jsonl`)));
+      if (!match) return '';
+      return readJsonlTurns(path.join(homeDir, '.claude', 'projects', match, `${sessionId}.jsonl`), maxTurns);
+    } catch {
+      return '';
+    }
+  }
+
+  return readJsonlTurns(jsonlPath, maxTurns);
+}
+
+function readJsonlTurns(filePath: string, maxTurns: number): string {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.trim().split('\n');
+
+    // Extract user/assistant text messages from the end
+    const turns: string[] = [];
+    for (let i = lines.length - 1; i >= 0 && turns.length < maxTurns; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        if (entry.type !== 'user' && entry.type !== 'assistant') continue;
+        const role = entry.message?.role;
+        const contentArr = entry.message?.content;
+        if (!role || !contentArr) continue;
+
+        let text = '';
+        if (typeof contentArr === 'string') {
+          text = contentArr;
+        } else if (Array.isArray(contentArr)) {
+          text = contentArr
+            .filter((c: { type: string; text?: string }) => c.type === 'text' && c.text)
+            .map((c: { text: string }) => c.text)
+            .join('\n');
+        }
+
+        if (text.trim()) {
+          const label = role === 'user' ? '유저' : '나';
+          // Truncate long messages
+          const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
+          turns.unshift(`${label}: ${truncated}`);
+        }
+      } catch { /* skip malformed lines */ }
+    }
+
+    return turns.length > 0 ? `\n최근 대화:\n${turns.join('\n')}` : '';
+  } catch {
+    return '';
+  }
+}
+
+function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, lastPokeTime: number | null, sessionId: string | null): string {
   const tz = config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const timeStr = now.toLocaleString('en-US', {
@@ -411,11 +476,13 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     }
   }
 
+  const recentChat = getRecentConversation(sessionId, workingDir);
+
   return `<thinking>
 ${timeStr}. 내가 메시지를 보낸 뒤로 ${myElapsed}가 지났다.${lastPokeElapsed ? ` ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 답장이 없다.'}
 지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
 
-${config.body}${contextContent}
+${config.body}${contextContent}${recentChat}
 </thinking>`;
 }
 

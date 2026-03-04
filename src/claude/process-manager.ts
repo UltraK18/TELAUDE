@@ -183,13 +183,13 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   return { process: child, parser };
 }
 
-export function sendMessage(up: UserProcess, text: string): boolean {
+export function sendMessage(up: UserProcess, text: string, appendText?: string): boolean {
   if (!up.process || !up.process.stdin || up.process.stdin.destroyed) {
     return false;
   }
 
   try {
-    up.process.stdin.write(text);
+    up.process.stdin.write(appendText ? `${text}\n\n${appendText}` : text);
     up.process.stdin.end();
     up.isProcessing = true;
     up.lastActivity = Date.now();

@@ -184,7 +184,17 @@ function launchAndSend(
     return false;
   }
 
-  const sent = sendMessage(up, text);
+  // Flush any queued messages into the same stdin write
+  const pendingQ = messageQueues.get(userId);
+  let appendText: string | undefined;
+  if (pendingQ && pendingQ.texts.length > 0) {
+    appendText = pendingQ.texts.join('\n\n');
+    pendingQ.texts = [];
+    messageQueues.delete(userId);
+    logger.info({ userId, appendLen: appendText.length }, 'Flushing queued messages into stdin');
+  }
+
+  const sent = sendMessage(up, text, appendText);
   if (!sent) {
     if (up.process) {
       try { up.process.kill(); } catch { /* ignore */ }

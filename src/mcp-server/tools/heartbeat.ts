@@ -34,12 +34,12 @@ export function registerHeartbeatTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_ok',
-    'Report that the cron job found nothing to report. This turn will be deleted from conversation history to save context.',
+    'schedule_ok',
+    'Report that the scheduled job found nothing to report. This turn will be deleted from conversation history to save context.',
     {},
     async () => {
       await mcpPost('/mcp/turn-delete', { type: 'cron' });
-      return { content: [{ type: 'text', text: 'Cron OK — turn will be cleaned up' }] };
+      return { content: [{ type: 'text', text: 'Schedule OK — turn will be cleaned up' }] };
     }
   );
 }

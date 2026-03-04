@@ -4,8 +4,8 @@ import { mcpPost } from '../http-client.js';
 
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
-    'cron_add',
-    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call cron_ok() only if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
+    'schedule_add',
+    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call schedule_ok() only if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
     {
       name: z.string().describe('Job name'),
       schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),
@@ -38,7 +38,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_list',
+    'schedule_list',
     'List all scheduled jobs',
     {
       currentWorkingDir: z.string().optional().describe('Filter jobs by working directory'),
@@ -57,7 +57,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_update',
+    'schedule_update',
     'Update an existing scheduled job',
     {
       jobId: z.string().describe('Job ID to update'),
@@ -74,7 +74,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_remove',
+    'schedule_remove',
     'Delete a scheduled job',
     { jobId: z.string().describe('Job ID to delete') },
     async ({ jobId }) => {
@@ -84,7 +84,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_pause',
+    'schedule_pause',
     'Pause a scheduled job (will not trigger until resumed)',
     { jobId: z.string().describe('Job ID to pause') },
     async ({ jobId }) => {
@@ -94,7 +94,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_resume',
+    'schedule_resume',
     'Resume a paused scheduled job',
     { jobId: z.string().describe('Job ID to resume') },
     async ({ jobId }) => {
@@ -104,7 +104,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_history',
+    'schedule_history',
     'View execution history for a scheduled job',
     { jobId: z.string().describe('Job ID') },
     async ({ jobId }) => {
@@ -121,17 +121,7 @@ export function registerSchedulingTools(server: McpServer): void {
   );
 
   server.tool(
-    'cron_next',
-    'Check when a scheduled job will next execute',
-    { jobId: z.string().describe('Job ID') },
-    async ({ jobId }) => {
-      const result = await mcpPost('/mcp/cron/next', { jobId });
-      return { content: [{ type: 'text', text: `Next execution: ${result.next ?? 'unknown'}` }] };
-    }
-  );
-
-  server.tool(
-    'cron_completed',
+    'schedule_completed',
     'View past completed/executed jobs (including one-time jobs that were auto-deleted)',
     {},
     async () => {

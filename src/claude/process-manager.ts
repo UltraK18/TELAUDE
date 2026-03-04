@@ -1,5 +1,6 @@
 import { spawn, ChildProcess } from 'child_process';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -70,12 +71,18 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   }
 
   // MCP config for telaude tools
-  const mcpServerPath = path.resolve(__dirname, '..', 'mcp-server', 'index.js');
+  // Detect dev (tsx → src/) vs prod (node → dist/) and pick correct MCP entry
+  const jsPath = path.resolve(__dirname, '..', 'mcp-server', 'index.js');
+  const tsPath = jsPath.replace(/\.js$/, '.ts');
+  const useTs = !fs.existsSync(jsPath) && fs.existsSync(tsPath);
+  const mcpCommand = useTs ? 'npx' : 'node';
+  const mcpArgs = useTs ? ['tsx', tsPath] : [jsPath];
+
   const mcpConfig = {
     mcpServers: {
       telaude: {
-        command: 'node',
-        args: [mcpServerPath],
+        command: mcpCommand,
+        args: mcpArgs,
         env: {
           TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
           TELAUDE_API_TOKEN: getApiToken(),

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
-import { getLastUserMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
+import { getLastUserMessageTime, getLastClaudeMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
 
 // --- Types ---
 
@@ -361,9 +361,9 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     ? estimateUserState(userId, tz, config.track)
     : 'unknown';
 
-  const lastMsg = getLastUserMessageTime(userId);
-  const elapsed = lastMsg
-    ? formatElapsed(Date.now() - new Date(lastMsg + 'Z').getTime())
+  const lastClaudeMsg = getLastClaudeMessageTime(userId);
+  const myElapsed = lastClaudeMsg
+    ? formatElapsed(Date.now() - new Date(lastClaudeMsg + 'Z').getTime())
     : 'unknown';
 
   const lastPokeElapsed = lastPokeTime
@@ -374,12 +374,12 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
   if (config.context) {
     contextContent = resolveContextFile(workingDir, config.context);
     if (contextContent) {
-      contextContent = `\n\n<context>\n${contextContent}\n</context>`;
+      contextContent = `\n\n${contextContent}`;
     }
   }
 
   return `<thinking>
-${timeStr}. 유저의 마지막 메시지가 ${elapsed} 전이다.${lastPokeElapsed ? ` 내가 ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 내가 보낸 메시지가 마지막 메시지다.'}
+${timeStr}. 내가 메시지를 보낸 뒤로 ${myElapsed}가 지났다.${lastPokeElapsed ? ` ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 답장이 없다.'}
 지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
 
 ${config.body}${contextContent}

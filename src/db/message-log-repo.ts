@@ -13,6 +13,13 @@ export function getLastUserMessageTime(userId: number): string | null {
   return row?.timestamp ?? null;
 }
 
+export function getLastClaudeMessageTime(userId: number): string | null {
+  const row = getDb()
+    .prepare("SELECT timestamp FROM message_logs WHERE user_id = ? AND direction = 'claude' ORDER BY id DESC LIMIT 1")
+    .get(userId) as { timestamp: string } | undefined;
+  return row?.timestamp ?? null;
+}
+
 /**
  * Get hourly message distribution for pattern analysis.
  * Returns array of { hour: 0-23, count: number } for the given number of days.

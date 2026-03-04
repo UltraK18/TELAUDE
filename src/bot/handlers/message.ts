@@ -151,19 +151,6 @@ function launchAndSend(
           }
           up.interrupted = false;
           up.isProcessing = false;
-        } else if (queue && queue.texts.length > 0) {
-          // Keep isProcessing = true, process next batch
-          const combined = queue.texts.join('\n\n');
-          queue.texts = [];
-          messageQueues.delete(userId);
-          logger.info({ userId, textLen: combined.length }, 'Processing queued messages');
-
-          const nextResume = up.sessionId ?? undefined;
-          if (launchAndSend(up, combined, chatId, userId, api, nextResume)) {
-            // launched ok
-          } else {
-            up.isProcessing = false;
-          }
         } else {
           messageQueues.delete(userId);
           up.isProcessing = false;

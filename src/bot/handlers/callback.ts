@@ -1,4 +1,4 @@
-import { type Context } from 'grammy';
+import { type Context, InlineKeyboard } from 'grammy';
 import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
@@ -6,6 +6,7 @@ import { getUserProcess, killProcess } from '../../claude/process-manager.js';
 import { upsertUserConfig, getUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
+import { scanCliSessions } from '../../utils/cli-sessions.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
 
@@ -155,19 +156,21 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       }
 
       await ctx.answerCallbackQuery({ text: 'Session deleted' });
-      await refreshSessionList(ctx, userId, false);
+      await refreshBotSessions(ctx, userId);
       return;
     }
 
-    // Toggle show all / current dir
-    if (rest === 'sess:all') {
+    // Browse CLI sessions from filesystem
+    if (rest === 'sess:cli') {
       await ctx.answerCallbackQuery();
-      await refreshSessionList(ctx, userId, true);
+      await showCliSessions(ctx, userId);
       return;
     }
-    if (rest === 'sess:dir') {
+
+    // Back to bot sessions
+    if (rest === 'sess:bot') {
       await ctx.answerCallbackQuery();
-      await refreshSessionList(ctx, userId, false);
+      await refreshBotSessions(ctx, userId);
       return;
     }
   }
@@ -175,25 +178,69 @@ export async function callbackHandler(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery();
 }
 
-async function refreshSessionList(ctx: Context, userId: number, showAll: boolean): Promise<void> {
+function getCurrentDir(userId: number): string {
   const up = getUserProcess(userId);
   const cfg = getUserConfig(userId);
-  const currentDir = up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+  return up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+}
 
-  const dirSessions = getRecentSessions(userId, 10, currentDir);
-  const allSessions = getRecentSessions(userId, 10);
-  const hasOtherDirSessions = allSessions.length > dirSessions.length;
-
-  const sessions = showAll ? allSessions : dirSessions;
-  if (sessions.length === 0) {
-    try { await ctx.editMessageText('No session history.'); } catch { /* ignore */ }
-    return;
-  }
-
-  const list = buildSessionList(sessions, showAll, hasOtherDirSessions);
-  if (!list) return;
+async function refreshBotSessions(ctx: Context, userId: number): Promise<void> {
+  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId));
+  const list = buildSessionList(sessions);
 
   try {
     await ctx.editMessageText(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
   } catch { /* message not modified — ignore */ }
+}
+
+async function showCliSessions(ctx: Context, userId: number): Promise<void> {
+  const currentDir = getCurrentDir(userId);
+  const cliSessions = scanCliSessions(currentDir);
+
+  // Exclude sessions already in bot DB
+  const dbSessions = getRecentSessions(userId, 100, currentDir);
+  const dbIds = new Set(dbSessions.map(s => s.session_id));
+  const filtered = cliSessions.filter(s => !dbIds.has(s.sessionId));
+
+  const keyboard = new InlineKeyboard();
+
+  if (filtered.length === 0) {
+    keyboard.text('\uD83D\uDCCB Telaude sessions', `${botInstanceHash}:sess:bot`).row();
+    try {
+      await ctx.editMessageText(
+        'No additional CLI sessions found for this directory.',
+        { reply_markup: keyboard },
+      );
+    } catch { /* ignore */ }
+    return;
+  }
+
+  const lines: string[] = [];
+  for (const s of filtered) {
+    const shortId = s.sessionId.slice(0, 8);
+    const ago = formatTimeAgo(s.lastActive);
+    lines.push(`\u26AA <code>${shortId}...</code> ${s.model} | ${ago}`);
+    keyboard
+      .text(`${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.sessionId}`)
+      .row();
+  }
+
+  keyboard.text('\uD83D\uDCCB Telaude sessions', `${botInstanceHash}:sess:bot`).row();
+
+  try {
+    await ctx.editMessageText(
+      `<b>CLI Sessions (${filtered.length})</b>\n\n${lines.join('\n')}\n\nTap to resume. Session will be registered.`,
+      { parse_mode: 'HTML', reply_markup: keyboard },
+    );
+  } catch { /* ignore */ }
+}
+
+function formatTimeAgo(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }

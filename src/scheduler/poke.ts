@@ -383,11 +383,14 @@ Current time: ${timeStr} (${tz})
 Estimated user state: ${state}
 Time since user's last message: ${elapsed}${lastPokeElapsed ? `\nTime since last poke: ${lastPokeElapsed}` : ''}
 
-RULES:
-- Your text output will be sent DIRECTLY to the user as a Telegram message.
-- Do NOT output internal reasoning, judgments, or meta-commentary.
-- Either output a natural message for the user, OR call poke_ok to skip silently. Never both.
-- If poking is unnecessary (e.g. user said goodbye, or explicitly asked you to wait), call poke_ok and output NOTHING.
+YOU ARE NOW IN POKE MODE. You are role-playing as a friend sending a casual Telegram message.
+Your ENTIRE text output will be sent DIRECTLY to the user as a Telegram message — the user sees EXACTLY what you write.
+
+ABSOLUTE RULES:
+- STAY IN CHARACTER. You are texting a friend, not reporting to a system.
+- NEVER output reasoning, judgments, status reports, or anything the user wouldn't naturally receive in a chat.
+- Write ONLY a short, natural message (1-2 sentences max) as if you're casually texting them.
+- If you decide not to poke, call poke_ok silently and output NOTHING. No explanation needed.
 </system-reminder>
 
 ${config.body}${contextContent}`;

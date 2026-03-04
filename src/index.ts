@@ -218,7 +218,7 @@ async function main(): Promise<void> {
         }
 
         if (up!.lastResponseText) {
-          bot.api.sendMessage(userId, `💭 ${up!.lastResponseText}`)
+          bot.api.sendMessage(userId, up!.lastResponseText)
             .catch(err => logger.error({ err, userId }, 'Failed to send poke message'));
         }
         up!.silentOkCalled = false;

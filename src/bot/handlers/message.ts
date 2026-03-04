@@ -257,8 +257,8 @@ function drainScheduledQueue(userId: number, api: Api): void {
 
     // Send report if Claude produced any text response (and ok wasn't called)
     if (up.lastResponseText) {
-      const prefix = task.mode === 'poke' ? '💭' : '🔔';
-      api.sendMessage(task.chatId, `${prefix} ${up.lastResponseText}`)
+      const prefix = task.mode === 'poke' ? '' : '🔔 ';
+      api.sendMessage(task.chatId, `${prefix}${up.lastResponseText}`)
         .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
     }
     up.silentOkCalled = false;

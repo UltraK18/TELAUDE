@@ -170,7 +170,7 @@ function launchAndSend(
           // Log Claude response and start poke timer (only for user conversations)
           if (up.currentMode === 'user') {
             logMessage(userId, 'claude');
-            startPokeTimer(userId, up.workingDir, up.sessionId);
+            startPokeTimer(userId, up.workingDir, up.sessionId, up.lastResponseText);
           }
           drainScheduledQueue(userId, api);
         }

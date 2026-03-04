@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { logger } from '../utils/logger.js';
 import { getLastUserMessageTime, getLastClaudeMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
 
@@ -23,6 +22,7 @@ interface PokeState {
   maxCount: number;
   workingDir: string;
   sessionId: string | null;
+  lastClaudeResponse: string | null;
   config: PokeConfig | null;
   watcher: fs.FSWatcher | null;
   watchDebounce: ReturnType<typeof setTimeout> | null;
@@ -78,7 +78,7 @@ export function setPokeCallback(cb: PokeCallback): void {
   pokeCallback = cb;
 }
 
-export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null): void {
+export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null, lastResponse?: string | null): void {
   const config = readPokeConfig(workingDir);
   if (!config) {
     // No POKE.md or invalid — clean up any existing state
@@ -94,6 +94,7 @@ export function startPokeTimer(userId: number, workingDir: string, sessionId: st
       maxCount: FREQUENCY_MAX[config.frequency],
       workingDir,
       sessionId,
+      lastClaudeResponse: lastResponse ?? null,
       config,
       watcher: null,
       watchDebounce: null,
@@ -104,6 +105,7 @@ export function startPokeTimer(userId: number, workingDir: string, sessionId: st
     state.config = config;
     state.workingDir = workingDir;
     state.sessionId = sessionId;
+    state.lastClaudeResponse = lastResponse ?? state.lastClaudeResponse;
     state.maxCount = FREQUENCY_MAX[config.frequency];
     // Don't reset count — only user message resets count
   }
@@ -218,7 +220,7 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
     return;
   }
 
-  const stdin = buildPokeStdin(userId, state.config, state.workingDir, state.lastPokeTime, state.sessionId);
+  const stdin = buildPokeStdin(userId, state.config, state.workingDir, state.lastPokeTime, state.lastClaudeResponse);
 
   try {
     state.count++;
@@ -382,71 +384,7 @@ function estimateUserState(userId: number, timezone: string, tracks: string[]): 
   return 'unknown';
 }
 
-function getRecentConversation(sessionId: string | null, workingDir: string, maxTurns = 10): string {
-  if (!sessionId) return '';
-
-  // Find session JSONL: ~/.claude/projects/{encoded-path}/{sessionId}.jsonl
-  const homeDir = os.homedir();
-  const encoded = workingDir.replace(/[:\\\/\s]/g, '-').replace(/^-+/, '');
-  const projectDir = path.join(homeDir, '.claude', 'projects', encoded);
-  const jsonlPath = path.join(projectDir, `${sessionId}.jsonl`);
-
-  if (!fs.existsSync(jsonlPath)) {
-    // Try finding by listing directory
-    try {
-      const dirs = fs.readdirSync(path.join(homeDir, '.claude', 'projects'));
-      const match = dirs.find(d => fs.existsSync(path.join(homeDir, '.claude', 'projects', d, `${sessionId}.jsonl`)));
-      if (!match) return '';
-      return readJsonlTurns(path.join(homeDir, '.claude', 'projects', match, `${sessionId}.jsonl`), maxTurns);
-    } catch {
-      return '';
-    }
-  }
-
-  return readJsonlTurns(jsonlPath, maxTurns);
-}
-
-function readJsonlTurns(filePath: string, maxTurns: number): string {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    const lines = content.trim().split('\n');
-
-    // Extract user/assistant text messages from the end
-    const turns: string[] = [];
-    for (let i = lines.length - 1; i >= 0 && turns.length < maxTurns; i--) {
-      try {
-        const entry = JSON.parse(lines[i]);
-        if (entry.type !== 'user' && entry.type !== 'assistant') continue;
-        const role = entry.message?.role;
-        const contentArr = entry.message?.content;
-        if (!role || !contentArr) continue;
-
-        let text = '';
-        if (typeof contentArr === 'string') {
-          text = contentArr;
-        } else if (Array.isArray(contentArr)) {
-          text = contentArr
-            .filter((c: { type: string; text?: string }) => c.type === 'text' && c.text)
-            .map((c: { text: string }) => c.text)
-            .join('\n');
-        }
-
-        if (text.trim()) {
-          const label = role === 'user' ? '유저' : '나';
-          // Truncate long messages
-          const truncated = text.length > 200 ? text.slice(0, 200) + '...' : text;
-          turns.unshift(`${label}: ${truncated}`);
-        }
-      } catch { /* skip malformed lines */ }
-    }
-
-    return turns.length > 0 ? `\n최근 대화:\n${turns.join('\n')}` : '';
-  } catch {
-    return '';
-  }
-}
-
-function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, lastPokeTime: number | null, sessionId: string | null): string {
+function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, lastPokeTime: number | null, lastClaudeResponse: string | null): string {
   const tz = config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const timeStr = now.toLocaleString('en-US', {
@@ -454,10 +392,6 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', hour12: false,
   });
-
-  const state = config.track.length > 0
-    ? estimateUserState(userId, tz, config.track)
-    : 'unknown';
 
   const lastClaudeMsg = getLastClaudeMessageTime(userId);
   const myElapsed = lastClaudeMsg
@@ -476,13 +410,16 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     }
   }
 
-  const recentChat = getRecentConversation(sessionId, workingDir);
+  // Truncate last response for context
+  const lastMsg = lastClaudeResponse
+    ? `\n내가 마지막으로 보낸 메시지: ${lastClaudeResponse.length > 300 ? lastClaudeResponse.slice(0, 300) + '...' : lastClaudeResponse}`
+    : '';
 
   return `<thinking>
-${timeStr}. 내가 메시지를 보낸 뒤로 ${myElapsed}가 지났다.${lastPokeElapsed ? ` ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 답장이 없다.'}
+${timeStr}. 내가 메시지를 보낸 뒤로 ${myElapsed}가 지났다.${lastPokeElapsed ? ` ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 답장이 없다.'}${lastMsg}
 지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
 
-${config.body}${contextContent}${recentChat}
+${config.body}${contextContent}
 </thinking>`;
 }
 

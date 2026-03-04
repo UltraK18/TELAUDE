@@ -99,13 +99,18 @@ export class StreamHandler {
         this.enqueue(async () => {
           logger.info({ userId: this.userId, responseLen: this.textBuffer.length, response: this.textBuffer.slice(0, 200) }, 'Claude response');
 
-          // Store last response for silent mode
-          if (this.silent && this.textBuffer.length > 0) {
-            if (this.up.silentOkCalled) {
-              // cron_ok/heartbeat_ok was called — save to reportText for history, not for auto-report
-              this.up.lastReportText = this.textBuffer;
+          // Store last response
+          if (this.textBuffer.length > 0) {
+            if (this.silent) {
+              if (this.up.silentOkCalled) {
+                // cron_ok/heartbeat_ok was called — save to reportText for history, not for auto-report
+                this.up.lastReportText = this.textBuffer;
+              } else {
+                // ok not called — save for auto-report on exit
+                this.up.lastResponseText = this.textBuffer;
+              }
             } else {
-              // ok not called — save for auto-report on exit
+              // Always store last response for poke context
               this.up.lastResponseText = this.textBuffer;
             }
           }

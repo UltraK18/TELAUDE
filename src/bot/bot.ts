@@ -63,6 +63,7 @@ export function createBot(): Bot {
     { command: 'stats', description: 'Session stats & tokens' },
     { command: 'stop', description: 'Stop current task' },
     { command: 'reload', description: 'Reload CLI session' },
+    { command: 'force_reload', description: 'Restart bot process' },
     { command: 'cd', description: 'Change working directory' },
     { command: 'pwd', description: 'Current directory' },
     { command: 'model', description: 'View/change model' },

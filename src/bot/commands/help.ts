@@ -17,6 +17,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 /new - New session
 /stop - Stop current task
 /reload - Reload CLI session
+/force_reload - Restart bot process
 /clear - Clear conversation
 
 <b>Settings</b>

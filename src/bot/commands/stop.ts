@@ -36,3 +36,12 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   killForReload(userId, 'Session reloaded by user.');
   await ctx.reply('Reloading session...');
 }
+
+export async function forceReloadCommand(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  await ctx.reply('Restarting bot process...');
+  // Allow the reply to be sent before exiting
+  setTimeout(() => process.exit(0), 500);
+}

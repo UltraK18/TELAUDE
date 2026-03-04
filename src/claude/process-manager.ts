@@ -189,7 +189,11 @@ export function sendMessage(up: UserProcess, text: string, appendText?: string):
   }
 
   try {
-    up.process.stdin.write(appendText ? `${text}\n\n${appendText}` : text);
+    if (appendText) {
+      up.process.stdin.write(`${text}\n\n[The user sent additional messages while you were working. After completing your current task, address these messages.]\n${appendText}\n[End of queued messages]`);
+    } else {
+      up.process.stdin.write(text);
+    }
     up.process.stdin.end();
     up.isProcessing = true;
     up.lastActivity = Date.now();

@@ -24,6 +24,7 @@ interface PokeState {
   config: PokeConfig | null;
   watcher: fs.FSWatcher | null;
   watchDebounce: ReturnType<typeof setTimeout> | null;
+  lastPokeTime: number | null;
 }
 
 type PokeCallback = (userId: number, stdin: string, workingDir: string) => Promise<void>;
@@ -93,6 +94,7 @@ export function startPokeTimer(userId: number, workingDir: string): void {
       config,
       watcher: null,
       watchDebounce: null,
+      lastPokeTime: null,
     };
     pokeStates.set(userId, state);
   } else {
@@ -203,10 +205,11 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
     return;
   }
 
-  const stdin = buildPokeStdin(userId, state.config, state.workingDir);
+  const stdin = buildPokeStdin(userId, state.config, state.workingDir, state.lastPokeTime);
 
   try {
     state.count++;
+    state.lastPokeTime = Date.now();
     logger.info({ userId, count: state.count }, 'Firing poke');
     await pokeCallback(userId, stdin, state.workingDir);
   } catch (err) {
@@ -338,7 +341,7 @@ function estimateUserState(userId: number, timezone: string, tracks: string[]): 
   return 'unknown';
 }
 
-function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string): string {
+function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, lastPokeTime: number | null): string {
   const tz = config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const timeStr = now.toLocaleString('en-US', {
@@ -356,6 +359,10 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string):
     ? formatElapsed(Date.now() - new Date(lastMsg + 'Z').getTime())
     : 'unknown';
 
+  const lastPokeElapsed = lastPokeTime
+    ? formatElapsed(Date.now() - lastPokeTime)
+    : null;
+
   let contextContent = '';
   if (config.context) {
     contextContent = resolveContextFile(workingDir, config.context);
@@ -367,7 +374,7 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string):
   return `<system-reminder>
 Current time: ${timeStr} (${tz})
 Estimated user state: ${state}
-Time since user's last message: ${elapsed}
+Time since user's last message: ${elapsed}${lastPokeElapsed ? `\nTime since last poke: ${lastPokeElapsed}` : ''}
 Use this context to compose a natural proactive message.
 If poking is unnecessary (e.g. user said goodbye), call poke_ok to skip.
 </system-reminder>

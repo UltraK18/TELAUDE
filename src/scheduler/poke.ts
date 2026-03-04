@@ -226,6 +226,13 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
 function shouldSkipForSleep(userId: number, config: PokeConfig): boolean {
   if (!config.track.includes('sleep_time')) return false;
 
+  // If user was recently active (within 30 min), they're clearly awake — never skip
+  const lastMsg = getLastUserMessageTime(userId);
+  if (lastMsg) {
+    const msSinceLastMsg = Date.now() - new Date(lastMsg + 'Z').getTime();
+    if (msSinceLastMsg < 30 * 60 * 1000) return false;
+  }
+
   const tz = config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const currentHour = getCurrentHour(tz);
   const sleepWindow = estimateSleepWindow(userId);

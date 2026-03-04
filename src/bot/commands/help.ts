@@ -16,6 +16,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 /resume - Resume session
 /new - New session
 /stop - Stop current task
+/reload - Reload CLI session
 /clear - Clear conversation
 
 <b>Settings</b>

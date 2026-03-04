@@ -2,6 +2,9 @@ import { logger } from '../utils/logger.js';
 
 interface PendingAsk {
   question: string;
+  choices?: string[];
+  messageId?: number;
+  chatId?: number;
   resolve: (answer: string) => void;
   reject: (err: Error) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -15,7 +18,7 @@ const ASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * Register a question for a user. Returns a promise that resolves when the user replies.
  * Only one pending ask per user at a time.
  */
-export function createAsk(userId: number, question: string): Promise<string> {
+export function createAsk(userId: number, question: string, choices?: string[]): Promise<string> {
   // Cancel existing ask if any
   cancelAsk(userId);
 
@@ -25,9 +28,20 @@ export function createAsk(userId: number, question: string): Promise<string> {
       reject(new Error('Ask timed out after 5 minutes'));
     }, ASK_TIMEOUT_MS);
 
-    pendingAsks.set(userId, { question, resolve, reject, timer });
-    logger.info({ userId, question: question.slice(0, 100) }, 'Ask registered');
+    pendingAsks.set(userId, { question, choices, resolve, reject, timer });
+    logger.info({ userId, question: question.slice(0, 100), hasChoices: !!choices }, 'Ask registered');
   });
+}
+
+/**
+ * Store the message ID of the ask message (for removing keyboard later).
+ */
+export function setAskMessageId(userId: number, messageId: number, chatId: number): void {
+  const pending = pendingAsks.get(userId);
+  if (pending) {
+    pending.messageId = messageId;
+    pending.chatId = chatId;
+  }
 }
 
 /**
@@ -35,6 +49,22 @@ export function createAsk(userId: number, question: string): Promise<string> {
  */
 export function hasPendingAsk(userId: number): boolean {
   return pendingAsks.has(userId);
+}
+
+/**
+ * Get choices for a pending ask (for callback resolution).
+ */
+export function getAskChoices(userId: number): string[] | undefined {
+  return pendingAsks.get(userId)?.choices;
+}
+
+/**
+ * Get messageId and chatId for keyboard removal.
+ */
+export function getAskMessageInfo(userId: number): { messageId: number; chatId: number } | null {
+  const pending = pendingAsks.get(userId);
+  if (!pending?.messageId || !pending?.chatId) return null;
+  return { messageId: pending.messageId, chatId: pending.chatId };
 }
 
 /**

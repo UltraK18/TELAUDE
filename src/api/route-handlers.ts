@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import { type Api, InputFile } from 'grammy';
+import { type Api, InputFile, InlineKeyboard } from 'grammy';
 import { registerRoute } from './internal-server.js';
-import { createAsk } from './ask-queue.js';
+import { createAsk, setAskMessageId } from './ask-queue.js';
 import { readHeartbeat, writeHeartbeat } from '../scheduler/heartbeat.js';
 import {
   getAllJobs, getJob, addJob, updateJob, removeJob,
@@ -34,10 +34,27 @@ export function registerAllRoutes(api: Api): void {
   registerRoute('/mcp/ask', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);
-    // Send question to user
-    await api.sendMessage(chatId, `❓ ${body.question}`);
-    // Wait for response
-    const answer = await createAsk(userId, body.question);
+    const choices: string[] | undefined = body.choices;
+
+    // Build keyboard if choices provided
+    const keyboard = choices?.length
+      ? (() => {
+          const kb = new InlineKeyboard();
+          choices.forEach((c, i) => kb.text(c, `ask:${i}`).row());
+          return kb;
+        })()
+      : undefined;
+
+    // Send question (with or without buttons)
+    const msg = await api.sendMessage(chatId, `❓ ${body.question}`, {
+      reply_markup: keyboard,
+    });
+
+    // Start waiting for answer (text or button click)
+    const answerPromise = createAsk(userId, body.question, choices);
+    setAskMessageId(userId, msg.message_id, chatId);
+
+    const answer = await answerPromise;
     return { answer };
   });
 

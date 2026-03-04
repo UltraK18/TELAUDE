@@ -5,11 +5,11 @@ import { mcpPost } from '../http-client.js';
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
     'cron_add',
-    'Schedule a job. Uses system timezone. Runs silent — reply to report, call cron_ok() if nothing to report.',
+    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call cron_ok() only if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
     {
       name: z.string().describe('Job name'),
       schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),
-      runAt: z.string().optional().describe('One-time job. Accepts relative ("5m", "1h", "30s") or local datetime ("2026-03-04T14:00:00"). Auto-deleted after execution.'),
+      runAt: z.string().optional().describe('One-time job. Prefer relative: "1m","5m","1h","30s" (no need to check current time). Also accepts local datetime. Auto-deleted after execution.'),
       message: z.string().describe('Prompt sent to Claude when triggered'),
       workingDir: z.string().optional().describe('Working directory'),
       model: z.string().optional().describe('Model override'),

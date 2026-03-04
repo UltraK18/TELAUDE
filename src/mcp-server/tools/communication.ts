@@ -25,10 +25,13 @@ export function registerCommunicationTools(server: McpServer): void {
 
   server.tool(
     'ask',
-    'Ask the user a question via Telegram and wait for their reply. Times out after 5 minutes.',
-    { question: z.string().describe('Question to ask the user') },
-    async ({ question }) => {
-      const result = await mcpPost('/mcp/ask', { question });
+    'Ask the user a question via Telegram and wait for their reply. Optionally provide choices as inline buttons. User can click a button or type freely. Times out after 5 minutes.',
+    {
+      question: z.string().describe('Question to ask the user'),
+      choices: z.array(z.string()).optional().describe('Optional button choices (e.g. ["Yes", "No", "Skip"])'),
+    },
+    async ({ question, choices }) => {
+      const result = await mcpPost('/mcp/ask', { question, choices });
       return { content: [{ type: 'text', text: `User replied: ${result.answer}` }] };
     }
   );

@@ -5,6 +5,7 @@ import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
 import { upsertUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
+import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { logger } from '../../utils/logger.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
@@ -79,6 +80,24 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     } else {
       try { await ctx.deleteMessage(); } catch { /* ignore */ }
     }
+    return;
+  }
+
+  // ask:<choiceIndex> — inline button answer to ask()
+  if (data.startsWith('ask:')) {
+    const idx = parseInt(data.slice(4), 10);
+    const choices = getAskChoices(userId);
+    if (!choices || idx < 0 || idx >= choices.length) {
+      await ctx.answerCallbackQuery({ text: 'Expired' });
+      return;
+    }
+    const chosen = choices[idx];
+    resolveAsk(userId, chosen);
+    // Remove keyboard, keep question text
+    try {
+      await ctx.editMessageReplyMarkup({ reply_markup: undefined });
+    } catch { /* ignore */ }
+    await ctx.answerCallbackQuery({ text: `✅ ${chosen}` });
     return;
   }
 

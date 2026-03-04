@@ -1,6 +1,6 @@
 import { type Api } from 'grammy';
 import path from 'path';
-import { writeFile } from 'fs/promises';
+import { mkdir, writeFile } from 'fs/promises';
 import { config } from '../config.js';
 import { logger } from './logger.js';
 import { type MediaType } from '../bot/handlers/media-types.js';
@@ -49,7 +49,9 @@ export async function downloadTelegramFile(
     fileName = `tg_${timestamp}_${path.basename(file.file_path)}`;
   }
 
-  const savePath = path.join(workingDir, fileName);
+  const saveDir = path.join(workingDir, 'user_send');
+  await mkdir(saveDir, { recursive: true });
+  const savePath = path.join(saveDir, fileName);
 
   await writeFile(savePath, buffer);
 

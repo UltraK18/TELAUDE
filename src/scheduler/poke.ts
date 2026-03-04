@@ -199,8 +199,8 @@ function calculateDelay(intensity: Level, count: number): number {
 async function firePoke(userId: number, state: PokeState): Promise<void> {
   if (!state.config || !pokeCallback) return;
 
-  // Check sleep window
-  if (shouldSkipForSleep(userId, state.config)) {
+  // Check sleep window (skip check for first poke — always send at least one)
+  if (state.count > 0 && shouldSkipForSleep(userId, state.config)) {
     logger.info({ userId }, 'Poke skipped (sleep window)');
     // Still schedule next if count allows
     state.count++;

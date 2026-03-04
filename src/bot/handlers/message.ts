@@ -309,7 +309,7 @@ function queueOrLaunch(
     const queued = pendingQueue.texts.join('\n\n');
     pendingQueue.texts = [];
     messageQueues.delete(userId);
-    text = `${text}\n\n[The user sent additional messages while you were working. After completing your current task, address these messages.]\n${queued}\n[End of queued messages]`;
+    text = `${text}\n\n<system-reminder>The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n${queued}\n</system-reminder>`;
     logger.info({ userId, textLen: text.length }, 'Merged queued messages with new message');
   }
 

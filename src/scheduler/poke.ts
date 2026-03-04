@@ -378,10 +378,12 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     }
   }
 
-  return `[나의 속마음] ${timeStr}. 유저의 마지막 메시지가 ${elapsed} 전이다.${lastPokeElapsed ? ` 내가 ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 내가 보낸 메시지가 마지막 메시지다.'}
+  return `<thinking>
+${timeStr}. 유저의 마지막 메시지가 ${elapsed} 전이다.${lastPokeElapsed ? ` 내가 ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 내가 보낸 메시지가 마지막 메시지다.'}
 지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
 
-${config.body}${contextContent}`;
+${config.body}${contextContent}
+</thinking>`;
 }
 
 function formatElapsed(ms: number): string {

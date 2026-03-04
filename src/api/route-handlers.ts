@@ -5,7 +5,7 @@ import { registerRoute } from './internal-server.js';
 import { createAsk, setAskMessageId } from './ask-queue.js';
 import { readHeartbeat, writeHeartbeat } from '../scheduler/heartbeat.js';
 import {
-  getAllJobs, getJob, addJob, updateJob, removeJob,
+  getAllJobs, getJob, addJob, updateJob, removeJob, getCompletedJobs,
 } from '../scheduler/cron-store.js';
 import {
   reloadAll, getNextRun, scheduleJob, unscheduleJob,
@@ -244,6 +244,12 @@ export function registerAllRoutes(api: Api): void {
     return { next: next?.toISOString() ?? null };
   });
 
+  registerRoute('/mcp/cron/completed', async (body) => {
+    const userId = body._userId as number;
+    const jobs = getCompletedJobs(userId);
+    return { jobs };
+  });
+
   // --- Turn deletion ---
 
   registerRoute('/mcp/turn-delete', async (body) => {
@@ -252,7 +258,9 @@ export function registerAllRoutes(api: Api): void {
     const up = getUserProcess(userId);
     if (up) {
       up.silentOkCalled = true;
-      up.lastResponseText = null; // Clear any buffered response — ok means nothing to report
+      // Preserve response for history, but prevent auto-report to Telegram
+      up.lastReportText = up.lastResponseText;
+      up.lastResponseText = null;
     }
     if (up?.sessionId && up?.workingDir) {
       await deleteTurn(up.sessionId, up.workingDir, body.type);

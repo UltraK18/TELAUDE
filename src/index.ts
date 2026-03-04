@@ -73,7 +73,7 @@ async function main(): Promise<void> {
         sessionId: job.sessionId ?? undefined,
         workingDir: job.workingDir,
       });
-      return;
+      return null;
     }
 
     // Spawn in silent mode
@@ -103,8 +103,8 @@ async function main(): Promise<void> {
       throw new Error('Failed to send cron message to Claude');
     }
 
-    // Wait for process to complete
-    await new Promise<void>((resolve) => {
+    // Wait for process to complete and capture response
+    const response = await new Promise<string | null>((resolve) => {
       childProc.on('exit', () => {
         // If reload pending, re-spawn with same session
         if (up!.reloadPending) {
@@ -124,27 +124,32 @@ async function main(): Promise<void> {
           if (sendToProcess(up!, reloadMsg)) {
             spawn2.process.on('exit', () => {
               up!.isProcessing = false;
-              resolve();
+              resolve(up!.lastResponseText);
             });
           } else {
             up!.isProcessing = false;
-            resolve();
+            resolve(null);
           }
           return;
         }
 
-        // Send report if Claude produced any text response
+        // lastResponseText = text before cron_ok; lastReportText = text preserved after cron_ok
+        const responseText = up!.lastResponseText ?? up!.lastReportText;
+
+        // Send report if Claude produced any text response (and ok wasn't called)
         if (up!.lastResponseText) {
           bot.api.sendMessage(job.userId, `🔔 ${up!.lastResponseText}`)
             .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
         }
         up!.silentOkCalled = false;
         up!.lastResponseText = null;
+        up!.lastReportText = null;
 
         up!.isProcessing = false;
-        resolve();
+        resolve(responseText);
       });
     });
+    return response;
   });
 
   // Start all cron jobs

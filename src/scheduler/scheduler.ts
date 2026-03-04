@@ -1,8 +1,8 @@
 import { Cron } from 'croner';
-import { getAllJobs, getJob, addHistory, removeJob, type CronJob } from './cron-store.js';
+import { getAllJobs, getJob, addHistory, removeJob, archiveJob, type CronJob } from './cron-store.js';
 import { logger } from '../utils/logger.js';
 
-type TriggerCallback = (job: CronJob) => Promise<void>;
+type TriggerCallback = (job: CronJob) => Promise<string | null>;
 
 const activeCrons = new Map<string, Cron>();
 const activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -32,11 +32,12 @@ async function executeJob(job: CronJob): Promise<void> {
       logger.info({ jobId: job.id }, 'Job paused or deleted, skipping execution');
       return;
     }
-    await triggerCallback(currentJob);
+    const response = await triggerCallback(currentJob);
     addHistory(job.id, {
       timestamp: new Date().toISOString(),
       status: 'success',
       durationMs: Date.now() - startTime,
+      response: response ?? undefined,
     });
   } catch (err: any) {
     logger.error({ err, jobId: job.id }, 'Cron job execution failed');
@@ -48,11 +49,12 @@ async function executeJob(job: CronJob): Promise<void> {
     });
   }
 
-  // Auto-delete one-time jobs after execution
+  // Auto-delete one-time jobs after execution (archive first)
   if (job.once) {
     stopJob(job.id);
+    archiveJob(job.id);
     removeJob(job.id);
-    logger.info({ jobId: job.id, name: job.name }, 'One-time job auto-deleted');
+    logger.info({ jobId: job.id, name: job.name }, 'One-time job archived and removed');
   }
 }
 

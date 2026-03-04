@@ -129,4 +129,21 @@ export function registerSchedulingTools(server: McpServer): void {
       return { content: [{ type: 'text', text: `Next execution: ${result.next ?? 'unknown'}` }] };
     }
   );
+
+  server.tool(
+    'cron_completed',
+    'View past completed/executed jobs (including one-time jobs that were auto-deleted)',
+    {},
+    async () => {
+      const result = await mcpPost('/mcp/cron/completed', {});
+      const jobs = result.jobs ?? [];
+      if (jobs.length === 0) {
+        return { content: [{ type: 'text', text: 'No completed jobs' }] };
+      }
+      const lines = jobs.map((j: any) =>
+        `[${j.id}] ${j.name} | ${j.completedAt} | ${j.once ? 'one-time' : j.schedule} | ${j.history?.length ?? 0} runs`
+      );
+      return { content: [{ type: 'text', text: lines.join('\n') }] };
+    }
+  );
 }

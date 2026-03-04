@@ -231,13 +231,14 @@ function drainScheduledQueue(userId: number, api: Api): void {
       return;
     }
 
-    // Send report if Claude produced any text response
+    // Send report if Claude produced any text response (and ok wasn't called)
     if (up.lastResponseText) {
       api.sendMessage(task.chatId, `🔔 ${up.lastResponseText}`)
         .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
     }
     up.silentOkCalled = false;
     up.lastResponseText = null;
+    up.lastReportText = null;
 
     // After scheduled task completes, check for more
     const queue = messageQueues.get(userId);

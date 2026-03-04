@@ -27,6 +27,8 @@ export interface UserProcess {
   silentOkCalled: boolean;
   /** Last response text from Claude (used by silent mode to send on exit if ok not called) */
   lastResponseText: string | null;
+  /** Preserved response text after cron_ok (for history, not sent to user) */
+  lastReportText: string | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -57,6 +59,7 @@ export function createUserProcess(
     reloadMessage: null,
     silentOkCalled: false,
     lastResponseText: null,
+    lastReportText: null,
   };
   processes.set(userId, up);
   return up;

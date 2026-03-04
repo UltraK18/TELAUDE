@@ -7,6 +7,22 @@ export interface CronJobHistory {
   status: 'success' | 'error';
   durationMs: number;
   error?: string;
+  response?: string;
+}
+
+export interface CompletedJob {
+  id: string;
+  name: string;
+  schedule: string;
+  message: string;
+  workingDir: string;
+  model?: string;
+  userId: number;
+  once: boolean;
+  runAt?: string;
+  createdAt: string;
+  completedAt: string;
+  history: CronJobHistory[];
 }
 
 export interface CronJob {
@@ -26,6 +42,7 @@ export interface CronJob {
 }
 
 const STORE_PATH = path.join(process.cwd(), 'data', 'cron-jobs.json');
+const HISTORY_PATH = path.join(process.cwd(), 'data', 'cron-history.json');
 
 function readStore(): CronJob[] {
   try {
@@ -121,4 +138,67 @@ export function addHistory(jobId: string, entry: CronJobHistory): void {
     job.history = job.history.slice(-50);
   }
   writeStore(jobs);
+}
+
+// --- Completed jobs archive ---
+
+function readHistory(): CompletedJob[] {
+  try {
+    if (!fs.existsSync(HISTORY_PATH)) return [];
+    const raw = fs.readFileSync(HISTORY_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(jobs: CompletedJob[]): void {
+  const dir = path.dirname(HISTORY_PATH);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(HISTORY_PATH, JSON.stringify(jobs, null, 2), 'utf-8');
+}
+
+/**
+ * Archive a job to completed history before removing it.
+ */
+export function archiveJob(jobId: string): void {
+  const job = getJob(jobId);
+  if (!job) return;
+
+  const completed: CompletedJob = {
+    id: job.id,
+    name: job.name,
+    schedule: job.schedule,
+    message: job.message,
+    workingDir: job.workingDir,
+    model: job.model,
+    userId: job.userId,
+    once: job.once,
+    runAt: job.runAt,
+    createdAt: job.createdAt,
+    completedAt: new Date().toISOString(),
+    history: job.history,
+  };
+
+  const history = readHistory();
+  history.push(completed);
+  // Keep last 200 entries
+  if (history.length > 200) {
+    history.splice(0, history.length - 200);
+  }
+  writeHistory(history);
+  logger.info({ jobId, name: job.name }, 'Job archived to history');
+}
+
+/**
+ * Get all completed jobs, optionally filtered by userId.
+ */
+export function getCompletedJobs(userId?: number): CompletedJob[] {
+  const history = readHistory();
+  if (userId != null) {
+    return history.filter(j => j.userId === userId);
+  }
+  return history;
 }

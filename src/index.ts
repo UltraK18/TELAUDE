@@ -164,7 +164,7 @@ async function main(): Promise<void> {
   });
 
   // --- Poke (proactive follow-up) ---
-  setPokeCallback(async (userId, stdin, workingDir) => {
+  setPokeCallback(async (userId, stdin, workingDir, sessionId) => {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
     const { getUserConfig } = await import('./db/config-repo.js');
@@ -186,6 +186,7 @@ async function main(): Promise<void> {
     if (!up) {
       up = createUserProcess(userId, workingDir, userModel);
     }
+    if (sessionId && !up.sessionId) up.sessionId = sessionId;
     up.workingDir = workingDir;
     up.isProcessing = true;
     up.currentMode = 'poke';

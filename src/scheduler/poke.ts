@@ -21,13 +21,14 @@ interface PokeState {
   count: number;
   maxCount: number;
   workingDir: string;
+  sessionId: string | null;
   config: PokeConfig | null;
   watcher: fs.FSWatcher | null;
   watchDebounce: ReturnType<typeof setTimeout> | null;
   lastPokeTime: number | null;
 }
 
-type PokeCallback = (userId: number, stdin: string, workingDir: string) => Promise<void>;
+type PokeCallback = (userId: number, stdin: string, workingDir: string, sessionId: string | null) => Promise<void>;
 
 // --- Constants ---
 
@@ -76,7 +77,7 @@ export function setPokeCallback(cb: PokeCallback): void {
   pokeCallback = cb;
 }
 
-export function startPokeTimer(userId: number, workingDir: string): void {
+export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null): void {
   const config = readPokeConfig(workingDir);
   if (!config) {
     // No POKE.md or invalid — clean up any existing state
@@ -91,6 +92,7 @@ export function startPokeTimer(userId: number, workingDir: string): void {
       count: 0,
       maxCount: FREQUENCY_MAX[config.frequency],
       workingDir,
+      sessionId,
       config,
       watcher: null,
       watchDebounce: null,
@@ -100,6 +102,7 @@ export function startPokeTimer(userId: number, workingDir: string): void {
   } else {
     state.config = config;
     state.workingDir = workingDir;
+    state.sessionId = sessionId;
     state.maxCount = FREQUENCY_MAX[config.frequency];
     // Don't reset count — only user message resets count
   }
@@ -211,7 +214,7 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
     state.count++;
     state.lastPokeTime = Date.now();
     logger.info({ userId, count: state.count }, 'Firing poke');
-    await pokeCallback(userId, stdin, state.workingDir);
+    await pokeCallback(userId, stdin, state.workingDir, state.sessionId);
   } catch (err) {
     logger.error({ err, userId }, 'Poke callback failed');
   }

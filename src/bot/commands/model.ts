@@ -1,6 +1,7 @@
 import { type Context } from 'grammy';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
 import { getUserConfig, upsertUserConfig } from '../../db/config-repo.js';
+import { getActiveSession, updateSessionModel } from '../../db/session-repo.js';
 
 const VALID_MODELS = ['sonnet', 'opus', 'haiku'];
 
@@ -31,6 +32,12 @@ export async function modelCommand(ctx: Context): Promise<void> {
 
   const up = getUserProcess(userId);
   if (up) up.model = modelName;
+
+  // Update active session so model persists across bot restarts
+  const activeSession = getActiveSession(userId);
+  if (activeSession) {
+    updateSessionModel(activeSession.session_id, modelName);
+  }
 
   await ctx.reply(`Model changed: <b>${modelName}</b>\nApplied from next message.`, { parse_mode: 'HTML' });
 }

@@ -167,6 +167,7 @@ async function main(): Promise<void> {
   setPokeCallback(async (userId, stdin, workingDir) => {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
+    const { getUserConfig } = await import('./db/config-repo.js');
 
     if (isUserActive(userId)) {
       enqueueScheduledTask({
@@ -180,9 +181,10 @@ async function main(): Promise<void> {
       return;
     }
 
+    const userModel = getUserConfig(userId).default_model;
     let up = getUserProcess(userId);
     if (!up) {
-      up = createUserProcess(userId, workingDir, 'sonnet');
+      up = createUserProcess(userId, workingDir, userModel);
     }
     up.workingDir = workingDir;
     up.isProcessing = true;

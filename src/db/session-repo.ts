@@ -79,6 +79,12 @@ export function updateSessionActivity(sessionId: string): void {
     .run(sessionId);
 }
 
+export function updateSessionModel(sessionId: string, model: string): void {
+  getDb()
+    .prepare('UPDATE sessions SET model = ? WHERE session_id = ?')
+    .run(model, sessionId);
+}
+
 export function updateSessionCost(sessionId: string, costUsd: number, turns: number, inputTokens?: number, outputTokens?: number): void {
   getDb()
     .prepare('UPDATE sessions SET total_cost_usd = ?, total_turns = ?, total_input_tokens = ?, total_output_tokens = ? WHERE session_id = ?')

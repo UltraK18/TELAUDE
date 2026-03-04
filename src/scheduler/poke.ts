@@ -202,9 +202,18 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
   // Check sleep window (skip check for first poke — always send at least one)
   if (state.count > 0 && shouldSkipForSleep(userId, state.config)) {
     logger.info({ userId }, 'Poke skipped (sleep window)');
-    // Still schedule next if count allows
     state.count++;
-    scheduleNextPoke(userId, state);
+    // Schedule next poke near wake-up time instead of normal delay
+    const wakeDelay = getDelayUntilWakeUp(userId, state.config);
+    if (wakeDelay && state.count < state.maxCount) {
+      const jitter = Math.round(Math.random() * 30 * 60 * 1000); // 0~30min jitter
+      const delay = wakeDelay + jitter;
+      state.timer = setTimeout(async () => {
+        state.timer = null;
+        await firePoke(userId, state);
+      }, delay);
+      logger.info({ userId, delayMs: delay, wakeDelayMs: wakeDelay, jitterMs: jitter }, 'Poke scheduled near wake-up');
+    }
     return;
   }
 
@@ -247,6 +256,23 @@ function shouldSkipForSleep(userId: number, config: PokeConfig): boolean {
 
   // Roll dice — return true to skip if roll fails
   return Math.random() > probability;
+}
+
+function getDelayUntilWakeUp(userId: number, config: PokeConfig): number | null {
+  const tz = config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const currentHour = getCurrentHour(tz);
+  const sleepWindow = estimateSleepWindow(userId);
+  if (!sleepWindow) return null;
+
+  // Calculate hours until sleep window ends
+  let hoursUntilWake: number;
+  if (sleepWindow.end > currentHour) {
+    hoursUntilWake = sleepWindow.end - currentHour;
+  } else {
+    hoursUntilWake = (24 - currentHour) + sleepWindow.end;
+  }
+
+  return hoursUntilWake * 60 * 60 * 1000;
 }
 
 function getSleepPhase(hour: number, sleepWindow: { start: number; end: number }): number | null {

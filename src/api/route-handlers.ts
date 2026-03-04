@@ -31,13 +31,6 @@ function getChatId(userId: number): number {
 export function registerAllRoutes(api: Api): void {
   // --- Communication routes ---
 
-  registerRoute('/mcp/notify', async (body) => {
-    const userId = body._userId as number;
-    const chatId = getChatId(userId);
-    await api.sendMessage(chatId, body.message);
-    return { ok: true };
-  });
-
   registerRoute('/mcp/ask', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);

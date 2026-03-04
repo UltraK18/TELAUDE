@@ -9,7 +9,7 @@ export function registerSchedulingTools(server: McpServer): void {
     {
       name: z.string().describe('Job name'),
       schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),
-      runAt: z.string().optional().describe('ISO datetime for one-time jobs (e.g. "2026-03-04T14:00:00"). Auto-deleted after execution.'),
+      runAt: z.string().optional().describe('One-time job. Accepts relative ("5m", "1h", "30s") or local datetime ("2026-03-04T14:00:00"). Auto-deleted after execution.'),
       message: z.string().describe('Prompt sent to Claude when triggered'),
       workingDir: z.string().optional().describe('Working directory'),
       model: z.string().optional().describe('Model override'),
@@ -18,10 +18,21 @@ export function registerSchedulingTools(server: McpServer): void {
       if (!schedule && !runAt) {
         return { content: [{ type: 'text', text: 'Error: provide either schedule (recurring) or runAt (one-time)' }] };
       }
-      const once = !!runAt;
+      // Parse relative time (e.g. "5m", "1h", "30s") into absolute datetime
+      let resolvedRunAt = runAt;
+      if (runAt) {
+        const match = runAt.match(/^(\d+)\s*(s|m|h)$/);
+        if (match) {
+          const val = parseInt(match[1], 10);
+          const unit = match[2];
+          const ms = unit === 's' ? val * 1000 : unit === 'm' ? val * 60000 : val * 3600000;
+          resolvedRunAt = new Date(Date.now() + ms).toISOString();
+        }
+      }
+      const once = !!resolvedRunAt;
       const finalSchedule = schedule ?? 'once';
-      const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt, message, workingDir, model, once });
-      const when = runAt ?? schedule;
+      const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt: resolvedRunAt, message, workingDir, model, once });
+      const when = resolvedRunAt ?? schedule;
       return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name}) — ${once ? `once at ${when}` : `recurring: ${when}`}` }] };
     }
   );

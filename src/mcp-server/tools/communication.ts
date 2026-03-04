@@ -24,16 +24,6 @@ export function registerCommunicationTools(server: McpServer): void {
   );
 
   server.tool(
-    'notify',
-    'Send a one-way notification message to the user via Telegram. No response expected.',
-    { message: z.string().describe('Notification message text') },
-    async ({ message }) => {
-      await mcpPost('/mcp/notify', { message });
-      return { content: [{ type: 'text', text: 'Notification sent' }] };
-    }
-  );
-
-  server.tool(
     'ask',
     'Ask the user a question via Telegram and wait for their reply. Times out after 5 minutes.',
     { question: z.string().describe('Question to ask the user') },

@@ -254,7 +254,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
   });
 
   const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
-  const wrappedText = `[silent mode] Reply to report, or call ${okTool} if nothing to report.\n\n${task.text}`;
+  const wrappedText = `[SCHEDULED TASK — call ${okTool} if nothing to report]\n${task.text}`;
   if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');

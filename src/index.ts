@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[silent mode] Reply to report, or call cron_ok() if nothing to report.\n\n${job.message}`;
+    const wrappedMessage = `[SCHEDULED TASK — call cron_ok() if nothing to report]\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');

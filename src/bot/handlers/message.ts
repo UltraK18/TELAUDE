@@ -151,14 +151,21 @@ function launchAndSend(
           }
           up.interrupted = false;
           up.isProcessing = false;
+        } else if (queue && queue.texts.length > 0) {
+          // Queued user messages — launch new process with context marker
+          const queued = queue.texts.join('\n\n');
+          queue.texts = [];
+          messageQueues.delete(userId);
+          const combined = `<system-reminder>The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n${queued}\n</system-reminder>`;
+          logger.info({ userId, queueSize: queued.length }, 'Draining queued messages after exit');
+          const nextResume = up.sessionId ?? undefined;
+          if (!launchAndSend(up, combined, chatId, userId, api, nextResume)) {
+            up.isProcessing = false;
+          }
         } else {
           up.isProcessing = false;
-
-          // Drain scheduled queue for this user (only if no pending user messages)
-          if (!messageQueues.get(userId)?.texts.length) {
-            messageQueues.delete(userId);
-            drainScheduledQueue(userId, api);
-          }
+          messageQueues.delete(userId);
+          drainScheduledQueue(userId, api);
         }
       });
 
@@ -301,16 +308,6 @@ function queueOrLaunch(
   if (ready.interrupted) {
     text = `[The user interrupted the previous task. The tool use was rejected — do not continue or retry it.]\n${text}`;
     ready.interrupted = false;
-  }
-
-  // Drain any queued messages (e.g. messages queued during /stop)
-  const pendingQueue = messageQueues.get(userId);
-  if (pendingQueue && pendingQueue.texts.length > 0) {
-    const queued = pendingQueue.texts.join('\n\n');
-    pendingQueue.texts = [];
-    messageQueues.delete(userId);
-    text = `${text}\n\n<system-reminder>The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n${queued}\n</system-reminder>`;
-    logger.info({ userId, textLen: text.length }, 'Merged queued messages with new message');
   }
 
   ready.isProcessing = true;

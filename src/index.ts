@@ -1,4 +1,3 @@
-import fs from 'fs';
 import path from 'path';
 import { needsSetup, runSetup } from './setup.js';
 
@@ -39,6 +38,82 @@ async function main(): Promise<void> {
   // Create and start bot
   const bot = createBot();
 
+  // --- Internal API ---
+  const crypto = await import('crypto');
+  const { startInternalApi, stopInternalApi } = await import('./api/internal-server.js');
+  const { registerAllRoutes } = await import('./api/route-handlers.js');
+
+  // Generate random token for this boot
+  const apiToken = crypto.randomBytes(32).toString('hex');
+
+  // Register route handlers (needs bot.api for Telegram operations)
+  registerAllRoutes(bot.api);
+
+  // Start Internal API server
+  await startInternalApi(apiToken);
+
+  // --- Scheduler ---
+  const { startAll: startScheduler, stopAll: stopScheduler, setTriggerCallback } = await import('./scheduler/scheduler.js');
+  const { isUserActive, enqueueScheduledTask } = await import('./bot/handlers/message.js');
+
+  // Set up the trigger callback for cron jobs
+  setTriggerCallback(async (job) => {
+    const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
+    const { StreamHandler } = await import('./claude/stream-handler.js');
+
+    // Check if user is active — if so, queue the task
+    if (isUserActive(job.userId)) {
+      enqueueScheduledTask({
+        userId: job.userId,
+        chatId: job.userId, // DM: userId === chatId
+        text: job.message,
+        api: bot.api,
+        mode: 'cron',
+        model: job.model,
+        sessionId: job.sessionId ?? undefined,
+        workingDir: job.workingDir,
+      });
+      return;
+    }
+
+    // Spawn in silent mode
+    let up = getUserProcess(job.userId);
+    if (!up) {
+      up = createUserProcess(job.userId, job.workingDir, job.model ?? 'sonnet');
+    }
+    if (job.sessionId) up.sessionId = job.sessionId;
+    up.workingDir = job.workingDir;
+    up.isProcessing = true;
+
+    const { process: childProc, parser } = spawnClaudeProcess(up, {
+      resumeSessionId: job.sessionId ?? undefined,
+      mode: 'cron',
+      model: job.model,
+    });
+
+    const streamHandler = new StreamHandler(bot.api, job.userId, job.userId, up, { silent: true });
+    streamHandler.attachToParser(parser).catch(err => {
+      logger.error({ err, jobId: job.id }, 'Cron stream handler error');
+    });
+
+    // Send message to Claude stdin
+    if (!sendToProcess(up, job.message)) {
+      up.isProcessing = false;
+      throw new Error('Failed to send cron message to Claude');
+    }
+
+    // Wait for process to complete
+    await new Promise<void>((resolve) => {
+      childProc.on('exit', () => {
+        up!.isProcessing = false;
+        resolve();
+      });
+    });
+  });
+
+  // Start all cron jobs
+  startScheduler();
+
   // Periodic cleanup of idle processes
   const cleanupInterval = setInterval(() => {
     cleanupIdleProcesses();
@@ -49,11 +124,13 @@ async function main(): Promise<void> {
     logger.info({ signal }, 'Shutting down...');
 
     clearInterval(cleanupInterval);
+    stopScheduler();
 
     for (const [userId] of getAllProcesses()) {
       killProcess(userId);
     }
 
+    await stopInternalApi();
     await bot.stop();
     closeDb();
 

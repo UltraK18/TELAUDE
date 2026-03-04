@@ -62,6 +62,11 @@ function buildConfig() {
     logging: {
       level: optional('LOG_LEVEL', 'info'),
     },
+
+    mcp: {
+      internalApiPort: optionalNumber('MCP_INTERNAL_API_PORT', 19816),
+      internalApiToken: '', // Set at runtime (random per boot)
+    },
   } as const;
 }
 

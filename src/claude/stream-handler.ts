@@ -11,11 +11,16 @@ import type { UserProcess } from './process-manager.js';
 const TELEGRAM_MAX_LEN = 4000;
 const TOOL_UPDATE_INTERVAL = 1000; // 1 second between tool edits
 
+export interface StreamHandlerOptions {
+  silent?: boolean;
+}
+
 export class StreamHandler {
   private api: Api;
   private chatId: number;
   private userId: number;
   private up: UserProcess;
+  private silent: boolean;
 
   // Text response state
   private textBuffer = '';
@@ -33,11 +38,12 @@ export class StreamHandler {
   private resolveComplete: (() => void) | null = null;
   private sessionCaptured = false;
 
-  constructor(api: Api, chatId: number, userId: number, up: UserProcess) {
+  constructor(api: Api, chatId: number, userId: number, up: UserProcess, opts?: StreamHandlerOptions) {
     this.api = api;
     this.chatId = chatId;
     this.userId = userId;
     this.up = up;
+    this.silent = opts?.silent ?? false;
   }
 
   attachToParser(parser: StreamParser): Promise<void> {
@@ -87,7 +93,7 @@ export class StreamHandler {
         await this.deleteToolMessage();
         await this.flushText();
 
-        if (event.is_error && event.result) {
+        if (event.is_error && event.result && !this.silent) {
           try {
             await this.api.sendMessage(this.chatId, `\u274C ${event.result}`);
           } catch (err) {
@@ -104,11 +110,13 @@ export class StreamHandler {
             event.num_turns ?? 0,
           );
 
-          const costMsg = `\uD83D\uDCB0 $${(event.total_cost_usd ?? event.cost_usd).toFixed(4)} | ${event.num_turns ?? 0} turns | ${((event.duration_ms ?? 0) / 1000).toFixed(1)}s`;
-          try {
-            await this.api.sendMessage(this.chatId, costMsg);
-          } catch (err) {
-            logger.error({ err }, 'Failed to send cost message');
+          if (!this.silent) {
+            const costMsg = `\uD83D\uDCB0 $${(event.total_cost_usd ?? event.cost_usd).toFixed(4)} | ${event.num_turns ?? 0} turns | ${((event.duration_ms ?? 0) / 1000).toFixed(1)}s`;
+            try {
+              await this.api.sendMessage(this.chatId, costMsg);
+            } catch (err) {
+              logger.error({ err }, 'Failed to send cost message');
+            }
           }
         }
 
@@ -143,6 +151,7 @@ export class StreamHandler {
     if (!this.toolDirty || this.toolLines.length === 0) return;
     this.toolDirty = false;
     this.lastToolUpdateTime = Date.now();
+    if (this.silent) return; // Skip Telegram output in silent mode
 
     const text = this.toolLines.join('\n');
 
@@ -164,6 +173,7 @@ export class StreamHandler {
 
   private async deleteToolMessage(): Promise<void> {
     if (!this.toolMessageId) return;
+    if (this.silent) { this.toolMessageId = null; this.toolLines = []; return; }
     try {
       await this.api.deleteMessage(this.chatId, this.toolMessageId);
     } catch {
@@ -228,6 +238,7 @@ export class StreamHandler {
   private async flushText(): Promise<void> {
     if (this.textBuffer.length === 0) return;
     if (this.textBuffer.length === this.lastSentTextLength) return;
+    if (this.silent) { this.lastSentTextLength = this.textBuffer.length; this.lastTextUpdateTime = Date.now(); return; }
 
     const text = this.textBuffer;
     this.lastSentTextLength = text.length;

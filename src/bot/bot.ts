@@ -8,6 +8,7 @@ import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { messageHandler, mediaHandler } from './handlers/message.js';
 import { callbackHandler } from './handlers/callback.js';
+import { askInterceptor } from './middleware/ask-interceptor.js';
 import { logger } from '../utils/logger.js';
 
 export function createBot(): Bot {
@@ -23,6 +24,7 @@ export function createBot(): Bot {
   bot.use(loggingMiddleware);
   bot.use(rateLimitMiddleware);
   bot.use(authMiddleware);
+  bot.use(askInterceptor);
 
   // Normalize commands to lowercase (e.g. /NEW → /new)
   bot.use((ctx, next) => {

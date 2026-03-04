@@ -12,10 +12,38 @@ import { getActiveSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText } from './media-types.js';
 import { MediaGroupCollector } from './media-group-collector.js';
+import { updateUserChatMapping } from '../../api/route-handlers.js';
 import { logger } from '../../utils/logger.js';
 
 // Per-user message queue: messages sent while processing are queued
 const messageQueues = new Map<number, { chatId: number; texts: string[] }>();
+
+/**
+ * Check if a user has an active Claude process running.
+ * Used by scheduler to defer cron/heartbeat jobs.
+ */
+export function isUserActive(userId: number): boolean {
+  const up = getUserProcess(userId);
+  return up?.isProcessing ?? false;
+}
+
+// Scheduled task queue: cron/heartbeat jobs deferred while user is active
+interface ScheduledTask {
+  userId: number;
+  chatId: number;
+  text: string;
+  api: Api;
+  mode: 'heartbeat' | 'cron';
+  model?: string;
+  sessionId?: string;
+  workingDir?: string;
+}
+const scheduledQueue: ScheduledTask[] = [];
+
+export function enqueueScheduledTask(task: ScheduledTask): void {
+  scheduledQueue.push(task);
+  logger.info({ userId: task.userId, mode: task.mode, queueSize: scheduledQueue.length }, 'Scheduled task queued');
+}
 
 function getOrCreateUp(userId: number): UserProcess {
   let up = getUserProcess(userId);
@@ -107,6 +135,9 @@ function launchAndSend(
         } else {
           messageQueues.delete(userId);
           up.isProcessing = false;
+
+          // Drain scheduled queue for this user
+          drainScheduledQueue(userId, api);
         }
       });
 
@@ -133,6 +164,51 @@ function launchAndSend(
 
   logger.info({ userId, textLen: text.length }, 'Message sent to Claude');
   return true;
+}
+
+function drainScheduledQueue(userId: number, api: Api): void {
+  const idx = scheduledQueue.findIndex(t => t.userId === userId);
+  if (idx === -1) return;
+
+  const task = scheduledQueue.splice(idx, 1)[0];
+  logger.info({ userId, mode: task.mode }, 'Draining scheduled task');
+
+  const up = getOrCreateUp(userId);
+  if (task.workingDir) up.workingDir = task.workingDir;
+
+  up.isProcessing = true;
+  const resumeId = task.sessionId ?? up.sessionId ?? undefined;
+
+  const { process: childProc, parser } = spawnClaudeProcess(up, {
+    resumeSessionId: resumeId,
+    mode: task.mode,
+    model: task.model,
+  });
+
+  const handler = new StreamHandler(api, task.chatId, userId, up, { silent: true });
+  handler.attachToParser(parser).catch(err => {
+    logger.error({ err, userId }, 'Silent stream handler error');
+  });
+
+  childProc.on('exit', () => {
+    // After scheduled task completes, check for more
+    const queue = messageQueues.get(userId);
+    if (queue && queue.texts.length > 0) {
+      const combined = queue.texts.join('\n\n');
+      queue.texts = [];
+      messageQueues.delete(userId);
+      const nextResume = up.sessionId ?? undefined;
+      launchAndSend(up, combined, task.chatId, userId, api, nextResume);
+    } else {
+      up.isProcessing = false;
+      drainScheduledQueue(userId, api);
+    }
+  });
+
+  if (!sendMessage(up, task.text)) {
+    up.isProcessing = false;
+    logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');
+  }
 }
 
 /**
@@ -184,6 +260,7 @@ export async function messageHandler(ctx: Context): Promise<void> {
   // Ignore commands (handled by command handlers)
   if (text.startsWith('/')) return;
 
+  updateUserChatMapping(userId, chatId);
   queueOrLaunch(userId, chatId, text, ctx.api);
 }
 
@@ -191,6 +268,8 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
   if (!userId || !chatId) return;
+
+  updateUserChatMapping(userId, chatId);
 
   const media = extractMediaInfo(ctx);
   if (!media) return;

@@ -1,7 +1,13 @@
 import { spawn, ChildProcess } from 'child_process';
+import { fileURLToPath } from 'url';
+import path from 'path';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
+import { getApiToken, getApiPort } from '../api/internal-server.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export interface UserProcess {
   telegramUserId: number;
@@ -45,20 +51,40 @@ export function createUserProcess(
 
 export interface SpawnOptions {
   resumeSessionId?: string;
+  mode?: 'user' | 'heartbeat' | 'cron';
+  model?: string;
 }
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
+  const model = opts?.model ?? up.model;
+
   const args = [
     '--verbose',
     '--output-format', 'stream-json',
     '--dangerously-skip-permissions',
-    '--model', up.model,
-    '--max-turns', String(config.claude.defaultMaxTurns),
+    '--model', model,
   ];
 
   if (opts?.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);
   }
+
+  // MCP config for telaude tools
+  const mcpServerPath = path.resolve(__dirname, '..', 'mcp-server', 'index.js');
+  const mcpConfig = {
+    mcpServers: {
+      telaude: {
+        command: 'node',
+        args: [mcpServerPath],
+        env: {
+          TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
+          TELAUDE_API_TOKEN: getApiToken(),
+          TELAUDE_USER_ID: String(up.telegramUserId),
+        },
+      },
+    },
+  };
+  args.push('--mcp-config', JSON.stringify(mcpConfig));
 
   args.push('-p');
 

@@ -275,6 +275,10 @@ function estimateSleepWindow(userId: number): { start: number; end: number } | n
   const dist = getHourlyDistribution(userId, 14);
   if (dist.length === 0) return null;
 
+  // Need enough data to make a meaningful estimate
+  const totalMessages = dist.reduce((sum, d) => sum + d.count, 0);
+  if (totalMessages < 50) return null;
+
   // Find the longest consecutive gap in activity — that's likely sleep
   const hourCounts = new Array(24).fill(0);
   for (const { hour, count } of dist) {

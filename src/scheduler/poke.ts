@@ -383,11 +383,8 @@ Current time: ${timeStr} (${tz})
 Estimated user state: ${state}
 Time since user's last message: ${elapsed}${lastPokeElapsed ? `\nTime since last poke: ${lastPokeElapsed}` : ''}
 
-[POKE] Generate a short message to send to the user. Your text output will be sent DIRECTLY as a Telegram message.
-
-Based on conversation context, write a natural 1-2 sentence message as if you're casually checking in.
-Match the user's language and tone. No system talk, no meta-references.
-If there is truly nothing worth saying (e.g. user explicitly said goodbye), call poke_ok instead.
+[나의 속마음] 유저가 답장이 없다. 내가 보낸 메시지가 마지막 메시지다.${lastPokeElapsed ? ' 아까 먼저 말 걸었는데 또 답이 없다.' : ''}
+지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
 </system-reminder>
 
 ${config.body}${contextContent}`;

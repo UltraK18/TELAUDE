@@ -13,8 +13,8 @@ function encodeCwd(cwd: string): string {
   let encoded = cwd.replace(/\\/g, '/');
   // Remove trailing slash
   encoded = encoded.replace(/\/$/, '');
-  // Replace colons (Windows drive) and slashes with hyphens
-  encoded = encoded.replace(/:/g, '-').replace(/\//g, '-');
+  // Replace colons (Windows drive), slashes, and spaces with hyphens
+  encoded = encoded.replace(/:/g, '-').replace(/\//g, '-').replace(/ /g, '-');
   // Remove leading hyphen if present
   if (encoded.startsWith('-')) {
     encoded = encoded.slice(1);

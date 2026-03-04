@@ -15,6 +15,8 @@ import { MediaGroupCollector } from './media-group-collector.js';
 import { updateUserChatMapping } from '../../api/route-handlers.js';
 import { logger } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
+import { logMessage } from '../../db/message-log-repo.js';
+import { startPokeTimer, resetPokeTimer } from '../../scheduler/poke.js';
 
 // Per-user message queue: messages sent while processing are queued
 const messageQueues = new Map<number, { chatId: number; texts: string[] }>();
@@ -34,7 +36,7 @@ interface ScheduledTask {
   chatId: number;
   text: string;
   api: Api;
-  mode: 'heartbeat' | 'cron';
+  mode: 'heartbeat' | 'cron' | 'poke';
   model?: string;
   sessionId?: string;
   workingDir?: string;
@@ -165,6 +167,11 @@ function launchAndSend(
         } else {
           up.isProcessing = false;
           messageQueues.delete(userId);
+          // Log Claude response and start poke timer (only for user conversations)
+          if (up.currentMode === 'user') {
+            logMessage(userId, 'claude');
+            startPokeTimer(userId, up.workingDir);
+          }
           drainScheduledQueue(userId, api);
         }
       });
@@ -250,7 +257,8 @@ function drainScheduledQueue(userId: number, api: Api): void {
 
     // Send report if Claude produced any text response (and ok wasn't called)
     if (up.lastResponseText) {
-      api.sendMessage(task.chatId, `🔔 ${up.lastResponseText}`)
+      const prefix = task.mode === 'poke' ? '💭' : '🔔';
+      api.sendMessage(task.chatId, `${prefix} ${up.lastResponseText}`)
         .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
     }
     up.silentOkCalled = false;
@@ -271,8 +279,11 @@ function drainScheduledQueue(userId: number, api: Api): void {
     }
   });
 
-  const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
-  const wrappedText = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call ${okTool} if there is truly nothing to report — it suppresses the response.\n${task.text}`;
+  const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : task.mode === 'poke' ? 'poke_ok()' : 'schedule_ok()';
+  // Poke uses the text as-is (already has system-reminder), others get wrapped
+  const wrappedText = task.mode === 'poke'
+    ? task.text
+    : `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call ${okTool} if there is truly nothing to report — it suppresses the response.\n${task.text}`;
   if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');
@@ -289,6 +300,7 @@ function queueOrLaunch(
   text: string,
   api: Api,
 ): void {
+  resetPokeTimer(userId);
   const currentUp = getUserProcess(userId);
 
   if (currentUp?.isProcessing) {
@@ -343,6 +355,7 @@ export async function messageHandler(ctx: Context): Promise<void> {
   // Ignore commands (handled by command handlers)
   if (text.startsWith('/')) return;
 
+  logMessage(userId, 'user');
   updateUserChatMapping(userId, chatId);
 
   // Delete /resume list message if present
@@ -360,6 +373,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   if (!userId || !chatId) return;
 
+  logMessage(userId, 'user');
   updateUserChatMapping(userId, chatId);
 
   const media = extractMediaInfo(ctx);

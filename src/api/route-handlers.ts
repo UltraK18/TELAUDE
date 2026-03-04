@@ -266,7 +266,7 @@ export function registerAllRoutes(api: Api): void {
       up.lastReportText = up.lastResponseText;
       up.lastResponseText = null;
       // Mark for deferred turn deletion — JSONL will be cleaned after process exits
-      up.pendingTurnDelete = body.type as 'heartbeat' | 'cron';
+      up.pendingTurnDelete = body.type as 'heartbeat' | 'cron' | 'poke';
     }
     return { ok: true };
   });

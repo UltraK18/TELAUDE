@@ -6,6 +6,7 @@ import { getUserProcess, killProcess, createUserProcess } from '../../claude/pro
 import { getUserConfig, upsertUserConfig } from '../../db/config-repo.js';
 import { deactivateAllUserSessions } from '../../db/session-repo.js';
 import { config } from '../../config.js';
+import { cancelPokeTimer } from '../../scheduler/poke.js';
 
 const PAGE_SIZE = 10;
 
@@ -100,6 +101,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
       up.sessionId = null;
     }
     deactivateAllUserSessions(userId);
+    cancelPokeTimer(userId);
 
     await ctx.reply(`Directory changed: <code>${result.resolved}</code>`, {
       parse_mode: 'HTML',

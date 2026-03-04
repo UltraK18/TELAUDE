@@ -30,9 +30,11 @@ export interface UserProcess {
   /** Preserved response text after cron_ok (for history, not sent to user) */
   lastReportText: string | null;
   /** Deferred turn deletion — JSONL cleaned after process exits to avoid race condition */
-  pendingTurnDelete: 'heartbeat' | 'cron' | null;
+  pendingTurnDelete: 'heartbeat' | 'cron' | 'poke' | null;
   /** Set by /stop — stream_end keeps tool message with ❌ instead of deleting */
   interrupted: boolean;
+  /** Current spawn mode — used by exit handler to decide poke timer behavior */
+  currentMode: 'user' | 'heartbeat' | 'cron' | 'poke';
 }
 
 const processes = new Map<number, UserProcess>();
@@ -66,6 +68,7 @@ export function createUserProcess(
     lastReportText: null,
     pendingTurnDelete: null,
     interrupted: false,
+    currentMode: 'user',
   };
   processes.set(userId, up);
   return up;
@@ -73,7 +76,7 @@ export function createUserProcess(
 
 export interface SpawnOptions {
   resumeSessionId?: string;
-  mode?: 'user' | 'heartbeat' | 'cron';
+  mode?: 'user' | 'heartbeat' | 'cron' | 'poke';
   model?: string;
 }
 

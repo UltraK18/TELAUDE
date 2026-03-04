@@ -63,6 +63,13 @@ function migrate(db: Database.Database): void {
       max_turns INTEGER DEFAULT 50
     );
 
+    CREATE TABLE IF NOT EXISTS message_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      direction TEXT NOT NULL,
+      timestamp TEXT DEFAULT (datetime('now'))
+    );
+
   `);
 
   // Clean up duplicate session_ids (keep latest), then add unique index

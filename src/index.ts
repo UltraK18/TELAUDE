@@ -54,6 +54,7 @@ async function main(): Promise<void> {
 
   // --- Scheduler ---
   const { startAll: startScheduler, stopAll: stopScheduler, setTriggerCallback } = await import('./scheduler/scheduler.js');
+  const { setPokeCallback, stopAllPokes } = await import('./scheduler/poke.js');
   const { isUserActive, enqueueScheduledTask } = await import('./bot/handlers/message.js');
 
   // Set up the trigger callback for cron jobs
@@ -162,6 +163,72 @@ async function main(): Promise<void> {
     return response;
   });
 
+  // --- Poke (proactive follow-up) ---
+  setPokeCallback(async (userId, stdin, workingDir) => {
+    const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
+    const { StreamHandler } = await import('./claude/stream-handler.js');
+
+    if (isUserActive(userId)) {
+      enqueueScheduledTask({
+        userId,
+        chatId: userId,
+        text: stdin,
+        api: bot.api,
+        mode: 'poke',
+        workingDir,
+      });
+      return;
+    }
+
+    let up = getUserProcess(userId);
+    if (!up) {
+      up = createUserProcess(userId, workingDir, 'sonnet');
+    }
+    up.workingDir = workingDir;
+    up.isProcessing = true;
+    up.currentMode = 'poke';
+
+    const { process: childProc, parser } = spawnClaudeProcess(up, {
+      resumeSessionId: up.sessionId ?? undefined,
+      mode: 'poke',
+    });
+
+    const streamHandler = new StreamHandler(bot.api, userId, userId, up, { silent: true });
+    streamHandler.attachToParser(parser).catch(err => {
+      logger.error({ err, userId }, 'Poke stream handler error');
+    });
+
+    if (!sendToProcess(up, stdin)) {
+      up.isProcessing = false;
+      up.currentMode = 'user';
+      throw new Error('Failed to send poke message to Claude');
+    }
+
+    await new Promise<void>((resolve) => {
+      childProc.on('exit', () => {
+        if (up!.pendingTurnDelete && up!.sessionId) {
+          import('./scheduler/turn-deleter.js').then(({ deleteTurn }) => {
+            deleteTurn(up!.sessionId!, up!.workingDir, up!.pendingTurnDelete!).catch(err => {
+              logger.error({ err, sessionId: up!.sessionId }, 'Deferred poke turn deletion failed');
+            });
+          });
+          up!.pendingTurnDelete = null;
+        }
+
+        if (up!.lastResponseText) {
+          bot.api.sendMessage(userId, `💭 ${up!.lastResponseText}`)
+            .catch(err => logger.error({ err, userId }, 'Failed to send poke message'));
+        }
+        up!.silentOkCalled = false;
+        up!.lastResponseText = null;
+        up!.lastReportText = null;
+        up!.isProcessing = false;
+        up!.currentMode = 'user';
+        resolve();
+      });
+    });
+  });
+
   // Start all cron jobs
   startScheduler();
 
@@ -176,6 +243,7 @@ async function main(): Promise<void> {
 
     clearInterval(cleanupInterval);
     stopScheduler();
+    stopAllPokes();
 
     for (const [userId] of getAllProcesses()) {
       killProcess(userId);

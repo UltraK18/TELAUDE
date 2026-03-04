@@ -74,7 +74,7 @@ interface JsonlMessage {
 export async function deleteTurn(
   sessionId: string,
   workingDir: string,
-  type: 'heartbeat' | 'cron',
+  type: 'heartbeat' | 'cron' | 'poke',
 ): Promise<boolean> {
   const jsonlPath = findSessionJsonl(sessionId, workingDir);
   if (!jsonlPath) {

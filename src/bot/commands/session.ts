@@ -4,6 +4,7 @@ import { getUserProcess, killProcess, removeUserProcess, createUserProcess } fro
 import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession } from '../../db/session-repo.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { botInstanceHash } from '../bot-instance.js';
+import { cancelPokeTimer } from '../../scheduler/poke.js';
 
 /** Track /resume list message per user (independent of UserProcess) */
 const sessionsMessages = new Map<number, { messageId: number; chatId: number }>();
@@ -92,6 +93,7 @@ export async function newCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  cancelPokeTimer(userId);
   killProcess(userId);
   const up = getUserProcess(userId);
   if (up) {
@@ -106,6 +108,7 @@ export async function clearCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  cancelPokeTimer(userId);
   removeUserProcess(userId);
   deactivateAllUserSessions(userId);
 

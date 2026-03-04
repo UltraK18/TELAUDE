@@ -23,11 +23,11 @@ export function registerSystemTools(server: McpServer): void {
 
   server.tool(
     'reload',
-    'Hot-reload Telaude configuration, cron jobs, and MCP settings. Returns reload result.',
-    {},
-    async () => {
-      const result = await mcpPost('/mcp/reload');
-      return { content: [{ type: 'text', text: `Reload complete: ${JSON.stringify(result)}` }] };
+    'Restart the Claude CLI process with fresh MCP configuration. Use after installing MCP servers, changing claude config, or modifying settings. The current CLI process will be killed and re-spawned with the same session (--resume). A confirmation message will be injected so you can verify changes.',
+    { message: z.string().optional().describe('Custom message to inject after restart (default: generic reload confirmation)') },
+    async ({ message }) => {
+      const result = await mcpPost('/mcp/reload', { message });
+      return { content: [{ type: 'text', text: `Reload initiated: ${JSON.stringify(result)}` }] };
     }
   );
 }

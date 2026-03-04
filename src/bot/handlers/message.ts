@@ -86,6 +86,27 @@ function launchAndSend(
       });
 
       childProc.on('exit', (code: number | null) => {
+        // Reload: re-spawn with same session and inject reload message
+        if (up.reloadPending) {
+          const reloadMsg = up.reloadMessage ?? 'MCP reload complete.';
+          up.reloadPending = false;
+          up.reloadMessage = null;
+          up.process = null;
+          up.parser = null;
+
+          const resumeId = up.sessionId ?? undefined;
+          logger.info({ userId, sessionId: resumeId }, 'Reload: re-spawning Claude CLI');
+
+          if (launchAndSend(up, reloadMsg, chatId, userId, api, resumeId)) {
+            // re-launched ok — isProcessing stays true
+          } else {
+            up.isProcessing = false;
+            api.sendMessage(chatId, '\u26A0\uFE0F Reload failed: could not restart Claude CLI.')
+              .catch(() => {});
+          }
+          return;
+        }
+
         if (code !== 0 && up.isProcessing) {
           // Resume failed → retry without resume (new session)
           if (res) {
@@ -191,6 +212,25 @@ function drainScheduledQueue(userId: number, api: Api): void {
   });
 
   childProc.on('exit', () => {
+    // Reload: re-spawn with same session
+    if (up.reloadPending) {
+      const reloadMsg = up.reloadMessage ?? 'MCP reload complete.';
+      up.reloadPending = false;
+      up.reloadMessage = null;
+      up.process = null;
+      up.parser = null;
+
+      const resumeId2 = up.sessionId ?? undefined;
+      logger.info({ userId, sessionId: resumeId2 }, 'Reload (scheduled): re-spawning Claude CLI');
+
+      if (launchAndSend(up, reloadMsg, task.chatId, userId, api, resumeId2)) {
+        // re-launched ok
+      } else {
+        up.isProcessing = false;
+      }
+      return;
+    }
+
     // After scheduled task completes, check for more
     const queue = messageQueues.get(userId);
     if (queue && queue.texts.length > 0) {

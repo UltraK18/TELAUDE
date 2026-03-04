@@ -105,6 +105,33 @@ async function main(): Promise<void> {
     // Wait for process to complete
     await new Promise<void>((resolve) => {
       childProc.on('exit', () => {
+        // If reload pending, re-spawn with same session
+        if (up!.reloadPending) {
+          const reloadMsg = up!.reloadMessage ?? 'MCP reload complete.';
+          up!.reloadPending = false;
+          up!.reloadMessage = null;
+          up!.process = null;
+          up!.parser = null;
+
+          const resumeId = up!.sessionId ?? undefined;
+          logger.info({ userId: job.userId, sessionId: resumeId }, 'Reload (cron): re-spawning Claude CLI');
+
+          const spawn2 = spawnClaudeProcess(up!, { resumeSessionId: resumeId, mode: 'cron', model: job.model });
+          const sh2 = new StreamHandler(bot.api, job.userId, job.userId, up!, { silent: true });
+          sh2.attachToParser(spawn2.parser).catch(() => {});
+
+          if (sendToProcess(up!, reloadMsg)) {
+            spawn2.process.on('exit', () => {
+              up!.isProcessing = false;
+              resolve();
+            });
+          } else {
+            up!.isProcessing = false;
+            resolve();
+          }
+          return;
+        }
+
         up!.isProcessing = false;
         resolve();
       });

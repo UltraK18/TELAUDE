@@ -19,6 +19,10 @@ export interface UserProcess {
   model: string;
   isProcessing: boolean;
   lastActivity: number;
+  /** Set to true when reload is requested — exit handler should re-spawn with same session */
+  reloadPending: boolean;
+  /** Message to inject via stdin after reload re-spawn */
+  reloadMessage: string | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -45,6 +49,8 @@ export function createUserProcess(
     model,
     isProcessing: false,
     lastActivity: Date.now(),
+    reloadPending: false,
+    reloadMessage: null,
   };
   processes.set(userId, up);
   return up;
@@ -128,9 +134,12 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
 
   child.on('exit', (code, signal) => {
     logger.info({ userId: up.telegramUserId, code, signal }, 'Claude CLI process exited');
-    up.process = null;
-    up.parser = null;
-    up.isProcessing = false;
+    // Don't reset state if reload is pending — message handler will re-spawn
+    if (!up.reloadPending) {
+      up.process = null;
+      up.parser = null;
+      up.isProcessing = false;
+    }
   });
 
   child.on('error', (err) => {
@@ -182,6 +191,30 @@ export function killProcess(userId: number): boolean {
     return true;
   } catch (err) {
     logger.error({ userId, err }, 'Failed to kill process');
+    return false;
+  }
+}
+
+export function killForReload(userId: number, message?: string): boolean {
+  const up = processes.get(userId);
+  if (!up?.process) return false;
+
+  up.reloadPending = true;
+  up.reloadMessage = message ?? 'MCP reload complete. The Claude CLI has been restarted with updated MCP configuration. Verify your changes if needed.';
+
+  try {
+    const pid = up.process.pid;
+    if (pid && process.platform === 'win32') {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      up.process.kill('SIGTERM');
+    }
+    // Don't clear process/parser/isProcessing here — let the exit handler do it
+    return true;
+  } catch (err) {
+    logger.error({ userId, err }, 'Failed to kill process for reload');
+    up.reloadPending = false;
+    up.reloadMessage = null;
     return false;
   }
 }

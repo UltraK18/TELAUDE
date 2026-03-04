@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[SCHEDULED TASK — call cron_ok() if nothing to report]\n${job.message}`;
+    const wrappedMessage = `[SCHEDULED TASK] Your text response will be sent to the user as a report. After responding, call cron_ok() to clean up this turn from history. Only skip responding and call cron_ok() directly if there is truly nothing to report.\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');
@@ -133,10 +133,10 @@ async function main(): Promise<void> {
           return;
         }
 
-        // Silent mode: send last response if ok was NOT called
-        if (!up!.silentOkCalled && up!.lastResponseText) {
-          bot.api.sendMessage(job.userId, `\uD83D\uDD14 [cron] ${up!.lastResponseText}`)
-            .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send silent cron response'));
+        // Send report if Claude produced any text response
+        if (up!.lastResponseText) {
+          bot.api.sendMessage(job.userId, `🔔 ${up!.lastResponseText}`)
+            .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
         }
         up!.silentOkCalled = false;
         up!.lastResponseText = null;

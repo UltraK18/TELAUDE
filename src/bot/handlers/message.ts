@@ -231,10 +231,10 @@ function drainScheduledQueue(userId: number, api: Api): void {
       return;
     }
 
-    // Silent mode: send last response if ok was NOT called
-    if (!up.silentOkCalled && up.lastResponseText) {
-      api.sendMessage(task.chatId, `\uD83D\uDD14 [${task.mode}] ${up.lastResponseText}`)
-        .catch(err => logger.error({ err, userId }, 'Failed to send silent response'));
+    // Send report if Claude produced any text response
+    if (up.lastResponseText) {
+      api.sendMessage(task.chatId, `🔔 ${up.lastResponseText}`)
+        .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
     }
     up.silentOkCalled = false;
     up.lastResponseText = null;
@@ -254,7 +254,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
   });
 
   const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
-  const wrappedText = `[SCHEDULED TASK — call ${okTool} if nothing to report]\n${task.text}`;
+  const wrappedText = `[SCHEDULED TASK] Your text response will be sent to the user as a report. After responding, call ${okTool} to clean up this turn from history. Only skip responding and call ${okTool} directly if there is truly nothing to report.\n${task.text}`;
   if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');

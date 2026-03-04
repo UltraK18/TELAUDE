@@ -152,11 +152,13 @@ function launchAndSend(
           up.interrupted = false;
           up.isProcessing = false;
         } else {
-          messageQueues.delete(userId);
           up.isProcessing = false;
 
-          // Drain scheduled queue for this user
-          drainScheduledQueue(userId, api);
+          // Drain scheduled queue for this user (only if no pending user messages)
+          if (!messageQueues.get(userId)?.texts.length) {
+            messageQueues.delete(userId);
+            drainScheduledQueue(userId, api);
+          }
         }
       });
 

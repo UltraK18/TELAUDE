@@ -202,6 +202,15 @@ function calculateDelay(intensity: Level, count: number): number {
 async function firePoke(userId: number, state: PokeState): Promise<void> {
   if (!state.config || !pokeCallback) return;
 
+  // Re-check POKE.md exists — file may have been removed/renamed since scheduling
+  const freshConfig = readPokeConfig(state.workingDir);
+  if (!freshConfig) {
+    logger.info({ userId }, 'Poke cancelled (POKE.md removed)');
+    cancelPokeTimer(userId);
+    return;
+  }
+  state.config = freshConfig;
+
   // Check sleep window (skip check for first poke — always send at least one)
   if (state.count > 0 && shouldSkipForSleep(userId, state.config)) {
     logger.info({ userId }, 'Poke skipped (sleep window)');
@@ -410,17 +419,13 @@ function buildPokeStdin(userId: number, config: PokeConfig, workingDir: string, 
     }
   }
 
-  // Truncate last response for context
-  const lastMsg = lastClaudeResponse
-    ? `\n내가 마지막으로 보낸 메시지: ${lastClaudeResponse.length > 300 ? lastClaudeResponse.slice(0, 300) + '...' : lastClaudeResponse}`
+  const lastPokeNote = lastPokeElapsed
+    ? `, last reach-out ${lastPokeElapsed} ago with no reply`
     : '';
 
-  return `<thinking>
-${timeStr}. 내가 메시지를 보낸 뒤로 ${myElapsed}가 지났다.${lastPokeElapsed ? ` ${lastPokeElapsed} 전에 먼저 말 걸었는데 또 답이 없다.` : ' 답장이 없다.'}${lastMsg}
-지금 느끼는 감정대로 짧게 메시지를 보내자. 텍스트 출력이 곧 텔레그램 메시지다.
+  return `[user no response on telegram...${myElapsed} after assistant's last output${lastPokeNote}] [current time: ${timeStr}] [To get a reply from the user, refer to the previous conversation context and naturally continue the conversation or reach out.]
 
-${config.body}${contextContent}
-</thinking>`;
+${config.body}${contextContent}`;
 }
 
 function formatElapsed(ms: number): string {

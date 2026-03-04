@@ -6,7 +6,7 @@ import { authMiddleware } from './middleware/auth.js';
 import { loggingMiddleware } from './middleware/logging.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { errorHandler } from './middleware/error-handler.js';
-import { messageHandler } from './handlers/message.js';
+import { messageHandler, fileHandler } from './handlers/message.js';
 import { callbackHandler } from './handlers/callback.js';
 import { logger } from '../utils/logger.js';
 
@@ -43,6 +43,10 @@ export function createBot(): Bot {
 
   // Text messages → Claude
   bot.on('message:text', messageHandler);
+
+  // File / photo messages → download & forward to Claude
+  bot.on('message:photo', fileHandler);
+  bot.on('message:document', fileHandler);
 
   logger.info('Bot configured');
   return bot;

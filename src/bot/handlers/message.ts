@@ -9,6 +9,7 @@ import {
 import { StreamHandler } from '../../claude/stream-handler.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession } from '../../db/session-repo.js';
+import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { logger } from '../../utils/logger.js';
 
 // Per-user message queue: messages sent while processing are queued
@@ -157,6 +158,65 @@ export async function messageHandler(ctx: Context): Promise<void> {
   }
 
   // Direct send — not processing
+  const ready = getOrCreateUp(userId);
+  ready.isProcessing = true;
+
+  const resumeId = ready.sessionId ?? undefined;
+
+  if (!launchAndSend(ready, text, chatId, userId, ctx.api, resumeId)) {
+    ready.isProcessing = false;
+    await ctx.reply('\u274C Failed to start Claude CLI. Check your settings.');
+  }
+}
+
+export async function fileHandler(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  const chatId = ctx.chat?.id;
+
+  if (!userId || !chatId) return;
+
+  // Determine file_id and whether it's a photo or document
+  const isPhoto = !!ctx.message?.photo;
+  const fileId = ctx.message?.document?.file_id
+    ?? ctx.message?.photo?.[ctx.message.photo.length - 1]?.file_id;
+
+  if (!fileId) return;
+
+  const originalFileName = ctx.message?.document?.file_name;
+  const caption = ctx.message?.caption ?? '';
+
+  const up = getOrCreateUp(userId);
+
+  // Download the file
+  let savedPath: string;
+  try {
+    savedPath = await downloadTelegramFile(ctx.api, fileId, up.workingDir, originalFileName);
+  } catch (err) {
+    logger.error({ err, userId }, 'Failed to download file');
+    await ctx.reply('\u274C Failed to download file.');
+    return;
+  }
+
+  // Construct text message for Claude
+  const label = isPhoto ? '사진 수신' : '파일 수신';
+  const text = caption
+    ? `[${label}: ${savedPath}]\n${caption}`
+    : `[${label}: ${savedPath}]`;
+
+  // If processing, queue the message
+  const currentUp = getUserProcess(userId);
+  if (currentUp?.isProcessing) {
+    let queue = messageQueues.get(userId);
+    if (!queue) {
+      queue = { chatId, texts: [] };
+      messageQueues.set(userId, queue);
+    }
+    queue.texts.push(text);
+    logger.info({ userId, queueSize: queue.texts.length }, 'File message queued');
+    return;
+  }
+
+  // Direct send
   const ready = getOrCreateUp(userId);
   ready.isProcessing = true;
 

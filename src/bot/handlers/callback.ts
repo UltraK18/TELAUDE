@@ -1,5 +1,5 @@
 import { type Context, InlineKeyboard } from 'grammy';
-import { resumeSession } from '../commands/session.js';
+import { resumeSession, getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
@@ -7,6 +7,7 @@ import { upsertUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { logger } from '../../utils/logger.js';
+import { botInstanceHash } from '../bot-instance.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
@@ -106,52 +107,82 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     return;
   }
 
-  if (data.startsWith('resume:')) {
-    const sessionId = data.slice(7);
-    await ctx.answerCallbackQuery({ text: 'Resuming session...' });
-    await resumeSession(userId, sessionId, ctx);
+  // Legacy buttons without hash (from previous bot versions) — expire them
+  if (data.startsWith('resume:') || data.startsWith('delete_session:')) {
+    await ctx.answerCallbackQuery({ text: 'This button has expired.' });
+    try { await ctx.editMessageReplyMarkup({ reply_markup: undefined }); } catch { /* ignore */ }
     return;
   }
 
-  if (data.startsWith('delete_session:')) {
-    const sessionId = data.slice(15);
-    deleteSession(sessionId);
+  // Session buttons use hash prefix: {hash}:resume:{id} / {hash}:ds:{id}
+  // Reject buttons from previous bot instances
+  if (data.includes(':resume:') || data.includes(':ds:')) {
+    const firstColon = data.indexOf(':');
+    const hash = data.slice(0, firstColon);
 
-    // If this was the active session, clear it
-    const up = getUserProcess(userId);
-    if (up?.sessionId === sessionId) {
-      killProcess(userId);
-      up.sessionId = null;
-    }
-
-    await ctx.answerCallbackQuery({ text: 'Session deleted' });
-
-    // Refresh the sessions list in-place
-    const sessions = getRecentSessions(userId, 10);
-    if (sessions.length === 0) {
-      await ctx.editMessageText('No session history.');
+    if (hash !== botInstanceHash) {
+      await ctx.answerCallbackQuery({ text: 'This button has expired.' });
+      try { await ctx.editMessageReplyMarkup({ reply_markup: undefined }); } catch { /* ignore */ }
       return;
     }
 
-    const keyboard = new InlineKeyboard();
-    const lines: string[] = [];
-    for (const s of sessions) {
-      const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
-      const shortId = s.session_id.slice(0, 8);
-      lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
-      keyboard
-        .text(`${active} ${shortId}... (${s.model})`, `resume:${s.session_id}`)
-        .text('\u274C', `delete_session:${s.session_id}`)
-        .row();
+    const rest = data.slice(firstColon + 1); // "resume:{id}" or "ds:{id}"
+
+    if (rest.startsWith('resume:')) {
+      const sessionId = rest.slice(7);
+      await ctx.answerCallbackQuery({ text: 'Resuming session...' });
+
+      // Delete /resume list message
+      const smsg = getSessionsMessage(userId);
+      if (smsg) {
+        ctx.api.deleteMessage(smsg.chatId, smsg.messageId).catch(() => {});
+        clearSessionsMessage(userId);
+      }
+
+      await resumeSession(userId, sessionId, ctx);
+      return;
     }
 
-    try {
-      await ctx.editMessageText(
-        `<b>Recent Sessions (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume a session.`,
-        { parse_mode: 'HTML', reply_markup: keyboard },
-      );
-    } catch { /* message not modified — ignore */ }
-    return;
+    if (rest.startsWith('ds:')) {
+      const sessionId = rest.slice(3);
+      deleteSession(sessionId);
+
+      // If this was the active session, clear it
+      const up = getUserProcess(userId);
+      if (up?.sessionId === sessionId) {
+        killProcess(userId);
+        up.sessionId = null;
+      }
+
+      await ctx.answerCallbackQuery({ text: 'Session deleted' });
+
+      // Refresh the sessions list in-place
+      const sessions = getRecentSessions(userId, 10);
+      if (sessions.length === 0) {
+        await ctx.editMessageText('No session history.');
+        return;
+      }
+
+      const keyboard = new InlineKeyboard();
+      const lines: string[] = [];
+      for (const s of sessions) {
+        const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
+        const shortId = s.session_id.slice(0, 8);
+        lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+        keyboard
+          .text(`${active} ${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.session_id}`)
+          .text('\u274C', `${botInstanceHash}:ds:${s.session_id}`)
+          .row();
+      }
+
+      try {
+        await ctx.editMessageText(
+          `<b>Recent Sessions (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume a session.`,
+          { parse_mode: 'HTML', reply_markup: keyboard },
+        );
+      } catch { /* message not modified — ignore */ }
+      return;
+    }
   }
 
   await ctx.answerCallbackQuery();

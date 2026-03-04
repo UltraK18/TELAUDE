@@ -38,6 +38,10 @@ export class StreamHandler {
   private resolveComplete: (() => void) | null = null;
   private sessionCaptured = false;
 
+  // Sequential event processing queue
+  private eventQueue: (() => Promise<void>)[] = [];
+  private processingEvent = false;
+
   constructor(api: Api, chatId: number, userId: number, up: UserProcess, opts?: StreamHandlerOptions) {
     this.api = api;
     this.chatId = chatId;
@@ -60,82 +64,90 @@ export class StreamHandler {
       });
 
       parser.on('text', (text: string) => {
-        // Text arrived: finalize tool message, switch to text mode
-        if (this.toolMessageId && this.toolDirty) {
-          this.flushToolLog();
-        }
-        this.textBuffer += text;
-        this.maybeFlushText();
+        this.enqueue(async () => {
+          // Text arrived: delete tool message, switch to text mode
+          if (this.toolMessageId) {
+            await this.deleteToolMessage();
+          }
+          this.textBuffer += text;
+          await this.maybeFlushText();
+        });
       });
 
-      parser.on('tool_use', async (name: string, input: unknown) => {
-        // If we had text, finalize it first
-        await this.flushText();
-        if (this.textMessageId) {
-          this.sentMessages.push(this.textMessageId);
+      parser.on('tool_use', (name: string, input: unknown) => {
+        this.enqueue(async () => {
+          // Finalize any pending text before switching to tool mode
+          await this.flushText();
+          if (this.textMessageId) {
+            this.sentMessages.push(this.textMessageId);
+          }
           this.textMessageId = null;
           this.textBuffer = '';
           this.lastSentTextLength = 0;
-        }
 
-        const inputStr = input ? JSON.stringify(input) : '';
-        const line = inputStr
-          ? formatToolWithInput(name, inputStr)
-          : formatToolStart(name);
-        this.toolLines.push(line);
-        this.toolDirty = true;
-        this.maybeFlushToolLog();
+          const inputStr = input ? JSON.stringify(input) : '';
+          const line = inputStr
+            ? formatToolWithInput(name, inputStr)
+            : formatToolStart(name);
+          this.toolLines.push(line);
+          this.toolDirty = true;
+          this.maybeFlushToolLog();
+        });
       });
 
-      parser.on('result', async (event: ResultEvent) => {
-        logger.info({ userId: this.userId, responseLen: this.textBuffer.length, response: this.textBuffer.slice(0, 200) }, 'Claude response');
+      parser.on('result', (event: ResultEvent) => {
+        this.enqueue(async () => {
+          logger.info({ userId: this.userId, responseLen: this.textBuffer.length, response: this.textBuffer.slice(0, 200) }, 'Claude response');
 
-        // Store last response for silent mode (sent on exit if ok not called)
-        if (this.silent && this.textBuffer.length > 0) {
-          this.up.lastResponseText = this.textBuffer;
-        }
-
-        await this.flushToolLog();
-        await this.deleteToolMessage();
-        await this.flushText();
-
-        if (event.is_error && event.result && !this.silent) {
-          try {
-            await this.api.sendMessage(this.chatId, `\u274C ${event.result}`);
-          } catch (err) {
-            logger.error({ err }, 'Failed to send error result');
-          }
-        }
-
-        const sessionId = event.session_id ?? this.up.sessionId;
-        if (sessionId && event.cost_usd != null) {
-          updateCost(
-            sessionId,
-            event.cost_usd,
-            event.total_cost_usd ?? event.cost_usd,
-            event.num_turns ?? 0,
-          );
-
-          if (!this.silent) {
-            const costMsg = `\uD83D\uDCB0 $${(event.total_cost_usd ?? event.cost_usd).toFixed(4)} | ${event.num_turns ?? 0} turns | ${((event.duration_ms ?? 0) / 1000).toFixed(1)}s`;
-            try {
-              await this.api.sendMessage(this.chatId, costMsg);
-            } catch (err) {
-              logger.error({ err }, 'Failed to send cost message');
+          // Store last response for silent mode
+          if (this.silent && this.textBuffer.length > 0) {
+            if (this.up.silentOkCalled) {
+              // cron_ok/heartbeat_ok was called — save to reportText for history, not for auto-report
+              this.up.lastReportText = this.textBuffer;
+            } else {
+              // ok not called — save for auto-report on exit
+              this.up.lastResponseText = this.textBuffer;
             }
           }
-        }
 
-        // isProcessing cleared by exit handler in message.ts (not here)
-        this.complete();
+          await this.flushToolLog();
+          await this.deleteToolMessage();
+          await this.flushText();
+
+          if (event.is_error && event.result && !this.silent) {
+            try {
+              await this.api.sendMessage(this.chatId, `\u274C ${event.result}`);
+            } catch (err) {
+              logger.error({ err }, 'Failed to send error result');
+            }
+          }
+
+          const sessionId = event.session_id ?? this.up.sessionId;
+          logger.info({ sessionId, total_cost_usd: event.total_cost_usd, usage: event.usage, num_turns: event.num_turns }, 'Result event received');
+          if (sessionId && (event.cost_usd != null || event.total_cost_usd != null)) {
+            const costVal = event.total_cost_usd ?? event.cost_usd ?? 0;
+            updateCost(
+              sessionId,
+              event.cost_usd ?? 0,
+              costVal,
+              event.num_turns ?? 0,
+              event.usage,
+            );
+          }
+
+          // isProcessing cleared by exit handler in message.ts (not here)
+          this.complete();
+        });
       });
 
-      parser.on('stream_end', async () => {
-        await this.flushToolLog();
-        await this.deleteToolMessage();
-        await this.flushText();
-        // isProcessing cleared by exit handler in message.ts (not here)
-        this.complete();
+      parser.on('stream_end', () => {
+        this.enqueue(async () => {
+          await this.flushToolLog();
+          await this.deleteToolMessage();
+          await this.flushText();
+          // isProcessing cleared by exit handler in message.ts (not here)
+          this.complete();
+        });
       });
 
       parser.on('parse_error', (line: string, err: Error) => {
@@ -191,13 +203,13 @@ export class StreamHandler {
 
   // ── Text response ──
 
-  private maybeFlushText(): void {
+  private async maybeFlushText(): Promise<void> {
     const now = Date.now();
     const timeSinceLastUpdate = now - this.lastTextUpdateTime;
     const newChars = this.textBuffer.length - this.lastSentTextLength;
 
     if (this.textBuffer.length > TELEGRAM_MAX_LEN) {
-      this.splitAndSendCurrent();
+      await this.splitAndSendCurrent();
       return;
     }
 
@@ -205,7 +217,7 @@ export class StreamHandler {
       timeSinceLastUpdate >= config.display.streamUpdateIntervalMs ||
       newChars >= config.display.streamUpdateMinChars
     ) {
-      this.flushText();
+      await this.flushText();
     }
   }
 
@@ -296,6 +308,26 @@ export class StreamHandler {
     } catch (err) {
       logger.error({ err }, 'Failed to send plain text');
     }
+  }
+
+  private enqueue(fn: () => Promise<void>): void {
+    this.eventQueue.push(fn);
+    if (!this.processingEvent) {
+      this.drainQueue();
+    }
+  }
+
+  private async drainQueue(): Promise<void> {
+    this.processingEvent = true;
+    while (this.eventQueue.length > 0) {
+      const fn = this.eventQueue.shift()!;
+      try {
+        await fn();
+      } catch (err) {
+        logger.error({ err }, 'Event queue handler error');
+      }
+    }
+    this.processingEvent = false;
   }
 
   private complete(): void {

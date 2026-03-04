@@ -14,6 +14,7 @@ import { extractMediaInfo, buildMediaText } from './media-types.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { updateUserChatMapping } from '../../api/route-handlers.js';
 import { logger } from '../../utils/logger.js';
+import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 
 // Per-user message queue: messages sent while processing are queued
 const messageQueues = new Map<number, { chatId: number; texts: string[] }>();
@@ -231,6 +232,16 @@ function drainScheduledQueue(userId: number, api: Api): void {
       return;
     }
 
+    // Deferred turn deletion — now safe since process has exited
+    if (up.pendingTurnDelete && up.sessionId) {
+      import('../../scheduler/turn-deleter.js').then(({ deleteTurn }) => {
+        deleteTurn(up.sessionId!, up.workingDir, up.pendingTurnDelete!).catch(err => {
+          logger.error({ err, sessionId: up.sessionId }, 'Deferred turn deletion failed');
+        });
+      });
+      up.pendingTurnDelete = null;
+    }
+
     // Send report if Claude produced any text response (and ok wasn't called)
     if (up.lastResponseText) {
       api.sendMessage(task.chatId, `🔔 ${up.lastResponseText}`)
@@ -255,7 +266,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
   });
 
   const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
-  const wrappedText = `[SCHEDULED TASK] Respond with your report first, then call ${okTool} as the very last action. Do NOT output text after calling ${okTool}. If truly nothing to report, call ${okTool} directly without responding.\n${task.text}`;
+  const wrappedText = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call ${okTool} if there is truly nothing to report — it suppresses the response.\n${task.text}`;
   if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');
@@ -312,6 +323,14 @@ export async function messageHandler(ctx: Context): Promise<void> {
   if (text.startsWith('/')) return;
 
   updateUserChatMapping(userId, chatId);
+
+  // Delete /resume list message if present
+  const smsg = getSessionsMessage(userId);
+  if (smsg) {
+    ctx.api.deleteMessage(smsg.chatId, smsg.messageId).catch(() => {});
+    clearSessionsMessage(userId);
+  }
+
   queueOrLaunch(userId, chatId, text, ctx.api);
 }
 

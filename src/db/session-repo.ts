@@ -11,6 +11,8 @@ export interface SessionRecord {
   is_active: number;
   total_cost_usd: number;
   total_turns: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
 }
 
 export function createSession(
@@ -19,6 +21,9 @@ export function createSession(
   workingDir: string,
   model: string,
 ): void {
+  // Deactivate all other sessions first — only one active at a time
+  deactivateAllUserSessions(userId);
+
   const existing = getDb()
     .prepare('SELECT id FROM sessions WHERE session_id = ?')
     .get(sessionId);
@@ -63,10 +68,10 @@ export function updateSessionActivity(sessionId: string): void {
     .run(sessionId);
 }
 
-export function updateSessionCost(sessionId: string, costUsd: number, turns: number): void {
+export function updateSessionCost(sessionId: string, costUsd: number, turns: number, inputTokens?: number, outputTokens?: number): void {
   getDb()
-    .prepare('UPDATE sessions SET total_cost_usd = ?, total_turns = ? WHERE session_id = ?')
-    .run(costUsd, turns, sessionId);
+    .prepare('UPDATE sessions SET total_cost_usd = ?, total_turns = ?, total_input_tokens = ?, total_output_tokens = ? WHERE session_id = ?')
+    .run(costUsd, turns, inputTokens ?? 0, outputTokens ?? 0, sessionId);
 }
 
 export function deactivateSession(sessionId: string): void {

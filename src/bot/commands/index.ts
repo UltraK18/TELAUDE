@@ -7,7 +7,7 @@ import { sessionCommand, sessionsCommand, resumeCommand, newCommand, clearComman
 import { stopCommand } from './stop.js';
 import { modelCommand } from './model.js';
 import { budgetCommand } from './budget.js';
-import { statusCommand, costCommand } from './status.js';
+import { statusCommand, costCommand, tokenCommand } from './status.js';
 
 export function registerCommands(bot: Bot): void {
   bot.command('start', startCommand);
@@ -19,7 +19,6 @@ export function registerCommands(bot: Bot): void {
   bot.command('projects', projectsCommand);
 
   bot.command('session', sessionCommand);
-  bot.command('sessions', sessionsCommand);
   bot.command('resume', resumeCommand);
   bot.command('new', newCommand);
   bot.command('clear', clearCommand);
@@ -29,4 +28,5 @@ export function registerCommands(bot: Bot): void {
   bot.command('budget', budgetCommand);
   bot.command('status', statusCommand);
   bot.command('cost', costCommand);
+  bot.command('token', tokenCommand);
 }

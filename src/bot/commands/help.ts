@@ -13,14 +13,14 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 
 <b>Sessions</b>
 /session - Current session info
-/sessions - Recent sessions
-/resume [id] - Resume session
+/resume - Resume session
 /new - New session
 /stop - Stop current task
 /clear - Clear conversation
 
 <b>Settings</b>
 /model [name] - View/change model
+/token - Session token usage
 /budget [amount] - View/set budget
 /status - Bot status
 /cost - Total cost`;

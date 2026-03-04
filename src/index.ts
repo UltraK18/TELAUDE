@@ -97,7 +97,7 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[SCHEDULED TASK] Respond with your report first, then call cron_ok() as the very last action. Do NOT output text after calling cron_ok(). If truly nothing to report, call cron_ok() directly without responding.\n${job.message}`;
+    const wrappedMessage = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call cron_ok() if there is truly nothing to report — it suppresses the response.\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');
@@ -131,6 +131,16 @@ async function main(): Promise<void> {
             resolve(null);
           }
           return;
+        }
+
+        // Deferred turn deletion — now safe since process has exited
+        if (up!.pendingTurnDelete && up!.sessionId) {
+          import('./scheduler/turn-deleter.js').then(({ deleteTurn }) => {
+            deleteTurn(up!.sessionId!, up!.workingDir, up!.pendingTurnDelete!).catch(err => {
+              logger.error({ err, sessionId: up!.sessionId }, 'Deferred turn deletion failed');
+            });
+          });
+          up!.pendingTurnDelete = null;
         }
 
         // lastResponseText = text before cron_ok; lastReportText = text preserved after cron_ok

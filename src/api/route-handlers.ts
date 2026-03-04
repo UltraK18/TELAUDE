@@ -235,8 +235,13 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/cron/history', async (body) => {
     const job = getJob(body.jobId);
-    if (!job) throw new Error(`Job not found: ${body.jobId}`);
-    return { history: job.history };
+    if (job) return { history: job.history };
+
+    // Check completed jobs archive
+    const completed = getCompletedJobs().find(j => j.id === body.jobId);
+    if (completed) return { history: completed.history };
+
+    throw new Error(`Job not found: ${body.jobId}`);
   });
 
   registerRoute('/mcp/cron/next', async (body) => {
@@ -253,7 +258,6 @@ export function registerAllRoutes(api: Api): void {
   // --- Turn deletion ---
 
   registerRoute('/mcp/turn-delete', async (body) => {
-    const { deleteTurn } = await import('../scheduler/turn-deleter.js');
     const userId = body._userId as number;
     const up = getUserProcess(userId);
     if (up) {
@@ -261,9 +265,8 @@ export function registerAllRoutes(api: Api): void {
       // Preserve response for history, but prevent auto-report to Telegram
       up.lastReportText = up.lastResponseText;
       up.lastResponseText = null;
-    }
-    if (up?.sessionId && up?.workingDir) {
-      await deleteTurn(up.sessionId, up.workingDir, body.type);
+      // Mark for deferred turn deletion — JSONL will be cleaned after process exits
+      up.pendingTurnDelete = body.type as 'heartbeat' | 'cron';
     }
     return { ok: true };
   });

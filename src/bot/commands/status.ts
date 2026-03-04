@@ -1,6 +1,7 @@
 import { type Context } from 'grammy';
-import { getAllProcesses } from '../../claude/process-manager.js';
-import { getRecentSessions } from '../../db/session-repo.js';
+import { getAllProcesses, getUserProcess } from '../../claude/process-manager.js';
+import { getActiveSession, getRecentSessions } from '../../db/session-repo.js';
+import { getCost } from '../../claude/cost-tracker.js';
 
 export async function statusCommand(ctx: Context): Promise<void> {
   const processes = getAllProcesses();
@@ -30,6 +31,38 @@ export async function costCommand(ctx: Context): Promise<void> {
     `Cost: $${totalCost.toFixed(4)}\n` +
     `Turns: ${totalTurns}\n` +
     `Sessions: ${sessions.length}`,
+    { parse_mode: 'HTML' },
+  );
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+export async function tokenCommand(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const up = getUserProcess(userId);
+  const sessionId = up?.sessionId ?? getActiveSession(userId)?.session_id;
+
+  if (!sessionId) {
+    await ctx.reply('No active session.');
+    return;
+  }
+
+  const cost = getCost(sessionId);
+  const input = cost?.inputTokens ?? 0;
+  const output = cost?.outputTokens ?? 0;
+
+  await ctx.reply(
+    `<b>Session Tokens</b>\n` +
+    `Input: ${formatTokens(input)} tokens\n` +
+    `Output: ${formatTokens(output)} tokens\n` +
+    `Total: ${formatTokens(input + output)} tokens\n` +
+    `Cost: $${(cost?.totalCostUsd ?? 0).toFixed(4)} | ${cost?.numTurns ?? 0} turns`,
     { parse_mode: 'HTML' },
   );
 }

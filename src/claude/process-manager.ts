@@ -29,6 +29,8 @@ export interface UserProcess {
   lastResponseText: string | null;
   /** Preserved response text after cron_ok (for history, not sent to user) */
   lastReportText: string | null;
+  /** Deferred turn deletion — JSONL cleaned after process exits to avoid race condition */
+  pendingTurnDelete: 'heartbeat' | 'cron' | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -60,6 +62,7 @@ export function createUserProcess(
     silentOkCalled: false,
     lastResponseText: null,
     lastReportText: null,
+    pendingTurnDelete: null,
   };
   processes.set(userId, up);
   return up;
@@ -107,6 +110,18 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     },
   };
   args.push('--mcp-config', JSON.stringify(mcpConfig));
+
+  // Disable interactive/UI tools that don't work in -p mode
+  const disallowed = [
+    'AskUserQuestion',   // auto-completes with empty answer, use MCP ask instead
+    'EnterPlanMode',     // plan mode UI, no user interaction possible
+    'ExitPlanMode',      // plan approval UI, no user interaction possible
+    'EnterWorktree',     // worktree UI management, unmanaged in headless mode
+    'SendMessageTool',   // swarm/agent team feature, not applicable
+    'TeammateTool',      // swarm/agent team feature, not applicable
+    'TeamDelete',        // swarm/agent team feature, not applicable
+  ];
+  args.push('--disallowedTools', ...disallowed);
 
   args.push('-p');
 

@@ -1,8 +1,20 @@
 import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import { getUserProcess, killProcess, removeUserProcess, createUserProcess } from '../../claude/process-manager.js';
-import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions } from '../../db/session-repo.js';
+import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession } from '../../db/session-repo.js';
 import { getUserConfig } from '../../db/config-repo.js';
+import { botInstanceHash } from '../bot-instance.js';
+
+/** Track /resume list message per user (independent of UserProcess) */
+const sessionsMessages = new Map<number, { messageId: number; chatId: number }>();
+
+export function getSessionsMessage(userId: number) {
+  return sessionsMessages.get(userId);
+}
+
+export function clearSessionsMessage(userId: number) {
+  sessionsMessages.delete(userId);
+}
 
 export async function sessionCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -53,35 +65,23 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
     const shortId = s.session_id.slice(0, 8);
     lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
     keyboard
-      .text(`${active} ${shortId}... (${s.model})`, `resume:${s.session_id}`)
-      .text('\u274C', `delete_session:${s.session_id}`)
+      .text(`${active} ${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.session_id}`)
+      .text('\u274C', `${botInstanceHash}:ds:${s.session_id}`)
       .row();
   }
 
-  await ctx.reply(
+  const msg = await ctx.reply(
     `<b>Recent Sessions (${sessions.length})</b>\n\n${lines.join('\n')}\n\nTap to resume a session.`,
     { parse_mode: 'HTML', reply_markup: keyboard },
   );
+
+  // Track message ID so it can be deleted on resume or next chat
+  sessionsMessages.set(userId, { messageId: msg.message_id, chatId: ctx.chat!.id });
 }
 
+/** /resume — show session list (same as /sessions) */
 export async function resumeCommand(ctx: Context): Promise<void> {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-
-  const text = ctx.message?.text ?? '';
-  const sessionId = text.replace(/^\/resume\s*/, '').trim();
-
-  if (!sessionId) {
-    const recent = getActiveSession(userId);
-    if (!recent) {
-      await ctx.reply('No session to resume. Use /sessions to see the list.');
-      return;
-    }
-    await resumeSession(userId, recent.session_id, ctx);
-    return;
-  }
-
-  await resumeSession(userId, sessionId, ctx);
+  return sessionsCommand(ctx);
 }
 
 export async function resumeSession(userId: number, sessionId: string, ctx: Context): Promise<void> {
@@ -100,6 +100,9 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
   up.sessionId = sessionId;
   up.workingDir = session?.working_dir ?? up.workingDir;
   up.model = session?.model ?? up.model;
+
+  // Mark this session active in DB (deactivates others) so it survives bot restart
+  createSession(userId, sessionId, up.workingDir, up.model);
 
   await ctx.reply(
     `Session resumed: <code>${sessionId.slice(0, 8)}...</code>\nContinuing from next message.`,

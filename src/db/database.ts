@@ -72,6 +72,16 @@ function migrate(db: Database.Database): void {
     );
   `);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)`);
+
+  // Add token columns if missing
+  const cols = db.pragma('table_info(sessions)') as { name: string }[];
+  const colNames = new Set(cols.map(c => c.name));
+  if (!colNames.has('total_input_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER DEFAULT 0');
+  }
+  if (!colNames.has('total_output_tokens')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER DEFAULT 0');
+  }
 }
 
 export function closeDb(): void {

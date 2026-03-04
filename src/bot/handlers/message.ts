@@ -143,9 +143,15 @@ function launchAndSend(
         const queue = messageQueues.get(userId);
         if (queue && queue.texts.length > 0) {
           // Keep isProcessing = true, process next batch
-          const combined = queue.texts.join('\n\n');
+          let combined = queue.texts.join('\n\n');
           queue.texts = [];
           messageQueues.delete(userId);
+
+          // If interrupted, prepend context to the queued messages
+          if (up.interrupted) {
+            combined = `[The user interrupted the previous task. The tool use was rejected — do not continue or retry it.]\n${combined}`;
+            up.interrupted = false;
+          }
           logger.info({ userId, textLen: combined.length }, 'Processing queued messages');
 
           const nextResume = up.sessionId ?? undefined;

@@ -62,7 +62,6 @@ export function createBot(): Bot {
     { command: 'resume', description: 'Resume session' },
     { command: 'stats', description: 'Session stats & tokens' },
     { command: 'stop', description: 'Stop current task' },
-    { command: 'reload', description: 'Reload CLI session' },
     { command: 'force_reload', description: 'Restart bot process' },
     { command: 'cd', description: 'Change working directory' },
     { command: 'pwd', description: 'Current directory' },

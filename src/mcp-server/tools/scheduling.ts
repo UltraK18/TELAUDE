@@ -5,17 +5,24 @@ import { mcpPost } from '../http-client.js';
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
     'cron_add',
-    'Register a new scheduled job. The message will be sent to Claude as user input at the scheduled time.',
+    'Schedule a job. Uses system timezone. Runs silent — reply to report, call cron_ok() if nothing to report.',
     {
-      name: z.string().describe('Human-readable job name'),
-      schedule: z.string().describe('Cron expression (e.g. "0 9 * * *" for daily 9am)'),
-      message: z.string().describe('Message to inject as user input when triggered'),
-      workingDir: z.string().optional().describe('Working directory for the Claude process'),
-      model: z.string().optional().describe('Model to use (default: current model)'),
+      name: z.string().describe('Job name'),
+      schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),
+      runAt: z.string().optional().describe('ISO datetime for one-time jobs (e.g. "2026-03-04T14:00:00"). Auto-deleted after execution.'),
+      message: z.string().describe('Prompt sent to Claude when triggered'),
+      workingDir: z.string().optional().describe('Working directory'),
+      model: z.string().optional().describe('Model override'),
     },
-    async ({ name, schedule, message, workingDir, model }) => {
-      const result = await mcpPost('/mcp/cron/add', { name, schedule, message, workingDir, model });
-      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name})` }] };
+    async ({ name, schedule, runAt, message, workingDir, model }) => {
+      if (!schedule && !runAt) {
+        return { content: [{ type: 'text', text: 'Error: provide either schedule (recurring) or runAt (one-time)' }] };
+      }
+      const once = !!runAt;
+      const finalSchedule = schedule ?? 'once';
+      const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt, message, workingDir, model, once });
+      const when = runAt ?? schedule;
+      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name}) — ${once ? `once at ${when}` : `recurring: ${when}`}` }] };
     }
   );
 

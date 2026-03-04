@@ -23,6 +23,10 @@ export interface UserProcess {
   reloadPending: boolean;
   /** Message to inject via stdin after reload re-spawn */
   reloadMessage: string | null;
+  /** Set to true when cron_ok/heartbeat_ok is called — silent exit won't send response */
+  silentOkCalled: boolean;
+  /** Last response text from Claude (used by silent mode to send on exit if ok not called) */
+  lastResponseText: string | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -51,6 +55,8 @@ export function createUserProcess(
     lastActivity: Date.now(),
     reloadPending: false,
     reloadMessage: null,
+    silentOkCalled: false,
+    lastResponseText: null,
   };
   processes.set(userId, up);
   return up;

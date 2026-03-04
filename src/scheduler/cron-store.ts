@@ -19,6 +19,8 @@ export interface CronJob {
   userId: number;
   sessionId: string | null;
   isPaused: boolean;
+  once: boolean;
+  runAt?: string;
   createdAt: string;
   history: CronJobHistory[];
 }
@@ -66,6 +68,8 @@ export function addJob(params: {
   model?: string;
   userId: number;
   sessionId?: string | null;
+  once?: boolean;
+  runAt?: string;
 }): CronJob {
   const jobs = readStore();
   const job: CronJob = {
@@ -78,6 +82,8 @@ export function addJob(params: {
     userId: params.userId,
     sessionId: params.sessionId ?? null,
     isPaused: false,
+    once: params.once ?? false,
+    runAt: params.runAt,
     createdAt: new Date().toISOString(),
     history: [],
   };

@@ -231,6 +231,14 @@ function drainScheduledQueue(userId: number, api: Api): void {
       return;
     }
 
+    // Silent mode: send last response if ok was NOT called
+    if (!up.silentOkCalled && up.lastResponseText) {
+      api.sendMessage(task.chatId, `\uD83D\uDD14 [${task.mode}] ${up.lastResponseText}`)
+        .catch(err => logger.error({ err, userId }, 'Failed to send silent response'));
+    }
+    up.silentOkCalled = false;
+    up.lastResponseText = null;
+
     // After scheduled task completes, check for more
     const queue = messageQueues.get(userId);
     if (queue && queue.texts.length > 0) {
@@ -245,7 +253,9 @@ function drainScheduledQueue(userId: number, api: Api): void {
     }
   });
 
-  if (!sendMessage(up, task.text)) {
+  const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : 'cron_ok()';
+  const wrappedText = `[silent mode] Reply to report, or call ${okTool} if nothing to report.\n\n${task.text}`;
+  if (!sendMessage(up, wrappedText)) {
     up.isProcessing = false;
     logger.error({ userId, mode: task.mode }, 'Failed to send scheduled message');
   }

@@ -179,6 +179,8 @@ export function registerAllRoutes(api: Api): void {
       model: body.model ?? up?.model,
       userId,
       sessionId: up?.sessionId,
+      once: body.once ?? false,
+      runAt: body.runAt,
     });
     scheduleJob(job.id);
     return { jobId: job.id };
@@ -235,10 +237,13 @@ export function registerAllRoutes(api: Api): void {
   // --- Turn deletion ---
 
   registerRoute('/mcp/turn-delete', async (body) => {
-    // Delegate to turn-deleter (will be implemented in Phase 6)
     const { deleteTurn } = await import('../scheduler/turn-deleter.js');
     const userId = body._userId as number;
     const up = getUserProcess(userId);
+    if (up) {
+      // Mark that ok was called — silent exit won't send response to Telegram
+      up.silentOkCalled = true;
+    }
     if (up?.sessionId && up?.workingDir) {
       await deleteTurn(up.sessionId, up.workingDir, body.type);
     }

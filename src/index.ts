@@ -96,8 +96,9 @@ async function main(): Promise<void> {
       logger.error({ err, jobId: job.id }, 'Cron stream handler error');
     });
 
-    // Send message to Claude stdin
-    if (!sendToProcess(up, job.message)) {
+    // Send message to Claude stdin (wrapped with silent mode hint)
+    const wrappedMessage = `[silent mode] Reply to report, or call cron_ok() if nothing to report.\n\n${job.message}`;
+    if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');
     }
@@ -131,6 +132,14 @@ async function main(): Promise<void> {
           }
           return;
         }
+
+        // Silent mode: send last response if ok was NOT called
+        if (!up!.silentOkCalled && up!.lastResponseText) {
+          bot.api.sendMessage(job.userId, `\uD83D\uDD14 [cron] ${up!.lastResponseText}`)
+            .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send silent cron response'));
+        }
+        up!.silentOkCalled = false;
+        up!.lastResponseText = null;
 
         up!.isProcessing = false;
         resolve();

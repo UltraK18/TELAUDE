@@ -1,10 +1,11 @@
 import { Cron } from 'croner';
-import { getAllJobs, getJob, addHistory, type CronJob } from './cron-store.js';
+import { getAllJobs, getJob, addHistory, removeJob, type CronJob } from './cron-store.js';
 import { logger } from '../utils/logger.js';
 
 type TriggerCallback = (job: CronJob) => Promise<void>;
 
 const activeCrons = new Map<string, Cron>();
+const activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let triggerCallback: TriggerCallback | null = null;
 
 /**
@@ -18,6 +19,43 @@ export function setTriggerCallback(cb: TriggerCallback): void {
 /**
  * Start/restart a single cron job.
  */
+async function executeJob(job: CronJob): Promise<void> {
+  logger.info({ jobId: job.id, name: job.name }, 'Cron job triggered');
+  const startTime = Date.now();
+
+  try {
+    if (!triggerCallback) {
+      throw new Error('No trigger callback registered');
+    }
+    const currentJob = getJob(job.id);
+    if (!currentJob || currentJob.isPaused) {
+      logger.info({ jobId: job.id }, 'Job paused or deleted, skipping execution');
+      return;
+    }
+    await triggerCallback(currentJob);
+    addHistory(job.id, {
+      timestamp: new Date().toISOString(),
+      status: 'success',
+      durationMs: Date.now() - startTime,
+    });
+  } catch (err: any) {
+    logger.error({ err, jobId: job.id }, 'Cron job execution failed');
+    addHistory(job.id, {
+      timestamp: new Date().toISOString(),
+      status: 'error',
+      durationMs: Date.now() - startTime,
+      error: err.message,
+    });
+  }
+
+  // Auto-delete one-time jobs after execution
+  if (job.once) {
+    stopJob(job.id);
+    removeJob(job.id);
+    logger.info({ jobId: job.id, name: job.name }, 'One-time job auto-deleted');
+  }
+}
+
 function startJob(job: CronJob): void {
   // Stop existing if any
   stopJob(job.id);
@@ -27,38 +65,25 @@ function startJob(job: CronJob): void {
     return;
   }
 
+  // One-time job with runAt: use setTimeout
+  if (job.once && job.runAt) {
+    const delayMs = new Date(job.runAt).getTime() - Date.now();
+    if (delayMs <= 0) {
+      logger.info({ jobId: job.id, name: job.name, runAt: job.runAt }, 'One-time job already past, skipping');
+      return;
+    }
+    const timer = setTimeout(() => {
+      activeTimers.delete(job.id);
+      executeJob(job);
+    }, delayMs);
+    activeTimers.set(job.id, timer);
+    logger.info({ jobId: job.id, name: job.name, runAt: job.runAt, delayMs }, 'One-time job scheduled');
+    return;
+  }
+
+  // Recurring job: use Cron
   try {
-    const cronInstance = new Cron(job.schedule, async () => {
-      logger.info({ jobId: job.id, name: job.name }, 'Cron job triggered');
-      const startTime = Date.now();
-
-      try {
-        if (!triggerCallback) {
-          throw new Error('No trigger callback registered');
-        }
-        // Re-read job from store in case it was updated
-        const currentJob = getJob(job.id);
-        if (!currentJob || currentJob.isPaused) {
-          logger.info({ jobId: job.id }, 'Job paused or deleted, skipping execution');
-          return;
-        }
-        await triggerCallback(currentJob);
-        addHistory(job.id, {
-          timestamp: new Date().toISOString(),
-          status: 'success',
-          durationMs: Date.now() - startTime,
-        });
-      } catch (err: any) {
-        logger.error({ err, jobId: job.id }, 'Cron job execution failed');
-        addHistory(job.id, {
-          timestamp: new Date().toISOString(),
-          status: 'error',
-          durationMs: Date.now() - startTime,
-          error: err.message,
-        });
-      }
-    });
-
+    const cronInstance = new Cron(job.schedule, () => executeJob(job));
     activeCrons.set(job.id, cronInstance);
     const next = cronInstance.nextRun();
     logger.info({ jobId: job.id, name: job.name, schedule: job.schedule, nextRun: next?.toISOString() }, 'Cron job scheduled');
@@ -75,6 +100,11 @@ function stopJob(jobId: string): void {
   if (existing) {
     existing.stop();
     activeCrons.delete(jobId);
+  }
+  const timer = activeTimers.get(jobId);
+  if (timer) {
+    clearTimeout(timer);
+    activeTimers.delete(jobId);
   }
 }
 
@@ -93,10 +123,14 @@ export function startAll(): void {
  * Stop all active cron jobs.
  */
 export function stopAll(): void {
-  for (const [id, cron] of activeCrons) {
+  for (const [, cron] of activeCrons) {
     cron.stop();
   }
   activeCrons.clear();
+  for (const [, timer] of activeTimers) {
+    clearTimeout(timer);
+  }
+  activeTimers.clear();
   logger.info('All cron jobs stopped');
 }
 

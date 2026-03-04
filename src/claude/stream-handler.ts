@@ -89,6 +89,12 @@ export class StreamHandler {
 
       parser.on('result', async (event: ResultEvent) => {
         logger.info({ userId: this.userId, responseLen: this.textBuffer.length, response: this.textBuffer.slice(0, 200) }, 'Claude response');
+
+        // Store last response for silent mode (sent on exit if ok not called)
+        if (this.silent && this.textBuffer.length > 0) {
+          this.up.lastResponseText = this.textBuffer;
+        }
+
         await this.flushToolLog();
         await this.deleteToolMessage();
         await this.flushText();

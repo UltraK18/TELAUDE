@@ -90,6 +90,13 @@ export class StreamParser extends EventEmitter {
         if (sys.session_id) {
           this.emit('session_id', sys.session_id);
         }
+        if (sys.subtype === 'status' && (event as any).status === 'compacting') {
+          this.emit('compact_start');
+        }
+        if (sys.subtype === 'compact_boundary') {
+          const meta = (event as any).compact_metadata as { trigger?: string; pre_tokens?: number } | undefined;
+          this.emit('compact_end', meta?.trigger ?? 'unknown', meta?.pre_tokens ?? 0);
+        }
         break;
       }
 

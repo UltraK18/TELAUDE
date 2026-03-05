@@ -35,6 +35,8 @@ export class StreamHandler {
   private lastToolUpdateTime = 0;
   private toolDirty = false;
 
+  private compactMessageId: number | null = null;
+  private compactAnimTimer: ReturnType<typeof setInterval> | null = null;
   private resolveComplete: (() => void) | null = null;
   private sessionCaptured = false;
 
@@ -92,6 +94,46 @@ export class StreamHandler {
           this.toolLines.push(line);
           this.toolDirty = true;
           this.maybeFlushToolLog();
+        });
+      });
+
+      parser.on('compact_start', () => {
+        this.enqueue(async () => {
+          if (this.silent) return;
+          try {
+            const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Auto-compacting.', { parse_mode: 'HTML' });
+            this.compactMessageId = msg.message_id;
+            // Animate dots
+            let dots = 1;
+            this.compactAnimTimer = setInterval(async () => {
+              if (!this.compactMessageId) { clearInterval(this.compactAnimTimer!); this.compactAnimTimer = null; return; }
+              dots = (dots % 3) + 1;
+              try {
+                await this.api.editMessageText(this.chatId, this.compactMessageId!, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Auto-compacting' + '.'.repeat(dots), { parse_mode: 'HTML' });
+              } catch { /* ignore edit errors */ }
+            }, 1000);
+          } catch (err) {
+            logger.error({ err }, 'Failed to send compact start notification');
+          }
+        });
+      });
+
+      parser.on('compact_end', (trigger: string, preTokens: number) => {
+        this.enqueue(async () => {
+          if (this.silent) return;
+          if (this.compactAnimTimer) { clearInterval(this.compactAnimTimer); this.compactAnimTimer = null; }
+          const tokenInfo = preTokens > 0 ? ` (${Math.round(preTokens / 1000)}k tokens)` : '';
+          const text = `<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Compacted${tokenInfo}`;
+          try {
+            if (this.compactMessageId) {
+              await this.api.editMessageText(this.chatId, this.compactMessageId, text, { parse_mode: 'HTML' });
+              this.compactMessageId = null;
+            } else {
+              await this.api.sendMessage(this.chatId, text, { parse_mode: 'HTML' });
+            }
+          } catch (err) {
+            logger.error({ err }, 'Failed to send compact end notification');
+          }
         });
       });
 

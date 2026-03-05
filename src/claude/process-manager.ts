@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
-import { logger } from '../utils/logger.js';
+import { logger, notify } from '../utils/logger.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { getApiToken, getApiPort } from '../api/internal-server.js';
 
@@ -131,6 +131,9 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
 
   args.push('-p');
 
+  const resumeLabel = opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId.slice(0, 8)}...)` : ' (new)';
+  const modeLabel = opts?.mode && opts.mode !== 'user' ? ` [${opts.mode}]` : '';
+  notify(`Claude CLI spawned${resumeLabel}${modeLabel}`);
   logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination

@@ -25,7 +25,7 @@ async function main(): Promise<void> {
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
   const { cleanupIdleProcesses, getAllProcesses, killProcess } = await import('./claude/process-manager.js');
-  const { logger } = await import('./utils/logger.js');
+  const { logger, notify } = await import('./utils/logger.js');
 
   // Initialize database
   const db = initDb();
@@ -266,9 +266,10 @@ async function main(): Promise<void> {
   // Start polling
   await bot.start({
     onStart: (botInfo) => {
-      console.log(`Bot started: @${botInfo.username}`);
+      notify(`Telaude started`);
+      notify(`Bot online: @${botInfo.username}`);
       if (isFirstRun) {
-        console.log('Enter the auth code in Telegram to activate.');
+        notify('Enter the auth code in Telegram to activate.');
       }
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 

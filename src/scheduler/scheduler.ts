@@ -1,6 +1,6 @@
 import { Cron } from 'croner';
 import { getAllJobs, getJob, addHistory, removeJob, archiveJob, type CronJob } from './cron-store.js';
-import { logger } from '../utils/logger.js';
+import { logger, notify, notifyError } from '../utils/logger.js';
 
 type TriggerCallback = (job: CronJob) => Promise<string | null>;
 
@@ -21,6 +21,7 @@ export function setTriggerCallback(cb: TriggerCallback): void {
  */
 async function executeJob(job: CronJob): Promise<void> {
   logger.info({ jobId: job.id, name: job.name }, 'Cron job triggered');
+  notify(`📋 Cron triggered: ${job.name ?? job.id}`);
   const startTime = Date.now();
 
   try {
@@ -41,6 +42,7 @@ async function executeJob(job: CronJob): Promise<void> {
     });
   } catch (err: any) {
     logger.error({ err, jobId: job.id }, 'Cron job execution failed');
+    notifyError(`Cron failed: ${job.name ?? job.id} — ${err.message}`);
     addHistory(job.id, {
       timestamp: new Date().toISOString(),
       status: 'error',

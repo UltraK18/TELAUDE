@@ -95,6 +95,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   const args = [
     '--verbose',
     '--output-format', 'stream-json',
+    '--include-partial-messages',
     '--dangerously-skip-permissions',
     '--model', model,
   ];

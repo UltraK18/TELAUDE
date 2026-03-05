@@ -36,12 +36,13 @@ export class StreamHandler {
   private sentMessages: number[] = [];
 
   // Unified tool/agent log state (single message)
-  private toolEntries = new Map<string, { line: string; isAgent: boolean }>();
+  private toolEntries = new Map<string, { line: string; isAgent: boolean; parentToolUseId: string | null }>();
   private toolMessageId: number | null = null;
   private lastToolUpdateTime = 0;
   private toolDirty = false;
-  private agentToolIds = new Set<string>();  // active agent toolIds for suppress check
-  private toolCount = 0;  // total tool calls counter
+  private agentToolIds = new Set<string>();  // active agent toolIds
+  private toolCount = 0;  // main-level tool calls counter
+  private agentToolCounts = new Map<string, number>();  // per-agent tool call counters
 
   private compactMessageId: number | null = null;
   private compactAnimTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,7 +86,7 @@ export class StreamHandler {
         });
       });
 
-      parser.on('tool_use', (name: string, input: unknown, toolId?: string) => {
+      parser.on('tool_use', (name: string, input: unknown, toolId?: string, parentToolUseId?: string | null) => {
         this.enqueue(async () => {
 
           // Finalize any pending text before switching to tool mode
@@ -98,27 +99,44 @@ export class StreamHandler {
           this.lastSentTextLength = 0;
 
           const id = toolId ?? `anon_${Date.now()}`;
+          const parent = parentToolUseId ?? null;
 
           if (name === 'Agent') {
             this.agentToolIds.add(id);
             const desc = (input as any)?.description ?? 'working';
-            this.toolEntries.set(id, { line: `🔄 ${desc}...`, isAgent: true });
-          } else {
-            // Remove previous non-agent tool entries (only latest tool shown)
+            this.toolEntries.set(id, { line: `🔄 ${desc}...`, isAgent: true, parentToolUseId: parent });
+          } else if (parent && this.agentToolIds.has(parent)) {
+            // Sub-agent tool: show under parent agent
+            // Remove previous sub-agent tool entries for this parent (only latest shown per agent)
             for (const [key, entry] of this.toolEntries) {
-              if (!entry.isAgent) this.toolEntries.delete(key);
+              if (!entry.isAgent && entry.parentToolUseId === parent) this.toolEntries.delete(key);
+            }
+            const count = (this.agentToolCounts.get(parent) ?? 0) + 1;
+            this.agentToolCounts.set(parent, count);
+            const inputStr = input ? JSON.stringify(input) : '';
+            let line = inputStr
+              ? formatToolWithInput(name, inputStr)
+              : formatToolStart(name);
+            if (count > 1) {
+              const sup = toSuperscript(count);
+              line = line.replace(/^(\S+)/, `$1${sup}`);
+            }
+            this.toolEntries.set(id, { line, isAgent: false, parentToolUseId: parent });
+          } else {
+            // Main-level tool: remove previous main-level non-agent entries
+            for (const [key, entry] of this.toolEntries) {
+              if (!entry.isAgent && !entry.parentToolUseId) this.toolEntries.delete(key);
             }
             this.toolCount++;
             const inputStr = input ? JSON.stringify(input) : '';
             let line = inputStr
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
-            // Insert superscript counter after first emoji (skip for first tool)
             if (this.toolCount > 1) {
               const sup = toSuperscript(this.toolCount);
               line = line.replace(/^(\S+)/, `$1${sup}`);
             }
-            this.toolEntries.set(id, { line, isAgent: false });
+            this.toolEntries.set(id, { line, isAgent: false, parentToolUseId: null });
           }
 
           this.toolDirty = true;
@@ -132,10 +150,15 @@ export class StreamHandler {
           const entry = this.toolEntries.get(toolId);
           if (!entry) return;
 
-          // Agent done → remove from entries
+          // Agent done → remove agent + its child tool entries
           if (entry.isAgent) {
             this.agentToolIds.delete(toolId);
+            this.agentToolCounts.delete(toolId);
             this.toolEntries.delete(toolId);
+            // Remove child tools belonging to this agent
+            for (const [key, child] of this.toolEntries) {
+              if (child.parentToolUseId === toolId) this.toolEntries.delete(key);
+            }
             if (this.toolEntries.size === 0) {
               await this.deleteToolMessage();
             } else {
@@ -244,7 +267,7 @@ export class StreamHandler {
           if (this.up.interrupted) {
             // Keep tool message visible with ❌ marker
             if (this.toolMessageId && this.toolEntries.size > 0) {
-              this.toolEntries.set('_interrupted', { line: '\n❌ Interrupted', isAgent: false });
+              this.toolEntries.set('_interrupted', { line: '\n❌ Interrupted', isAgent: false, parentToolUseId: null });
               this.toolDirty = true;
               await this.flushToolLog();
             } else if (!this.toolMessageId && !this.silent) {
@@ -280,14 +303,34 @@ export class StreamHandler {
   }
 
   private buildToolText(): string {
-    // Agent lines on top, then normal tool lines
-    const agentLines: string[] = [];
-    const toolLines: string[] = [];
-    for (const entry of this.toolEntries.values()) {
-      if (entry.isAgent) agentLines.push(entry.line);
-      else toolLines.push(entry.line);
+    // Build hierarchical display: agents with their sub-tools indented below
+    const lines: string[] = [];
+    const mainTools: string[] = [];
+
+    // Collect agent entries with their IDs
+    const agentIds: string[] = [];
+    for (const [id, entry] of this.toolEntries) {
+      if (entry.isAgent) agentIds.push(id);
     }
-    return [...agentLines, ...toolLines].join('\n');
+
+    // Render each agent + its child tools
+    for (const agentId of agentIds) {
+      const agentEntry = this.toolEntries.get(agentId);
+      if (agentEntry) lines.push(agentEntry.line);
+      // Find child tools for this agent
+      for (const [, entry] of this.toolEntries) {
+        if (!entry.isAgent && entry.parentToolUseId === agentId) {
+          lines.push(`  └ ${entry.line}`);
+        }
+      }
+    }
+
+    // Main-level (non-agent, no parent) tools
+    for (const entry of this.toolEntries.values()) {
+      if (!entry.isAgent && !entry.parentToolUseId) mainTools.push(entry.line);
+    }
+
+    return [...lines, ...mainTools].join('\n');
   }
 
   private async flushToolLog(): Promise<void> {
@@ -325,6 +368,7 @@ export class StreamHandler {
     this.toolMessageId = null;
     this.toolEntries.clear();
     this.agentToolIds.clear();
+    this.agentToolCounts.clear();
     this.toolCount = 0;
   }
 

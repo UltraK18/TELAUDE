@@ -33,6 +33,7 @@ export interface AssistantEvent {
     stop_reason?: string;
   };
   session_id?: string;
+  parent_tool_use_id?: string | null;
 }
 
 export interface ResultEvent {
@@ -106,11 +107,13 @@ export class StreamParser extends EventEmitter {
           this.emit('session_id', asst.session_id);
         }
 
+        const parentId = asst.parent_tool_use_id ?? null;
+
         for (const block of asst.message.content) {
           if (block.type === 'text' && block.text) {
             this.emit('text', block.text);
           } else if (block.type === 'tool_use') {
-            this.emit('tool_use', block.name ?? 'unknown', block.input, block.id);
+            this.emit('tool_use', block.name ?? 'unknown', block.input, block.id, parentId);
           } else if (block.type === 'tool_result') {
             const resultId = (block as any).tool_use_id ?? block.id;
             this.emit('tool_result', resultId);

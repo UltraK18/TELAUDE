@@ -2,6 +2,7 @@ import { type Context, type NextFunction } from 'grammy';
 import { isUserAuthorized, authorizeUser } from '../../db/auth-repo.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
+import { updateUserChatMapping } from '../../api/route-handlers.js';
 
 const PUBLIC_COMMANDS = new Set(['/start', '/auth', '/help']);
 
@@ -42,6 +43,8 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
     );
 
     if (success) {
+      const chatId = ctx.chat?.id;
+      if (chatId) updateUserChatMapping(userId, chatId);
       logger.info({ userId, username: ctx.from?.username }, 'User authorized via code');
       try { await ctx.deleteMessage(); } catch { /* may lack permission */ }
       await ctx.reply(

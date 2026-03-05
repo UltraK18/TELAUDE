@@ -21,6 +21,7 @@ function buildConfig() {
   return {
     telegram: {
       botToken: required('TELEGRAM_BOT_TOKEN'),
+      chatId: process.env.CHAT_ID ? Number(process.env.CHAT_ID) : null as number | null,
       allowedUserIds: process.env.ALLOWED_TELEGRAM_IDS
         ? process.env.ALLOWED_TELEGRAM_IDS.split(',').map(Number).filter(Boolean)
         : [],

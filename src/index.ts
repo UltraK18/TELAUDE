@@ -50,7 +50,7 @@ async function main(): Promise<void> {
   // --- Internal API ---
   const crypto = await import('crypto');
   const { startInternalApi, stopInternalApi } = await import('./api/internal-server.js');
-  const { registerAllRoutes } = await import('./api/route-handlers.js');
+  const { registerAllRoutes, getChatId } = await import('./api/route-handlers.js');
 
   // Generate random token for this boot
   const apiToken = crypto.randomBytes(32).toString('hex');
@@ -75,7 +75,7 @@ async function main(): Promise<void> {
     if (isUserActive(job.userId)) {
       enqueueScheduledTask({
         userId: job.userId,
-        chatId: job.userId, // DM: userId === chatId
+        chatId: getChatId(job.userId),
         text: job.message,
         api: bot.api,
         mode: 'cron',
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
       model: job.model,
     });
 
-    const streamHandler = new StreamHandler(bot.api, job.userId, job.userId, up, { silent: true });
+    const streamHandler = new StreamHandler(bot.api, getChatId(job.userId), job.userId, up, { silent: true });
     streamHandler.attachToParser(parser).catch(err => {
       logger.error({ err, jobId: job.id }, 'Cron stream handler error');
     });
@@ -128,7 +128,7 @@ async function main(): Promise<void> {
           logger.info({ userId: job.userId, sessionId: resumeId }, 'Reload (cron): re-spawning Claude CLI');
 
           const spawn2 = spawnClaudeProcess(up!, { resumeSessionId: resumeId, mode: 'cron', model: job.model });
-          const sh2 = new StreamHandler(bot.api, job.userId, job.userId, up!, { silent: true });
+          const sh2 = new StreamHandler(bot.api, getChatId(job.userId), job.userId, up!, { silent: true });
           sh2.attachToParser(spawn2.parser).catch(() => {});
 
           if (sendToProcess(up!, reloadMsg)) {
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
 
         // Send report if Claude produced any text response (and ok wasn't called)
         if (up!.lastResponseText) {
-          bot.api.sendMessage(job.userId, `🔔 ${up!.lastResponseText}`)
+          bot.api.sendMessage(getChatId(job.userId), `🔔 ${up!.lastResponseText}`)
             .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
         }
         up!.silentOkCalled = false;
@@ -181,7 +181,7 @@ async function main(): Promise<void> {
     if (isUserActive(userId)) {
       enqueueScheduledTask({
         userId,
-        chatId: userId,
+        chatId: getChatId(userId),
         text: stdin,
         api: bot.api,
         mode: 'poke',
@@ -205,7 +205,7 @@ async function main(): Promise<void> {
       mode: 'poke',
     });
 
-    const streamHandler = new StreamHandler(bot.api, userId, userId, up, { silent: true });
+    const streamHandler = new StreamHandler(bot.api, getChatId(userId), userId, up, { silent: true });
     streamHandler.attachToParser(parser).catch(err => {
       logger.error({ err, userId }, 'Poke stream handler error');
     });
@@ -228,7 +228,7 @@ async function main(): Promise<void> {
         }
 
         if (up!.lastResponseText) {
-          bot.api.sendMessage(userId, up!.lastResponseText)
+          bot.api.sendMessage(getChatId(userId), up!.lastResponseText)
             .catch(err => logger.error({ err, userId }, 'Failed to send poke message'));
         }
         up!.silentOkCalled = false;
@@ -350,7 +350,7 @@ async function main(): Promise<void> {
       if (process.env.NODE_ENV === 'development') {
         import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
           for (const uid of getAuthorizedUserIds()) {
-            bot.api.sendMessage(uid, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
+            bot.api.sendMessage(getChatId(uid), '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
           }
         });
 
@@ -362,7 +362,7 @@ async function main(): Promise<void> {
               ? `[The user has restarted the application]\nUser said: ${flag.message}`
               : '[The user has restarted the application]';
             import('./bot/handlers/message.js').then(({ queueOrLaunch }) => {
-              queueOrLaunch(flag.userId, flag.userId, stdin, bot.api);
+              queueOrLaunch(flag.userId, getChatId(flag.userId), stdin, bot.api);
             });
           }
         });

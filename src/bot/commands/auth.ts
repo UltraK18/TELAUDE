@@ -2,6 +2,7 @@ import { type Context } from 'grammy';
 import { authorizeUser, isUserAuthorized } from '../../db/auth-repo.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
+import { updateUserChatMapping } from '../../api/route-handlers.js';
 
 export async function authCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -35,6 +36,8 @@ export async function authCommand(ctx: Context): Promise<void> {
   );
 
   if (success) {
+    const chatId = ctx.chat?.id;
+    if (chatId) updateUserChatMapping(userId, chatId);
     logger.info({ userId, username: ctx.from?.username }, 'User authorized');
     await ctx.reply(
       'Authorized! Send a message to start using Claude.\n' +

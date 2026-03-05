@@ -15,6 +15,12 @@ export async function stopCommand(ctx: Context): Promise<void> {
     return;
   }
 
+  // If text follows /stop, clear existing queue and register stop message
+  const text = (ctx.message?.text ?? '').replace(/^\/stop\s*/, '').trim();
+  if (text) {
+    up.stopMessage = text;
+  }
+
   up.interrupted = true;
   killProcess(userId);
 }

@@ -87,9 +87,6 @@ export class StreamHandler {
 
       parser.on('tool_use', (name: string, input: unknown, toolId?: string) => {
         this.enqueue(async () => {
-          // TodoWrite: skip display entirely
-          if (name === 'TodoWrite') return;
-
 
           // Finalize any pending text before switching to tool mode
           await this.flushText();

@@ -14,7 +14,7 @@ import { extractMediaInfo, buildMediaText } from './media-types.js';
 import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { ForwardCollector } from './forward-collector.js';
-import { updateUserChatMapping } from '../../api/route-handlers.js';
+import { setUserChat } from '../../api/route-handlers.js';
 import { logger, notify } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 import { logMessage } from '../../db/message-log-repo.js';
@@ -146,15 +146,26 @@ function launchAndSend(
         // Success (code === 0) — drain queue
         const queue = messageQueues.get(userId);
 
-        // If interrupted, prepend context to queued messages and wait for next user input
+        // If interrupted, clear queue and handle stop message
         if (up.interrupted) {
-          if (queue && queue.texts.length > 0) {
-            const INTERRUPT_CTX = '[The user interrupted the previous task. The tool use was rejected — do not continue or retry it.]';
-            queue.texts.unshift(INTERRUPT_CTX);
-            // interrupted flag stays false; queueOrLaunch will drain on next user message
+          // Clear any pending queue
+          if (queue) {
+            queue.texts = [];
+            messageQueues.delete(userId);
           }
           up.interrupted = false;
-          up.isProcessing = false;
+
+          // /stop <text> — send stop message as new input
+          if (up.stopMessage) {
+            const stopText = `[The user interrupted the previous task. The tool use was rejected — do not continue or retry it.]\n${up.stopMessage}`;
+            up.stopMessage = null;
+            const nextResume = up.sessionId ?? undefined;
+            if (!launchAndSend(up, stopText, chatId, userId, api, nextResume)) {
+              up.isProcessing = false;
+            }
+          } else {
+            up.isProcessing = false;
+          }
         } else if (queue && queue.texts.length > 0) {
           // Queued user messages — launch new process with context marker
           const queued = queue.texts.join('\n\n');
@@ -425,7 +436,7 @@ export async function messageHandler(ctx: Context): Promise<void> {
   if (text.startsWith('/')) return;
 
   logMessage(userId, 'user');
-  updateUserChatMapping(userId, chatId);
+  setUserChat(userId, chatId);
 
   // Forwarded message → batch with ForwardCollector
   const fwdSource = getForwardSource(ctx);
@@ -452,7 +463,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   if (!userId || !chatId) return;
 
   logMessage(userId, 'user');
-  updateUserChatMapping(userId, chatId);
+  setUserChat(userId, chatId);
 
   const media = extractMediaInfo(ctx);
   if (!media) return;

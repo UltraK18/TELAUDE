@@ -11,17 +11,52 @@ import {
   reloadAll, getNextRun, scheduleJob, unscheduleJob,
 } from '../scheduler/scheduler.js';
 import { getUserProcess, killForReload } from '../claude/process-manager.js';
+import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
 // In-memory userId → chatId mapping (updated on every message)
 const userChatMap = new Map<number, number>();
 
+/** Update in-memory mapping + persist to .env if needed (call on auth) */
 export function updateUserChatMapping(userId: number, chatId: number): void {
+  userChatMap.set(userId, chatId);
+
+  // Persist to .env if changed or missing
+  if (config.telegram.chatId !== chatId) {
+    persistChatId(chatId);
+  }
+}
+
+/** Lightweight in-memory only update (call on every message) */
+export function setUserChat(userId: number, chatId: number): void {
   userChatMap.set(userId, chatId);
 }
 
-function getChatId(userId: number): number {
-  return userChatMap.get(userId) ?? userId; // DM: userId === chatId
+export function getChatId(userId: number): number {
+  return config.telegram.chatId ?? userChatMap.get(userId) ?? userId;
+}
+
+/** Write CHAT_ID to .env file (add or update) */
+function persistChatId(chatId: number): void {
+  const envPath = path.join(process.cwd(), '.env');
+  try {
+    let content = fs.readFileSync(envPath, 'utf-8');
+    if (/^CHAT_ID=/m.test(content)) {
+      content = content.replace(/^CHAT_ID=.*/m, `CHAT_ID=${chatId}`);
+    } else {
+      // Insert after TELEGRAM_BOT_TOKEN line
+      content = content.replace(
+        /^(TELEGRAM_BOT_TOKEN=.*)$/m,
+        `$1\nCHAT_ID=${chatId}`,
+      );
+    }
+    fs.writeFileSync(envPath, content, 'utf-8');
+    // Update runtime config
+    (config.telegram as any).chatId = chatId;
+    logger.info({ chatId }, 'CHAT_ID persisted to .env');
+  } catch (err) {
+    logger.error({ err }, 'Failed to persist CHAT_ID to .env');
+  }
 }
 
 /**

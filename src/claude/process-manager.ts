@@ -39,6 +39,8 @@ export interface UserProcess {
   currentMode: 'user' | 'heartbeat' | 'cron' | 'poke';
   /** Last bot message ID in Telegram (for pin/unpin) */
   lastBotMessageId: number | null;
+  /** Message from /stop <text> — sent as new input after process exits */
+  stopMessage: string | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -74,6 +76,7 @@ export function createUserProcess(
     interrupted: false,
     currentMode: 'user',
     lastBotMessageId: null,
+    stopMessage: null,
   };
   processes.set(userId, up);
   return up;

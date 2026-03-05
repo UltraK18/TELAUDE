@@ -304,10 +304,13 @@ let statusCheckers: (() => { heartbeat: boolean; poke: boolean }) | null = null;
 function formatUptime(): string {
   if (!startTime) return '00:00:00';
   const diff = Math.floor((Date.now() - startTime.getTime()) / 1000);
-  const h = Math.floor(diff / 3600);
+  const d = Math.floor(diff / 86400);
+  const h = Math.floor((diff % 86400) / 3600);
   const m = Math.floor((diff % 3600) / 60);
   const s = diff % 60;
-  return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  return d > 0
+    ? `${d}d ${pad2(h)}:${pad2(m)}:${pad2(s)}`
+    : `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
 }
 
 function indicator(on: boolean): string {

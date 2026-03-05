@@ -23,18 +23,21 @@ export const logger = pino({
   transport: { targets },
 });
 
+const GRAY = '\x1b[90m';
+const RESET = '\x1b[0m';
+
 function timestamp(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${String(d.getFullYear()).slice(2)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+  return `${GRAY}[${String(d.getFullYear()).slice(2)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}] (${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())})${RESET}`;
 }
 
 /** Print to console regardless of environment (for important events) */
 export function notify(msg: string): void {
-  console.log(`[${timestamp()}] ${msg}`);
+  console.log(`${timestamp()} ${msg}`);
 }
 
 /** Print error to console regardless of environment */
 export function notifyError(msg: string): void {
-  console.error(`[${timestamp()}] ❌ ${msg}`);
+  console.error(`${timestamp()} ❌ ${msg}`);
 }

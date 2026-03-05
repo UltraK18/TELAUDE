@@ -131,9 +131,11 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
 
   args.push('-p');
 
-  const resumeLabel = opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId.slice(0, 8)}...)` : ' (new)';
-  const modeLabel = opts?.mode && opts.mode !== 'user' ? ` [${opts.mode}]` : '';
-  notify(`Claude CLI spawned${resumeLabel}${modeLabel}`);
+  const mode = opts?.mode ?? 'user';
+  if (mode !== 'user' && mode !== 'poke') {
+    const resumeLabel = opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId.slice(0, 8)}...)` : ' (new)';
+    notify(`Claude CLI spawned${resumeLabel} [${mode}]`);
+  }
   logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination

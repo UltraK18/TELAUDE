@@ -13,6 +13,7 @@ import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText } from './media-types.js';
 import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
+import { ForwardCollector } from './forward-collector.js';
 import { updateUserChatMapping } from '../../api/route-handlers.js';
 import { logger, notify } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
@@ -342,6 +343,72 @@ export function queueOrLaunch(
   }
 }
 
+/**
+ * Extract forward source from a forwarded message.
+ * Returns a label like "@username" or "ChannelName" or null if not forwarded.
+ */
+function getForwardSource(ctx: Context): string | null {
+  const origin = ctx.message?.forward_origin;
+  if (!origin) return null;
+
+  switch (origin.type) {
+    case 'user':
+      return `@${origin.sender_user.username ?? origin.sender_user.first_name}`;
+    case 'hidden_user':
+      return origin.sender_user_name;
+    case 'chat':
+      return (origin as any).sender_chat?.title ?? 'Unknown chat';
+    case 'channel':
+      return (origin as any).chat?.title ?? 'Unknown channel';
+    default:
+      return 'Unknown';
+  }
+}
+
+// Forward collector — batches forwarded messages from same user
+const forwardCollector = new ForwardCollector(
+  (userId, chatId, text, api) => queueOrLaunch(userId, chatId, text, api),
+);
+
+/**
+ * Extract reply context from a message that replies to another message.
+ * Returns a prefix string like [Reply to assistant: "..."] or null.
+ */
+function getReplyContext(ctx: Context): string | null {
+  const reply = ctx.message?.reply_to_message;
+  if (!reply) return null;
+
+  // Determine source
+  const fromBot = reply.from?.id === ctx.me.id;
+  const fwdChat = reply.forward_origin?.type === 'channel'
+    ? (reply.forward_origin as any).chat?.title
+    : null;
+  const fwdUser = reply.forward_origin?.type === 'user'
+    ? (reply.forward_origin as any).sender_user?.username ?? (reply.forward_origin as any).sender_user?.first_name
+    : null;
+
+  let source: string;
+  if (fromBot) {
+    source = 'assistant';
+  } else if (fwdChat) {
+    source = `forwarded from ${fwdChat}`;
+  } else if (fwdUser) {
+    source = `forwarded from @${fwdUser}`;
+  } else {
+    source = "user's message";
+  }
+
+  // Extract text (truncate if too long)
+  const replyText = reply.text ?? reply.caption ?? '';
+  const truncated = replyText.length > 200
+    ? replyText.slice(0, 200) + '...'
+    : replyText;
+
+  return truncated
+    ? `[Reply to ${source}: "${truncated}"]`
+    : `[Reply to ${source}]`;
+}
+
 // Media group collector — batches files with same media_group_id
 const mediaGroupCollector = new MediaGroupCollector(
   (userId, chatId, text, api) => queueOrLaunch(userId, chatId, text, api),
@@ -360,6 +427,13 @@ export async function messageHandler(ctx: Context): Promise<void> {
   logMessage(userId, 'user');
   updateUserChatMapping(userId, chatId);
 
+  // Forwarded message → batch with ForwardCollector
+  const fwdSource = getForwardSource(ctx);
+  if (fwdSource) {
+    forwardCollector.add(userId, chatId, fwdSource, text, ctx.api);
+    return;
+  }
+
   // Delete /resume list message if present
   const smsg = getSessionsMessage(userId);
   if (smsg) {
@@ -367,7 +441,9 @@ export async function messageHandler(ctx: Context): Promise<void> {
     clearSessionsMessage(userId);
   }
 
-  queueOrLaunch(userId, chatId, text, ctx.api);
+  const replyCtx = getReplyContext(ctx);
+  const fullText = replyCtx ? `${replyCtx}\n${text}` : text;
+  queueOrLaunch(userId, chatId, fullText, ctx.api);
 }
 
 export async function mediaHandler(ctx: Context): Promise<void> {
@@ -381,9 +457,55 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   const media = extractMediaInfo(ctx);
   if (!media) return;
 
-  const caption = ctx.message?.caption ?? '';
+  const replyCtx = getReplyContext(ctx);
+  const rawCaption = ctx.message?.caption ?? '';
+  const caption = replyCtx ? `${replyCtx}\n${rawCaption}` : rawCaption;
   const mediaGroupId = ctx.message?.media_group_id;
   const up = getOrCreateUp(userId);
+
+  // Forwarded media → resolve to text then batch with ForwardCollector
+  const fwdSource = getForwardSource(ctx);
+  if (fwdSource && !mediaGroupId) {
+    let mediaText: string;
+    if (media.mediaType === 'sticker') {
+      const { getCachedSticker, cacheSticker } = await import('../../utils/sticker-cache.js');
+      const uniqueId = media.fileUniqueId ?? media.fileId;
+      const emoji = media.stickerEmoji ?? '';
+      let stickerPath = getCachedSticker(uniqueId);
+      if (!stickerPath) {
+        try {
+          const fileId = media.stickerThumbnailFileId ?? media.fileId;
+          const file = await ctx.api.getFile(fileId);
+          const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
+          const res = await fetch(url);
+          const buffer = Buffer.from(await res.arrayBuffer());
+          stickerPath = await cacheSticker(uniqueId, buffer);
+        } catch {
+          stickerPath = null;
+        }
+      }
+      mediaText = stickerPath ? `[스티커: ${stickerPath}] ${emoji}` : `[스티커: ${emoji}]`;
+    } else if (media.mediaType === 'photo') {
+      try {
+        const savedPath = await downloadTelegramFile(ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType);
+        mediaText = `[사진: ${savedPath}]`;
+      } catch {
+        mediaText = '[사진]';
+      }
+    } else {
+      try {
+        const savedPath = await downloadTelegramFile(ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType);
+        const label = (await import('./media-types.js')).MEDIA_LABELS[media.mediaType];
+        mediaText = `[${label}: ${savedPath}]`;
+      } catch {
+        const label = (await import('./media-types.js')).MEDIA_LABELS[media.mediaType];
+        mediaText = `[${label}]`;
+      }
+    }
+    const fullText = rawCaption ? `${mediaText}\n${rawCaption}` : mediaText;
+    forwardCollector.add(userId, chatId, fwdSource, fullText, ctx.api);
+    return;
+  }
 
   // Media group → delegate to collector for batching
   if (mediaGroupId) {

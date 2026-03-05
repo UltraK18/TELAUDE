@@ -22,6 +22,7 @@
     "grammy": "^1.30.0",
     "ignore": "^7.0.5",
     "pino": "^9.5.0",
+    "sharp": "^0.34.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

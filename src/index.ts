@@ -265,10 +265,13 @@ async function main(): Promise<void> {
   const { pokeExists: pokeFileExists } = await import('./scheduler/poke.js');
   const { heartbeatExists: hbFileExists } = await import('./scheduler/heartbeat.js');
 
-  // Periodic cleanup of idle processes
+  // Periodic cleanup of idle processes + sticker cache
+  const { cleanStickerCache } = await import('./utils/sticker-cache.js');
+  cleanStickerCache(); // clean on startup
   const cleanupInterval = setInterval(() => {
     cleanupIdleProcesses();
   }, 60_000);
+  setInterval(() => cleanStickerCache(), 24 * 60 * 60 * 1000); // daily
 
   // Graceful shutdown
   const shutdown = async (signal: string) => {

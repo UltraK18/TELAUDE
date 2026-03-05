@@ -16,6 +16,11 @@ export interface MediaInfo {
   originalFileName?: string;
   mimeType?: string;
   fileSize?: number;
+  /** Sticker-specific metadata */
+  stickerEmoji?: string;
+  stickerSetName?: string;
+  fileUniqueId?: string;
+  stickerThumbnailFileId?: string;
 }
 
 export const MEDIA_LABELS: Record<MediaType, string> = {
@@ -88,6 +93,10 @@ export function extractMediaInfo(ctx: Context): MediaInfo | null {
       fileId: msg.sticker.file_id,
       mediaType: 'sticker',
       fileSize: msg.sticker.file_size,
+      stickerEmoji: msg.sticker.emoji,
+      stickerSetName: msg.sticker.set_name,
+      fileUniqueId: msg.sticker.file_unique_id,
+      stickerThumbnailFileId: msg.sticker.thumbnail?.file_id,
     };
   }
   if (msg.animation) {

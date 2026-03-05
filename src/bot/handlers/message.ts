@@ -11,6 +11,7 @@ import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText } from './media-types.js';
+import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { updateUserChatMapping } from '../../api/route-handlers.js';
 import { logger, notify } from '../../utils/logger.js';
@@ -402,7 +403,38 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     return;
   }
 
-  // Single file → download immediately
+  // Sticker → convert webp to jpg thumbnail, cache by file_unique_id
+  if (media.mediaType === 'sticker') {
+    const { getCachedSticker, cacheSticker } = await import('../../utils/sticker-cache.js');
+    const uniqueId = media.fileUniqueId ?? media.fileId;
+    const emoji = media.stickerEmoji ?? '';
+
+    let stickerPath = getCachedSticker(uniqueId);
+    if (!stickerPath) {
+      try {
+        // Try thumbnail first (always static webp), then fall back to original
+        const fileId = media.stickerThumbnailFileId ?? media.fileId;
+        const file = await ctx.api.getFile(fileId);
+        const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
+        const res = await fetch(url);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        stickerPath = await cacheSticker(uniqueId, buffer);
+      } catch (err) {
+        logger.error({ err, userId }, 'Failed to convert sticker');
+        const text = `[스티커 수신: ${emoji}]`;
+        queueOrLaunch(userId, chatId, text, ctx.api);
+        return;
+      }
+    }
+
+    const text = caption
+      ? `[스티커 수신: ${stickerPath}] ${emoji}\n${caption}`
+      : `[스티커 수신: ${stickerPath}] ${emoji}`;
+    queueOrLaunch(userId, chatId, text, ctx.api);
+    return;
+  }
+
+  // All other media → download file
   let savedPath: string;
   try {
     savedPath = await downloadTelegramFile(

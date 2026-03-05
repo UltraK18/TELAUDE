@@ -45,4 +45,24 @@ export function registerCommunicationTools(server: McpServer): void {
       return { content: [{ type: 'text', text: `Zip sent: ${result.fileName ?? dir}` }] };
     }
   );
+
+  server.tool(
+    'pin_message',
+    'Pin the most recent bot message in the Telegram chat. Useful for important info the user should see.',
+    {},
+    async () => {
+      await mcpPost('/mcp/pin-message', {});
+      return { content: [{ type: 'text', text: 'Message pinned' }] };
+    }
+  );
+
+  server.tool(
+    'unpin_message',
+    'Unpin all pinned messages in the Telegram chat',
+    {},
+    async () => {
+      await mcpPost('/mcp/unpin-message', {});
+      return { content: [{ type: 'text', text: 'Messages unpinned' }] };
+    }
+  );
 }

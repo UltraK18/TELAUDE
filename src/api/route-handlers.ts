@@ -271,6 +271,25 @@ export function registerAllRoutes(api: Api): void {
     return { ok: true };
   });
 
+  // --- Pin/Unpin ---
+
+  registerRoute('/mcp/pin-message', async (body) => {
+    const userId = body._userId as number;
+    const chatId = getChatId(userId);
+    const up = getUserProcess(userId);
+    const messageId = up?.lastBotMessageId;
+    if (!messageId) throw new Error('No recent bot message to pin');
+    await api.pinChatMessage(chatId, messageId, { disable_notification: true });
+    return { ok: true };
+  });
+
+  registerRoute('/mcp/unpin-message', async (body) => {
+    const userId = body._userId as number;
+    const chatId = getChatId(userId);
+    await api.unpinAllChatMessages(chatId);
+    return { ok: true };
+  });
+
   // --- Reload ---
 
   registerRoute('/mcp/reload', async (body) => {

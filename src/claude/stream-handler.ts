@@ -400,6 +400,7 @@ export class StreamHandler {
           parse_mode: 'HTML',
         });
         this.textMessageId = msg.message_id;
+        this.up.lastBotMessageId = msg.message_id;
       } else {
         await this.api.editMessageText(this.chatId, this.textMessageId, html, {
           parse_mode: 'HTML',

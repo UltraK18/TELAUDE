@@ -37,6 +37,8 @@ export interface UserProcess {
   interrupted: boolean;
   /** Current spawn mode — used by exit handler to decide poke timer behavior */
   currentMode: 'user' | 'heartbeat' | 'cron' | 'poke';
+  /** Last bot message ID in Telegram (for pin/unpin) */
+  lastBotMessageId: number | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -71,6 +73,7 @@ export function createUserProcess(
     pendingTurnDelete: null,
     interrupted: false,
     currentMode: 'user',
+    lastBotMessageId: null,
   };
   processes.set(userId, up);
   return up;

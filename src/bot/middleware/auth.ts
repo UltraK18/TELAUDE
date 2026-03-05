@@ -10,6 +10,9 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  // Ignore service messages (pin notifications, member joins, etc.)
+  if (!ctx.message?.text && !ctx.message?.photo && !ctx.message?.document && !ctx.message?.voice && !ctx.callbackQuery) return;
+
   // Check if command is public
   const text = ctx.message?.text ?? '';
   const command = text.split(' ')[0];

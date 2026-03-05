@@ -257,6 +257,14 @@ async function main(): Promise<void> {
   };
   setOnChange(refreshScheduleDashboard);
 
+  // Pre-load modules for initial dashboard display
+  const { getAuthorizedUserIds: getAuthIds } = await import('./db/auth-repo.js');
+  const { getActiveSession: getActive, getRecentSessions: getRecent } = await import('./db/session-repo.js');
+  const { loadSettings: loadSets } = await import('./settings/settings-store.js');
+  const { config: cfg } = await import('./config.js');
+  const { pokeExists: pokeFileExists } = await import('./scheduler/poke.js');
+  const { heartbeatExists: hbFileExists } = await import('./scheduler/heartbeat.js');
+
   // Periodic cleanup of idle processes
   const cleanupInterval = setInterval(() => {
     cleanupIdleProcesses();
@@ -291,23 +299,47 @@ async function main(): Promise<void> {
       // Initialize TUI dashboard
       initDashboard();
       setDashboardOutput(dashboardLog, dashboardError);
-      updateSession({ botUsername: botInfo.username });
+
+      // Load last session from DB for initial dashboard display
+      const authIds = getAuthIds();
+      let lastDir = cfg.paths.defaultWorkingDir;
+      let lastModel = loadSets().model ?? cfg.claude.defaultModel;
+      let lastSessionId: string | null = null;
+
+      for (const uid of authIds) {
+        const active = getActive(uid);
+        if (active) {
+          lastDir = active.working_dir;
+          lastModel = active.model;
+          lastSessionId = active.session_id;
+          break;
+        }
+        const recent = getRecent(uid, 1);
+        if (recent.length > 0) {
+          lastDir = recent[0].working_dir;
+          lastModel = recent[0].model;
+          lastSessionId = recent[0].session_id;
+          break;
+        }
+      }
+
+      updateSession({
+        botUsername: botInfo.username,
+        model: lastModel,
+        dir: lastDir,
+        ...(lastSessionId ? { id: lastSessionId } : {}),
+      });
       notify(`Bot online: @${botInfo.username}`);
       if (isFirstRun) {
         notify('Enter the auth code in Telegram to activate.');
       }
       refreshScheduleDashboard();
 
-      // Status bar: heartbeat & poke indicators
-      import('./scheduler/poke.js').then(({ isPokeActive }) => {
-        import('./scheduler/heartbeat.js').then(({ heartbeatExists }) => {
-          const defaultDir = process.cwd();
-          setStatusCheckers(() => ({
-            heartbeat: heartbeatExists(defaultDir),
-            poke: isPokeActive(),
-          }));
-        });
-      });
+      // Status bar: heartbeat & poke indicators (use last session dir)
+      setStatusCheckers(() => ({
+        heartbeat: hbFileExists(lastDir),
+        poke: pokeFileExists(lastDir),
+      }));
 
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 

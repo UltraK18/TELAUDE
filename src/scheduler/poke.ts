@@ -153,6 +153,10 @@ export function isPokeActive(): boolean {
   return pokeStates.size > 0;
 }
 
+export function pokeExists(workingDir: string): boolean {
+  return fs.existsSync(path.join(workingDir, POKE_FILENAME));
+}
+
 export function stopAllPokes(): void {
   for (const [userId] of pokeStates) {
     cancelPokeTimer(userId);

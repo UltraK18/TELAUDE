@@ -199,13 +199,21 @@ export function dashboardError(msg: string): void {
   }
 }
 
+let sessionState: { botUsername?: string; id?: string; model?: string; dir?: string } = {};
+
 export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string }): void {
   if (!sessionBox) return;
+  // Merge with previous state
+  if (info.botUsername) sessionState.botUsername = info.botUsername;
+  if (info.id) sessionState.id = info.id;
+  if (info.model) sessionState.model = info.model;
+  if (info.dir) sessionState.dir = info.dir;
+
   const lines: string[] = [];
-  if (info.botUsername) lines.push(`Bot: {cyan-fg}@${info.botUsername}{/cyan-fg}`);
-  if (info.id) lines.push(`Session: {white-fg}${info.id.slice(0, 8)}...{/white-fg}`);
-  if (info.model) lines.push(`Model: {white-fg}${info.model}{/white-fg}`);
-  if (info.dir) lines.push(`Dir: {gray-fg}${info.dir}{/gray-fg}`);
+  if (sessionState.botUsername) lines.push(`Bot: {cyan-fg}@${sessionState.botUsername}{/cyan-fg}`);
+  if (sessionState.id) lines.push(`Session: {white-fg}${sessionState.id.slice(0, 8)}...{/white-fg}`);
+  if (sessionState.model) lines.push(`Model: {white-fg}${sessionState.model}{/white-fg}`);
+  if (sessionState.dir) lines.push(`Dir: {gray-fg}${sessionState.dir}{/gray-fg}`);
   sessionBox.setContent(lines.length > 0 ? lines.join('\n') : '{gray-fg}No active session{/gray-fg}');
   screen?.render();
 }

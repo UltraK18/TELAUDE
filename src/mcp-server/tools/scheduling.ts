@@ -1,6 +1,27 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { Cron } from 'croner';
 import { mcpPost } from '../http-client.js';
+
+function nowStr(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function nextRunStr(schedule?: string, runAt?: string): string {
+  if (runAt) {
+    const d = new Date(runAt);
+    if (!isNaN(d.getTime())) return d.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  }
+  if (schedule && schedule !== 'once') {
+    try {
+      const next = new Cron(schedule).nextRun();
+      if (next) return next.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    } catch { /* ignore */ }
+  }
+  return '—';
+}
 
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
@@ -32,8 +53,8 @@ export function registerSchedulingTools(server: McpServer): void {
       const once = !!resolvedRunAt;
       const finalSchedule = schedule ?? 'once';
       const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt: resolvedRunAt, message, workingDir, model, once });
-      const when = resolvedRunAt ?? schedule;
-      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name}) — ${once ? `once at ${when}` : `recurring: ${when}`}` }] };
+      const next = nextRunStr(schedule, resolvedRunAt);
+      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name}) — ${once ? 'once' : `recurring: ${schedule}`}\nNow: ${nowStr()} | Next: ${next}` }] };
     }
   );
 
@@ -49,10 +70,11 @@ export function registerSchedulingTools(server: McpServer): void {
       if (jobs.length === 0) {
         return { content: [{ type: 'text', text: 'No scheduled jobs' }] };
       }
-      const lines = jobs.map((j: any) =>
-        `[${j.id}] ${j.name} | ${j.schedule} | ${j.isPaused ? 'PAUSED' : 'ACTIVE'} | dir: ${j.workingDir ?? 'default'}`
-      );
-      return { content: [{ type: 'text', text: lines.join('\n') }] };
+      const lines = jobs.map((j: any) => {
+        const next = nextRunStr(j.schedule, j.runAt);
+        return `[${j.id}] ${j.name} | ${j.schedule} | ${j.isPaused ? 'PAUSED' : 'ACTIVE'} | next: ${next}`;
+      });
+      return { content: [{ type: 'text', text: `Now: ${nowStr()}\n${lines.join('\n')}` }] };
     }
   );
 
@@ -68,8 +90,10 @@ export function registerSchedulingTools(server: McpServer): void {
       model: z.string().optional().describe('New model'),
     },
     async ({ jobId, ...updates }) => {
-      await mcpPost('/mcp/cron/update', { jobId, ...updates });
-      return { content: [{ type: 'text', text: `Job ${jobId} updated` }] };
+      const result = await mcpPost('/mcp/cron/update', { jobId, ...updates });
+      const job = result.job;
+      const next = job ? nextRunStr(job.schedule, job.runAt) : '—';
+      return { content: [{ type: 'text', text: `Job ${jobId} updated\nNow: ${nowStr()} | Next: ${next}` }] };
     }
   );
 

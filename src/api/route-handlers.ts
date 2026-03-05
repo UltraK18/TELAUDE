@@ -201,7 +201,7 @@ export function registerAllRoutes(api: Api): void {
     if (body.currentWorkingDir) {
       jobs = jobs.filter(j => j.workingDir === body.currentWorkingDir);
     }
-    return { jobs: jobs.map(j => ({ id: j.id, name: j.name, schedule: j.schedule, isPaused: j.isPaused, workingDir: j.workingDir })) };
+    return { jobs: jobs.map(j => ({ id: j.id, name: j.name, schedule: j.schedule, isPaused: j.isPaused, workingDir: j.workingDir, runAt: j.runAt, once: j.once })) };
   });
 
   registerRoute('/mcp/cron/update', async (body) => {
@@ -209,7 +209,7 @@ export function registerAllRoutes(api: Api): void {
     const job = updateJob(jobId, updates);
     if (!job) throw new Error(`Job not found: ${jobId}`);
     scheduleJob(jobId); // Re-schedule with new settings
-    return { ok: true };
+    return { ok: true, job: { schedule: job.schedule, runAt: job.runAt } };
   });
 
   registerRoute('/mcp/cron/remove', async (body) => {

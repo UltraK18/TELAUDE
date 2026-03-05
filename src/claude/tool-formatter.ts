@@ -43,9 +43,15 @@ function getToolIcon(toolName: string): string {
   return TOOL_ICONS.default;
 }
 
+/** Strip mcp__server__ prefix for display, e.g. mcp__telaude__ask → ask */
+function displayToolName(toolName: string): string {
+  const mcpMatch = toolName.match(/^mcp__[^_]+__(.+)$/);
+  return mcpMatch ? mcpMatch[1] : toolName;
+}
+
 export function formatToolStart(toolName: string): string {
   const icon = getToolIcon(toolName);
-  return `${icon} <b>${toolName}</b>`;
+  return `${icon} <b>${displayToolName(toolName)}</b>`;
 }
 
 export function formatToolWithInput(toolName: string, inputJson: string): string {
@@ -61,25 +67,25 @@ export function formatToolWithInput(toolName: string, inputJson: string): string
     // Invalid JSON, just show tool name
   }
 
-  return `${icon} <b>${toolName}</b>`;
+  return `${icon} <b>${displayToolName(toolName)}</b>`;
 }
 
 function getToolSummary(toolName: string, params: Record<string, unknown>): string | null {
   switch (toolName) {
     case 'Read':
-      return `Reading: <code>${truncatePath(params.file_path as string)}</code>`;
+      return `<b>Read</b>: <code>${truncatePath(params.file_path as string)}</code>`;
     case 'Write':
-      return `Writing: <code>${truncatePath(params.file_path as string)}</code>`;
+      return `<b>Write</b>: <code>${truncatePath(params.file_path as string)}</code>`;
     case 'Edit':
-      return `Editing: <code>${truncatePath(params.file_path as string)}</code>`;
+      return `<b>Edit</b>: <code>${truncatePath(params.file_path as string)}</code>`;
     case 'Bash':
-      return `Bash: <code>${truncateText(params.command as string, 60)}</code>`;
+      return `<b>Bash</b>: <code>${truncateText(params.command as string, 60)}</code>`;
     case 'Glob':
-      return `Glob: <code>${params.pattern}</code>`;
+      return `<b>Glob</b>: <code>${params.pattern}</code>`;
     case 'Grep':
-      return `Grep: <code>${truncateText(params.pattern as string, 40)}</code>`;
+      return `<b>Grep</b>: <code>${truncateText(params.pattern as string, 40)}</code>`;
     case 'WebSearch':
-      return `Search: <code>${truncateText(params.query as string, 50)}</code>`;
+      return `<b>Search</b>: <code>${truncateText(params.query as string, 50)}</code>`;
     default:
       return null;
   }

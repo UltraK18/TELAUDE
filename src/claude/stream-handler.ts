@@ -128,6 +128,7 @@ export class StreamHandler {
             let line = inputStr
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
+            // Intentional: first tool has no superscript, count starts at ² (cleaner UX)
             if (count > 1) {
               line = addSuperscript(line, toSuperscript(count));
             }
@@ -142,6 +143,7 @@ export class StreamHandler {
             let line = inputStr
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
+            // Intentional: first tool has no superscript, count starts at ² (cleaner UX)
             if (this.toolCount > 1) {
               line = addSuperscript(line, toSuperscript(this.toolCount));
             }

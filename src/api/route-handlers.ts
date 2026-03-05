@@ -81,7 +81,7 @@ export function registerAllRoutes(api: Api): void {
       : undefined;
 
     // Send question (with or without buttons)
-    const msg = await api.sendMessage(chatId, `❓ ${body.question}`, {
+    const msg = await api.sendMessage(chatId, body.question, {
       reply_markup: keyboard,
     });
 

@@ -1,5 +1,7 @@
 import { type Context } from 'grammy';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const HELP_TEXT = `<b>Telaude Commands</b>
 
 <b>General</b>
@@ -16,13 +18,18 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 /resume - Resume session
 /new - New session
 /stop - Stop current task
-/force_reload - Restart bot process
 /clear - Clear conversation
 
 <b>Settings</b>
 /model [name] - View/change model
 /budget [amount] - View/set budget`;
 
+const DEV_SECTION = `
+
+<b>Dev</b>
+/force_reload - Restart bot process`;
+
 export async function helpCommand(ctx: Context): Promise<void> {
-  await ctx.reply(HELP_TEXT, { parse_mode: 'HTML' });
+  const text = isDev ? HELP_TEXT + DEV_SECTION : HELP_TEXT;
+  await ctx.reply(text, { parse_mode: 'HTML' });
 }

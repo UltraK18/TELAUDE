@@ -8,6 +8,7 @@ import { stopCommand, forceReloadCommand } from './stop.js';
 import { modelCommand } from './model.js';
 import { budgetCommand } from './budget.js';
 import { statsCommand } from './status.js';
+import { compactCommand } from './compact.js';
 
 export function registerCommands(bot: Bot): void {
   bot.command('start', startCommand);
@@ -23,8 +24,11 @@ export function registerCommands(bot: Bot): void {
   bot.command('clear', clearCommand);
 
   bot.command('stop', stopCommand);
-  bot.command('force_reload', forceReloadCommand);
+  if (process.env.NODE_ENV === 'development') {
+    bot.command('force_reload', forceReloadCommand);
+  }
   bot.command('model', modelCommand);
   bot.command('budget', budgetCommand);
   bot.command('stats', statsCommand);
+  bot.command('compact', compactCommand);
 }

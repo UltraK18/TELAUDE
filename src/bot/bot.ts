@@ -57,17 +57,21 @@ export function createBot(): Bot {
   bot.on('message:animation', mediaHandler);
 
   // Register command menu for autocomplete
-  bot.api.setMyCommands([
+  const commands = [
     { command: 'new', description: 'New session' },
     { command: 'resume', description: 'Resume session' },
     { command: 'stats', description: 'Session stats & tokens' },
     { command: 'stop', description: 'Stop current task' },
-    { command: 'force_reload', description: 'Restart bot process' },
     { command: 'cd', description: 'Change working directory' },
     { command: 'pwd', description: 'Current directory' },
     { command: 'model', description: 'View/change model' },
+    { command: 'compact', description: 'Compress context' },
     { command: 'help', description: 'Command list' },
-  ]).catch(err => logger.error({ err }, 'Failed to set bot commands'));
+  ];
+  if (process.env.NODE_ENV === 'development') {
+    commands.push({ command: 'force_reload', description: 'Restart bot process' });
+  }
+  bot.api.setMyCommands(commands).catch(err => logger.error({ err }, 'Failed to set bot commands'));
 
   logger.info('Bot configured');
   return bot;

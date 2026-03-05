@@ -17,6 +17,7 @@ export async function stopCommand(ctx: Context): Promise<void> {
 
 
 export async function forceReloadCommand(ctx: Context): Promise<void> {
+  if (process.env.NODE_ENV !== 'development') return;
   const userId = ctx.from?.id;
   if (!userId) return;
 

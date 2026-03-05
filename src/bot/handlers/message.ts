@@ -294,7 +294,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
  * Shared: queue text if Claude is processing, otherwise launch new process.
  * Used by messageHandler, mediaHandler, and MediaGroupCollector callback.
  */
-function queueOrLaunch(
+export function queueOrLaunch(
   userId: number,
   chatId: number,
   text: string,

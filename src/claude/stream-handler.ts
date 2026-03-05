@@ -101,7 +101,7 @@ export class StreamHandler {
         this.enqueue(async () => {
           if (this.silent) return;
           try {
-            const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Auto-compacting.', { parse_mode: 'HTML' });
+            const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Compacting.', { parse_mode: 'HTML' });
             this.compactMessageId = msg.message_id;
             // Animate dots
             let dots = 1;
@@ -109,7 +109,7 @@ export class StreamHandler {
               if (!this.compactMessageId) { clearInterval(this.compactAnimTimer!); this.compactAnimTimer = null; return; }
               dots = (dots % 3) + 1;
               try {
-                await this.api.editMessageText(this.chatId, this.compactMessageId!, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Auto-compacting' + '.'.repeat(dots), { parse_mode: 'HTML' });
+                await this.api.editMessageText(this.chatId, this.compactMessageId!, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Compacting' + '.'.repeat(dots), { parse_mode: 'HTML' });
               } catch { /* ignore edit errors */ }
             }, 1000);
           } catch (err) {

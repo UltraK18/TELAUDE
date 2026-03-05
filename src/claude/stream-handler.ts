@@ -116,9 +116,11 @@ export class StreamHandler {
             let line = inputStr
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
-            // Insert superscript counter after first emoji
-            const sup = toSuperscript(this.toolCount);
-            line = line.replace(/^(\S+)/, `$1${sup}`);
+            // Insert superscript counter after first emoji (skip for first tool)
+            if (this.toolCount > 1) {
+              const sup = toSuperscript(this.toolCount);
+              line = line.replace(/^(\S+)/, `$1${sup}`);
+            }
             this.toolEntries.set(id, { line, isAgent: false });
           }
 

@@ -1,9 +1,35 @@
 import blessed from 'blessed';
 
+const SHADOW_CHARS = new Set('╗╝╚═╔╠╣╩╦║');
+
+function colorizeSegment(text: string, fg: string): string {
+  let result = '';
+  let inShadow = false;
+  for (const ch of text) {
+    const isShadow = SHADOW_CHARS.has(ch);
+    if (isShadow && !inShadow) {
+      if (result) result += `{/${fg}}`;
+      result += '{gray-fg}';
+      inShadow = true;
+    } else if (!isShadow && inShadow) {
+      result += '{/gray-fg}';
+      result += `{${fg}}`;
+      inShadow = false;
+    } else if (!isShadow && !inShadow && result === '') {
+      result += `{${fg}}`;
+    }
+    result += ch;
+  }
+  // Close open tag
+  if (inShadow) result += '{/gray-fg}';
+  else result += `{/${fg}}`;
+  return result;
+}
+
 function colorizeBanner(line: string, splitAt: number): string {
   const left = line.slice(0, splitAt);
   const right = line.slice(splitAt);
-  return `{blue-fg}${left}{/blue-fg}{208-fg}${right}{/208-fg}`;
+  return colorizeSegment(left, 'blue-fg') + colorizeSegment(right, '208-fg');
 }
 
 const BANNER_LINES = [
@@ -21,6 +47,8 @@ let screen: blessed.Widgets.Screen | null = null;
 let sessionBox: blessed.Widgets.BoxElement | null = null;
 let scheduleBox: blessed.Widgets.BoxElement | null = null;
 let logBox: blessed.Widgets.Log | null = null;
+let statusBar: blessed.Widgets.BoxElement | null = null;
+let startTime: Date | null = null;
 
 export function initDashboard(): void {
   screen = blessed.screen({
@@ -66,7 +94,7 @@ export function initDashboard(): void {
     top: 8,
     left: '50%',
     width: '50%',
-    height: '100%-8',
+    height: '100%-11',
     label: ' Schedule ',
     content: '{gray-fg}No scheduled jobs{/gray-fg}',
     tags: true,
@@ -84,7 +112,7 @@ export function initDashboard(): void {
     top: 14,
     left: 0,
     width: '50%',
-    height: '100%-14',
+    height: '100%-17',
     label: ' Logs ',
     tags: true,
     border: { type: 'line' },
@@ -97,6 +125,24 @@ export function initDashboard(): void {
     mouse: true,
     padding: { left: 1, right: 1 },
   });
+
+  // Status bar (bottom)
+  startTime = new Date();
+  statusBar = blessed.box({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: '100%',
+    height: 3,
+    tags: true,
+    border: { type: 'line' },
+    style: { border: { fg: 208 } },
+    padding: { left: 1 },
+  });
+  renderStatusBar();
+
+  // Update uptime every second
+  setInterval(() => renderStatusBar(), 1000);
 
   // Re-render on terminal resize
   screen.on('resize', () => {
@@ -249,4 +295,35 @@ export function updateSchedule(jobs: ScheduleJob[]): void {
 
 export function isDashboardActive(): boolean {
   return screen !== null;
+}
+
+// --- Status bar ---
+
+let statusCheckers: (() => { heartbeat: boolean; poke: boolean }) | null = null;
+
+function formatUptime(): string {
+  if (!startTime) return '00:00:00';
+  const diff = Math.floor((Date.now() - startTime.getTime()) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+}
+
+function indicator(on: boolean): string {
+  return on ? '{green-fg}●{/green-fg}' : '{red-fg}●{/red-fg}';
+}
+
+function renderStatusBar(): void {
+  if (!statusBar) return;
+  const state = statusCheckers ? statusCheckers() : { heartbeat: false, poke: false };
+  const uptime = `{gray-fg}Uptime:{/gray-fg} {white-fg}${formatUptime()}{/white-fg}`;
+  const hb = `{gray-fg}Heartbeat:{/gray-fg} ${indicator(state.heartbeat)}`;
+  const pk = `{gray-fg}Poke:{/gray-fg} ${indicator(state.poke)}`;
+  statusBar.setContent(`${uptime}    ${hb}    ${pk}`);
+  screen?.render();
+}
+
+export function setStatusCheckers(fn: () => { heartbeat: boolean; poke: boolean }): void {
+  statusCheckers = fn;
 }

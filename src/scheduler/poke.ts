@@ -149,6 +149,10 @@ export function cancelPokeTimer(userId: number): void {
   logger.info({ userId }, 'Poke timer cancelled');
 }
 
+export function isPokeActive(): boolean {
+  return pokeStates.size > 0;
+}
+
 export function stopAllPokes(): void {
   for (const [userId] of pokeStates) {
     cancelPokeTimer(userId);

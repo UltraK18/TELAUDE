@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const { createBot } = await import('./bot/bot.js');
   const { cleanupIdleProcesses, getAllProcesses, killProcess } = await import('./claude/process-manager.js');
   const { logger, notify, setDashboardOutput } = await import('./utils/logger.js');
-  const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule } = await import('./utils/dashboard.js');
+  const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers } = await import('./utils/dashboard.js');
 
   // Initialize database
   const db = initDb();
@@ -289,6 +289,18 @@ async function main(): Promise<void> {
         notify('Enter the auth code in Telegram to activate.');
       }
       refreshScheduleDashboard();
+
+      // Status bar: heartbeat & poke indicators
+      import('./scheduler/poke.js').then(({ isPokeActive }) => {
+        import('./scheduler/heartbeat.js').then(({ heartbeatExists }) => {
+          const defaultDir = process.cwd();
+          setStatusCheckers(() => ({
+            heartbeat: heartbeatExists(defaultDir),
+            poke: isPokeActive(),
+          }));
+        });
+      });
+
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 
       // Notify authorized users on dev restart

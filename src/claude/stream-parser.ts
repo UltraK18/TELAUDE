@@ -110,7 +110,9 @@ export class StreamParser extends EventEmitter {
           if (block.type === 'text' && block.text) {
             this.emit('text', block.text);
           } else if (block.type === 'tool_use') {
-            this.emit('tool_use', block.name ?? 'unknown', block.input);
+            this.emit('tool_use', block.name ?? 'unknown', block.input, block.id);
+          } else if (block.type === 'tool_result') {
+            this.emit('tool_result', block.id);
           }
         }
         break;

@@ -41,6 +41,11 @@ export class StreamHandler {
   private resolveComplete: (() => void) | null = null;
   private sessionCaptured = false;
 
+  // Subagent state
+  private agentToolId: string | null = null;
+  private agentMessageId: number | null = null;
+  private agentAnimTimer: ReturnType<typeof setInterval> | null = null;
+
   // Sequential event processing queue
   private eventQueue: (() => Promise<void>)[] = [];
   private processingEvent = false;
@@ -78,8 +83,46 @@ export class StreamHandler {
         });
       });
 
-      parser.on('tool_use', (name: string, input: unknown) => {
+      parser.on('tool_use', (name: string, input: unknown, toolId?: string) => {
         this.enqueue(async () => {
+          // Agent (subagent) tool → show dedicated icon, suppress inner tools
+          if (name === 'Agent' || name === 'TodoWrite') {
+            if (name === 'Agent') {
+              this.agentToolId = toolId ?? null;
+              await this.flushText();
+              if (this.textMessageId) {
+                this.sentMessages.push(this.textMessageId);
+              }
+              this.textMessageId = null;
+              this.textBuffer = '';
+              this.lastSentTextLength = 0;
+              // Delete current tool message if any
+              await this.deleteToolMessage();
+              // Show agent working indicator
+              if (!this.silent) {
+                try {
+                  const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5368324170671202286">🔄</tg-emoji> Agent working.', { parse_mode: 'HTML' });
+                  this.agentMessageId = msg.message_id;
+                  let dots = 1;
+                  this.agentAnimTimer = setInterval(async () => {
+                    if (!this.agentMessageId) { clearInterval(this.agentAnimTimer!); this.agentAnimTimer = null; return; }
+                    dots = (dots % 3) + 1;
+                    try {
+                      await this.api.editMessageText(this.chatId, this.agentMessageId!, '<tg-emoji emoji-id="5368324170671202286">🔄</tg-emoji> Agent working' + '.'.repeat(dots), { parse_mode: 'HTML' });
+                    } catch { /* ignore */ }
+                  }, 1000);
+                } catch (err) {
+                  logger.error({ err }, 'Failed to send agent indicator');
+                }
+              }
+            }
+            // TodoWrite: just skip display entirely
+            return;
+          }
+
+          // Inside subagent → suppress tool display
+          if (this.agentToolId) return;
+
           // Finalize any pending text before switching to tool mode
           await this.flushText();
           if (this.textMessageId) {
@@ -96,6 +139,22 @@ export class StreamHandler {
           this.toolLines.push(line);
           this.toolDirty = true;
           this.maybeFlushToolLog();
+        });
+      });
+
+      parser.on('tool_result', (toolId?: string) => {
+        this.enqueue(async () => {
+          // Agent finished → clean up indicator
+          if (toolId && toolId === this.agentToolId) {
+            this.agentToolId = null;
+            if (this.agentAnimTimer) { clearInterval(this.agentAnimTimer); this.agentAnimTimer = null; }
+            if (this.agentMessageId && !this.silent) {
+              try {
+                await this.api.deleteMessage(this.chatId, this.agentMessageId);
+              } catch { /* ignore */ }
+              this.agentMessageId = null;
+            }
+          }
         });
       });
 

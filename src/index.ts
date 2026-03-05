@@ -271,6 +271,25 @@ async function main(): Promise<void> {
         console.log('Enter the auth code in Telegram to activate.');
       }
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
+
+      // Notify authorized users on dev restart
+      if (process.env.NODE_ENV === 'development') {
+        import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
+          for (const uid of getAuthorizedUserIds()) {
+            bot.api.sendMessage(uid, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
+          }
+        });
+
+        // Send reload notification to Claude session if /reload was used
+        import('./bot/commands/stop.js').then(({ consumeReloadFlag }) => {
+          const uid = consumeReloadFlag();
+          if (uid) {
+            import('./bot/handlers/message.js').then(({ queueOrLaunch }) => {
+              queueOrLaunch(uid, uid, '[The user has restarted the application]', bot.api);
+            });
+          }
+        });
+      }
     },
   });
 }

@@ -69,7 +69,10 @@ export function createBot(): Bot {
     { command: 'help', description: 'Command list' },
   ];
   if (process.env.NODE_ENV === 'development') {
-    commands.push({ command: 'force_reload', description: 'Restart bot process' });
+    commands.push(
+      { command: 'reload', description: 'Restart bot (notify Claude)' },
+      { command: 'reload_sil', description: 'Restart bot (silent)' },
+    );
   }
   bot.api.setMyCommands(commands).catch(err => logger.error({ err }, 'Failed to set bot commands'));
 

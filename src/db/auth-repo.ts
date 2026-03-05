@@ -74,6 +74,13 @@ export async function authorizeUser(
   return false;
 }
 
+export function getAuthorizedUserIds(): number[] {
+  const rows = getDb()
+    .prepare('SELECT telegram_user_id FROM auth_tokens WHERE is_authorized = 1')
+    .all() as { telegram_user_id: number }[];
+  return rows.map(r => r.telegram_user_id);
+}
+
 export function revokeUser(userId: number): void {
   getDb()
     .prepare('UPDATE auth_tokens SET is_authorized = 0 WHERE telegram_user_id = ?')

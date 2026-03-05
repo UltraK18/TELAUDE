@@ -4,7 +4,7 @@ import { authCommand } from './auth.js';
 import { helpCommand } from './help.js';
 import { cdCommand, pwdCommand, projectsCommand } from './cd.js';
 import { sessionsCommand, resumeCommand, newCommand, clearCommand } from './session.js';
-import { stopCommand, forceReloadCommand } from './stop.js';
+import { stopCommand, reloadCommand, reloadSilentCommand } from './stop.js';
 import { modelCommand } from './model.js';
 import { budgetCommand } from './budget.js';
 import { statsCommand } from './status.js';
@@ -25,7 +25,8 @@ export function registerCommands(bot: Bot): void {
 
   bot.command('stop', stopCommand);
   if (process.env.NODE_ENV === 'development') {
-    bot.command('force_reload', forceReloadCommand);
+    bot.command('reload', reloadCommand);
+    bot.command('reload_sil', reloadSilentCommand);
   }
   bot.command('model', modelCommand);
   bot.command('budget', budgetCommand);

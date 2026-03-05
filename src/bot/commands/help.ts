@@ -27,7 +27,8 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 const DEV_SECTION = `
 
 <b>Dev</b>
-/force_reload - Restart bot process`;
+/reload - Restart bot (notify Claude)
+/reload_sil - Restart bot (silent)`;
 
 export async function helpCommand(ctx: Context): Promise<void> {
   const text = isDev ? HELP_TEXT + DEV_SECTION : HELP_TEXT;

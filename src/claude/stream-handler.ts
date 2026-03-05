@@ -17,6 +17,17 @@ function toSuperscript(n: number): string {
   return String(n).split('').map(d => SUPERSCRIPT_DIGITS[+d]).join('');
 }
 
+/** Insert superscript after the icon, handling tg-emoji tags correctly */
+function addSuperscript(line: string, sup: string): string {
+  // If line starts with <tg-emoji ...>...</tg-emoji>, insert sup after closing tag
+  const tgMatch = line.match(/^(<tg-emoji[^>]*>[^<]*<\/tg-emoji>)/);
+  if (tgMatch) {
+    return tgMatch[1] + sup + line.slice(tgMatch[1].length);
+  }
+  // Fallback: insert after first non-space token
+  return line.replace(/^(\S+)/, `$1${sup}`);
+}
+
 export interface StreamHandlerOptions {
   silent?: boolean;
 }
@@ -104,7 +115,7 @@ export class StreamHandler {
           if (name === 'Agent') {
             this.agentToolIds.add(id);
             const desc = (input as any)?.description ?? 'working';
-            this.toolEntries.set(id, { line: `🔄 ${desc}...`, isAgent: true, parentToolUseId: parent });
+            this.toolEntries.set(id, { line: `<tg-emoji emoji-id="5427181942934088912">💬</tg-emoji> ${desc}...`, isAgent: true, parentToolUseId: parent });
           } else if (parent && this.agentToolIds.has(parent)) {
             // Sub-agent tool: show under parent agent
             // Remove previous sub-agent tool entries for this parent (only latest shown per agent)
@@ -118,8 +129,7 @@ export class StreamHandler {
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
             if (count > 1) {
-              const sup = toSuperscript(count);
-              line = line.replace(/^(\S+)/, `$1${sup}`);
+              line = addSuperscript(line, toSuperscript(count));
             }
             this.toolEntries.set(id, { line, isAgent: false, parentToolUseId: parent });
           } else {
@@ -133,8 +143,7 @@ export class StreamHandler {
               ? formatToolWithInput(name, inputStr)
               : formatToolStart(name);
             if (this.toolCount > 1) {
-              const sup = toSuperscript(this.toolCount);
-              line = line.replace(/^(\S+)/, `$1${sup}`);
+              line = addSuperscript(line, toSuperscript(this.toolCount));
             }
             this.toolEntries.set(id, { line, isAgent: false, parentToolUseId: null });
           }

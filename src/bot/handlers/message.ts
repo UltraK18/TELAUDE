@@ -432,6 +432,16 @@ export async function messageHandler(ctx: Context): Promise<void> {
 
   if (!userId || !chatId || !text) return;
 
+  // Log custom emoji entities (for discovering premium emoji IDs)
+  const entities = ctx.message?.entities;
+  if (entities) {
+    for (const ent of entities) {
+      if (ent.type === 'custom_emoji') {
+        logger.info({ userId, custom_emoji_id: (ent as any).custom_emoji_id, text: text.slice(ent.offset, ent.offset + ent.length) }, 'Custom emoji detected');
+      }
+    }
+  }
+
   // Ignore commands (handled by command handlers)
   if (text.startsWith('/')) return;
 

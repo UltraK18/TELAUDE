@@ -1,22 +1,55 @@
+// tg-emoji wrapper for premium animated emoji
+function tge(emojiId: string, fallback: string): string {
+  return `<tg-emoji emoji-id="${emojiId}">${fallback}</tg-emoji>`;
+}
+
 const TOOL_ICONS: Record<string, string> = {
-  Read: '📖',
-  Write: '✏️',
-  Edit: '✏️',
-  Bash: '⚡',
-  Glob: '🔍',
-  Grep: '🔍',
-  WebFetch: '🌐',
-  WebSearch: '🌐',
-  default: '🔧',
+  Read: tge('5206186681346039457', '🧑‍🎓'),
+  Write: tge('5334882760735598374', '📝'),
+  Edit: tge('5956143844457189176', '✏️'),
+  Bash: tge('5456140674028019486', '⚡️'),
+  Glob: tge('5447410659077661506', '🌐'),
+  Grep: tge('5447410659077661506', '🌐'),
+  WebFetch: tge('5282843764451195532', '🖥'),
+  WebSearch: tge('5282843764451195532', '🖥'),
+  default: tge('5341715473882955310', '⚙️'),
 };
 
+// MCP tool-specific icons (matched by tool name suffix)
+const MCP_TOOL_ICONS: Record<string, string> = {
+  ask: tge('5436113877181941026', '❓'),
+  schedule_add: tge('5413879192267805083', '🗓'),
+  schedule_list: tge('5413879192267805083', '🗓'),
+  schedule_update: tge('5413879192267805083', '🗓'),
+  schedule_remove: tge('5413879192267805083', '🗓'),
+  schedule_pause: tge('5413879192267805083', '🗓'),
+  schedule_resume: tge('5413879192267805083', '🗓'),
+  schedule_history: tge('5413879192267805083', '🗓'),
+  schedule_ok: tge('5413879192267805083', '🗓'),
+  schedule_completed: tge('5413879192267805083', '🗓'),
+  heartbeat_check: tge('5413879192267805083', '🗓'),
+  heartbeat_update: tge('5413879192267805083', '🗓'),
+  heartbeat_ok: tge('5413879192267805083', '🗓'),
+};
+
+function getToolIcon(toolName: string): string {
+  if (TOOL_ICONS[toolName]) return TOOL_ICONS[toolName];
+  // MCP tools: mcp__server__tool → extract tool suffix
+  const mcpMatch = toolName.match(/^mcp__[^_]+__(.+)$/);
+  if (mcpMatch) {
+    const suffix = mcpMatch[1];
+    if (MCP_TOOL_ICONS[suffix]) return MCP_TOOL_ICONS[suffix];
+  }
+  return TOOL_ICONS.default;
+}
+
 export function formatToolStart(toolName: string): string {
-  const icon = TOOL_ICONS[toolName] ?? TOOL_ICONS.default;
+  const icon = getToolIcon(toolName);
   return `${icon} <b>${toolName}</b>`;
 }
 
 export function formatToolWithInput(toolName: string, inputJson: string): string {
-  const icon = TOOL_ICONS[toolName] ?? TOOL_ICONS.default;
+  const icon = getToolIcon(toolName);
 
   try {
     const params = JSON.parse(inputJson);

@@ -88,17 +88,17 @@ export async function runSetup(): Promise<void> {
       if (!botToken) print('Token is required.');
     }
 
-    rl.close();
-
     // Step 3: Generate auth code
     const authCode = generateAuthCode();
     print('');
     print('[3/3] Auth Code Generated');
     print('');
-    print(`Auth code: ${authCode}`);
+    print(`  Auth code: ${authCode}`);
     print('');
-    print('Send this code to your bot on Telegram to authenticate.');
+    print('  Send this code to your bot on Telegram to authenticate.');
     print('');
+    await ask(rl, 'Press Enter to start the bot...');
+    rl.close();
 
     // Write .env
     const envContent = [

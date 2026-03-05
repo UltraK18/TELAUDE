@@ -1,11 +1,13 @@
 import { spawn, ChildProcess } from 'child_process';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { config } from '../config.js';
 import { logger, notify } from '../utils/logger.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { getApiToken, getApiPort } from '../api/internal-server.js';
+import { loadSettings } from '../settings/settings-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -81,7 +83,8 @@ export interface SpawnOptions {
 }
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
-  const model = opts?.model ?? up.model;
+  const settings = loadSettings();
+  const model = opts?.model ?? settings.model ?? up.model;
 
   const args = [
     '--verbose',
@@ -102,19 +105,44 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   const mcpCommand = useTs ? 'npx' : 'node';
   const mcpArgs = useTs ? ['tsx', tsPath] : [jsPath];
 
-  const mcpConfig = {
-    mcpServers: {
-      telaude: {
-        command: mcpCommand,
-        args: mcpArgs,
-        env: {
-          TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
-          TELAUDE_API_TOKEN: getApiToken(),
-          TELAUDE_USER_ID: String(up.telegramUserId),
-        },
+  // Build MCP config: telaude (inline) + global servers from ~/.claude.json & ~/.claude/settings.json
+  const mcpServers: Record<string, unknown> = {};
+  if (!settings.disabledMcpServers.includes('telaude')) {
+    mcpServers.telaude = {
+      command: mcpCommand,
+      args: mcpArgs,
+      env: {
+        TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
+        TELAUDE_API_TOKEN: getApiToken(),
+        TELAUDE_USER_ID: String(up.telegramUserId),
       },
-    },
-  };
+    };
+  }
+
+  // Load global MCP servers and include only non-disabled ones
+  const globalSources = [
+    path.join(os.homedir(), '.claude.json'),
+    path.join(os.homedir(), '.claude', 'settings.json'),
+  ];
+  for (const src of globalSources) {
+    try {
+      if (fs.existsSync(src)) {
+        const raw = JSON.parse(fs.readFileSync(src, 'utf-8'));
+        if (raw.mcpServers) {
+          for (const [name, cfg] of Object.entries(raw.mcpServers)) {
+            if (name !== 'telaude' && !settings.disabledMcpServers.includes(name)) {
+              mcpServers[name] = cfg;
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  const mcpConfig = { mcpServers };
+  args.push('--strict-mcp-config');
   args.push('--mcp-config', JSON.stringify(mcpConfig));
 
   // Disable interactive/UI tools that don't work in -p mode
@@ -127,6 +155,10 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     'TeammateTool',      // swarm/agent team feature, not applicable
     'TeamDelete',        // swarm/agent team feature, not applicable
   ];
+  // Add user-disabled tools from settings
+  if (settings.disabledTools.length > 0) {
+    disallowed.push(...settings.disabledTools);
+  }
   args.push('--disallowedTools', ...disallowed);
 
   args.push('-p');

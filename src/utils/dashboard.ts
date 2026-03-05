@@ -1,4 +1,5 @@
 import blessed from 'blessed';
+import { openSettingsScreen } from '../settings/settings-tui.js';
 
 const SHADOW_CHARS = new Set('╗╝╚═╔╠╣╩╦║');
 
@@ -138,7 +139,25 @@ export function initDashboard(): void {
     border: { type: 'line' },
     style: { border: { fg: 208 } },
     padding: { left: 1 },
+    mouse: true,
   });
+
+  // Settings button (right-aligned inside status bar)
+  const settingsBtn = blessed.box({
+    parent: statusBar,
+    top: 0,
+    right: 1,
+    width: 12,
+    height: 1,
+    tags: true,
+    content: '{208-fg}[Settings]{/208-fg}',
+    style: { hover: { fg: 'white' } },
+    mouse: true,
+  });
+  settingsBtn.on('click', () => {
+    if (screen) openSettingsScreen(screen);
+  });
+
   renderStatusBar();
 
   // Update uptime every second
@@ -149,8 +168,13 @@ export function initDashboard(): void {
     screen!.render();
   });
 
+  // Open settings on 's'
+  screen.key(['s'], () => {
+    if (screen) openSettingsScreen(screen);
+  });
+
   // Quit on q or Ctrl-C
-  screen.key(['q', 'C-c'], () => {
+  screen.key(['C-c'], () => {
     process.exit(0);
   });
 

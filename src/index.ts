@@ -6,6 +6,14 @@ async function main(): Promise<void> {
   const isFirstRun = needsSetup();
   if (isFirstRun) {
     await runSetup();
+    // Restart process with clean terminal state for TUI
+    const { spawn } = await import('child_process');
+    const child = spawn(process.argv[0], process.argv.slice(1), {
+      stdio: 'inherit',
+      env: process.env,
+    });
+    child.on('exit', (code) => process.exit(code ?? 0));
+    return;
   }
 
   // Now load .env into process.env

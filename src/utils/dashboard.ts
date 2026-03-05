@@ -142,7 +142,16 @@ export function initDashboard(): void {
     mouse: true,
   });
 
-  // Settings button (right-aligned inside status bar)
+  // Settings hint + button (right-aligned inside status bar)
+  blessed.box({
+    parent: statusBar,
+    top: 0,
+    right: 13,
+    width: 16,
+    height: 1,
+    tags: true,
+    content: '{gray-fg}press s to open{/gray-fg}',
+  });
   const settingsBtn = blessed.box({
     parent: statusBar,
     top: 0,

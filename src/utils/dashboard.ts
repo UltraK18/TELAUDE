@@ -195,7 +195,6 @@ function formatJobLine(j: ScheduleJob, showNextRun: boolean): string {
     return `${status} ${j.name} {gray-fg}${timeStr}{/gray-fg}`;
   }
 
-  // Jobs list: show schedule type
   if (j.once) {
     const next = getNextRun(j);
     const timeStr = next ? formatTime(next) : 'once';

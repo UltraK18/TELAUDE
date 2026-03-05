@@ -70,10 +70,9 @@ export function registerSchedulingTools(server: McpServer): void {
       if (jobs.length === 0) {
         return { content: [{ type: 'text', text: 'No scheduled jobs' }] };
       }
-      const lines = jobs.map((j: any) => {
-        const next = nextRunStr(j.schedule, j.runAt);
-        return `[${j.id}] ${j.name} | ${j.schedule} | ${j.isPaused ? 'PAUSED' : 'ACTIVE'} | next: ${next}`;
-      });
+      const lines = jobs.map((j: any) =>
+        `[${j.id}] ${j.name} | ${j.schedule} | ${j.isPaused ? 'PAUSED' : 'ACTIVE'} | dir: ${j.workingDir ?? 'default'}`
+      );
       return { content: [{ type: 'text', text: `Now: ${nowStr()}\n${lines.join('\n')}` }] };
     }
   );

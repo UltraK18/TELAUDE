@@ -12,6 +12,11 @@ import type { UserProcess } from './process-manager.js';
 const TELEGRAM_MAX_LEN = 4000;
 const TOOL_UPDATE_INTERVAL = 1000; // 1 second between tool edits
 
+const SUPERSCRIPT_DIGITS = '⁰¹²³⁴⁵⁶⁷⁸⁹';
+function toSuperscript(n: number): string {
+  return String(n).split('').map(d => SUPERSCRIPT_DIGITS[+d]).join('');
+}
+
 export interface StreamHandlerOptions {
   silent?: boolean;
 }
@@ -30,21 +35,18 @@ export class StreamHandler {
   private lastSentTextLength = 0;
   private sentMessages: number[] = [];
 
-  // Tool log state
-  private toolLines: string[] = [];
+  // Unified tool/agent log state (single message)
+  private toolEntries = new Map<string, { line: string; isAgent: boolean }>();
   private toolMessageId: number | null = null;
   private lastToolUpdateTime = 0;
   private toolDirty = false;
+  private agentToolIds = new Set<string>();  // active agent toolIds for suppress check
+  private toolCount = 0;  // total tool calls counter
 
   private compactMessageId: number | null = null;
   private compactAnimTimer: ReturnType<typeof setInterval> | null = null;
   private resolveComplete: (() => void) | null = null;
   private sessionCaptured = false;
-
-  // Subagent state
-  private agentToolId: string | null = null;
-  private agentMessageId: number | null = null;
-  private agentAnimTimer: ReturnType<typeof setInterval> | null = null;
 
   // Sequential event processing queue
   private eventQueue: (() => Promise<void>)[] = [];
@@ -85,43 +87,9 @@ export class StreamHandler {
 
       parser.on('tool_use', (name: string, input: unknown, toolId?: string) => {
         this.enqueue(async () => {
-          // Agent (subagent) tool → show dedicated icon, suppress inner tools
-          if (name === 'Agent' || name === 'TodoWrite') {
-            if (name === 'Agent') {
-              this.agentToolId = toolId ?? null;
-              await this.flushText();
-              if (this.textMessageId) {
-                this.sentMessages.push(this.textMessageId);
-              }
-              this.textMessageId = null;
-              this.textBuffer = '';
-              this.lastSentTextLength = 0;
-              // Delete current tool message if any
-              await this.deleteToolMessage();
-              // Show agent working indicator
-              if (!this.silent) {
-                try {
-                  const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5368324170671202286">🔄</tg-emoji> Agent working.', { parse_mode: 'HTML' });
-                  this.agentMessageId = msg.message_id;
-                  let dots = 1;
-                  this.agentAnimTimer = setInterval(async () => {
-                    if (!this.agentMessageId) { clearInterval(this.agentAnimTimer!); this.agentAnimTimer = null; return; }
-                    dots = (dots % 3) + 1;
-                    try {
-                      await this.api.editMessageText(this.chatId, this.agentMessageId!, '<tg-emoji emoji-id="5368324170671202286">🔄</tg-emoji> Agent working' + '.'.repeat(dots), { parse_mode: 'HTML' });
-                    } catch { /* ignore */ }
-                  }, 1000);
-                } catch (err) {
-                  logger.error({ err }, 'Failed to send agent indicator');
-                }
-              }
-            }
-            // TodoWrite: just skip display entirely
-            return;
-          }
+          // TodoWrite: skip display entirely
+          if (name === 'TodoWrite') return;
 
-          // Inside subagent → suppress tool display
-          if (this.agentToolId) return;
 
           // Finalize any pending text before switching to tool mode
           await this.flushText();
@@ -132,11 +100,28 @@ export class StreamHandler {
           this.textBuffer = '';
           this.lastSentTextLength = 0;
 
-          const inputStr = input ? JSON.stringify(input) : '';
-          const line = inputStr
-            ? formatToolWithInput(name, inputStr)
-            : formatToolStart(name);
-          this.toolLines.push(line);
+          const id = toolId ?? `anon_${Date.now()}`;
+
+          if (name === 'Agent') {
+            this.agentToolIds.add(id);
+            const desc = (input as any)?.description ?? 'working';
+            this.toolEntries.set(id, { line: `🔄 ${desc}...`, isAgent: true });
+          } else {
+            // Remove previous non-agent tool entries (only latest tool shown)
+            for (const [key, entry] of this.toolEntries) {
+              if (!entry.isAgent) this.toolEntries.delete(key);
+            }
+            this.toolCount++;
+            const inputStr = input ? JSON.stringify(input) : '';
+            let line = inputStr
+              ? formatToolWithInput(name, inputStr)
+              : formatToolStart(name);
+            // Insert superscript counter after first emoji
+            const sup = toSuperscript(this.toolCount);
+            line = line.replace(/^(\S+)/, `$1${sup}`);
+            this.toolEntries.set(id, { line, isAgent: false });
+          }
+
           this.toolDirty = true;
           this.maybeFlushToolLog();
         });
@@ -144,15 +129,19 @@ export class StreamHandler {
 
       parser.on('tool_result', (toolId?: string) => {
         this.enqueue(async () => {
-          // Agent finished → clean up indicator
-          if (toolId && toolId === this.agentToolId) {
-            this.agentToolId = null;
-            if (this.agentAnimTimer) { clearInterval(this.agentAnimTimer); this.agentAnimTimer = null; }
-            if (this.agentMessageId && !this.silent) {
-              try {
-                await this.api.deleteMessage(this.chatId, this.agentMessageId);
-              } catch { /* ignore */ }
-              this.agentMessageId = null;
+          if (!toolId) return;
+          const entry = this.toolEntries.get(toolId);
+          if (!entry) return;
+
+          // Agent done → remove from entries
+          if (entry.isAgent) {
+            this.agentToolIds.delete(toolId);
+            this.toolEntries.delete(toolId);
+            if (this.toolEntries.size === 0) {
+              await this.deleteToolMessage();
+            } else {
+              this.toolDirty = true;
+              await this.flushToolLog();
             }
           }
         });
@@ -172,7 +161,7 @@ export class StreamHandler {
               try {
                 await this.api.editMessageText(this.chatId, this.compactMessageId!, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Compacting' + '.'.repeat(dots), { parse_mode: 'HTML' });
               } catch { /* ignore edit errors */ }
-            }, 1000);
+            }, 2000);
           } catch (err) {
             logger.error({ err }, 'Failed to send compact start notification');
           }
@@ -255,8 +244,8 @@ export class StreamHandler {
         this.enqueue(async () => {
           if (this.up.interrupted) {
             // Keep tool message visible with ❌ marker
-            if (this.toolMessageId && this.toolLines.length > 0) {
-              this.toolLines.push('\n❌ Interrupted');
+            if (this.toolMessageId && this.toolEntries.size > 0) {
+              this.toolEntries.set('_interrupted', { line: '\n❌ Interrupted', isAgent: false });
               this.toolDirty = true;
               await this.flushToolLog();
             } else if (!this.toolMessageId && !this.silent) {
@@ -291,13 +280,24 @@ export class StreamHandler {
     }
   }
 
+  private buildToolText(): string {
+    // Agent lines on top, then normal tool lines
+    const agentLines: string[] = [];
+    const toolLines: string[] = [];
+    for (const entry of this.toolEntries.values()) {
+      if (entry.isAgent) agentLines.push(entry.line);
+      else toolLines.push(entry.line);
+    }
+    return [...agentLines, ...toolLines].join('\n');
+  }
+
   private async flushToolLog(): Promise<void> {
-    if (!this.toolDirty || this.toolLines.length === 0) return;
+    if (!this.toolDirty || this.toolEntries.size === 0) return;
     this.toolDirty = false;
     this.lastToolUpdateTime = Date.now();
-    if (this.silent) return; // Skip Telegram output in silent mode
+    if (this.silent) return;
 
-    const text = this.toolLines.join('\n');
+    const text = this.buildToolText();
 
     try {
       if (!this.toolMessageId) {
@@ -317,14 +317,16 @@ export class StreamHandler {
 
   private async deleteToolMessage(): Promise<void> {
     if (!this.toolMessageId) return;
-    if (this.silent) { this.toolMessageId = null; this.toolLines = []; return; }
+    if (this.silent) { this.toolMessageId = null; this.toolEntries.clear(); this.agentToolIds.clear(); return; }
     try {
       await this.api.deleteMessage(this.chatId, this.toolMessageId);
     } catch {
       // Message may already be deleted — ignore
     }
     this.toolMessageId = null;
-    this.toolLines = [];
+    this.toolEntries.clear();
+    this.agentToolIds.clear();
+    this.toolCount = 0;
   }
 
   // ── Text response ──

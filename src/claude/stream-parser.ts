@@ -112,7 +112,8 @@ export class StreamParser extends EventEmitter {
           } else if (block.type === 'tool_use') {
             this.emit('tool_use', block.name ?? 'unknown', block.input, block.id);
           } else if (block.type === 'tool_result') {
-            this.emit('tool_result', block.id);
+            const resultId = (block as any).tool_use_id ?? block.id;
+            this.emit('tool_result', resultId);
           }
         }
         break;

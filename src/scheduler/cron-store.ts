@@ -2,6 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 
+let _onChange: (() => void) | null = null;
+export function setOnChange(cb: () => void): void { _onChange = cb; }
+
 export interface CronJobHistory {
   timestamp: string;
   status: 'success' | 'error';
@@ -107,6 +110,7 @@ export function addJob(params: {
   jobs.push(job);
   writeStore(jobs);
   logger.info({ jobId: job.id, name: job.name }, 'Cron job added');
+  _onChange?.();
   return job;
 }
 
@@ -116,6 +120,7 @@ export function updateJob(jobId: string, updates: Partial<Pick<CronJob, 'name' |
   if (idx === -1) return null;
   Object.assign(jobs[idx], updates);
   writeStore(jobs);
+  _onChange?.();
   return jobs[idx];
 }
 
@@ -125,6 +130,7 @@ export function removeJob(jobId: string): boolean {
   if (filtered.length === jobs.length) return false;
   writeStore(filtered);
   logger.info({ jobId }, 'Cron job removed');
+  _onChange?.();
   return true;
 }
 

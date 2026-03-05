@@ -13,7 +13,7 @@ import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText } from './media-types.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { updateUserChatMapping } from '../../api/route-handlers.js';
-import { logger } from '../../utils/logger.js';
+import { logger, notify } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 import { logMessage } from '../../db/message-log-repo.js';
 import { startPokeTimer, resetPokeTimer } from '../../scheduler/poke.js';
@@ -197,6 +197,7 @@ function launchAndSend(
     return false;
   }
 
+  notify(`Message → Claude (${text.length} chars)`);
   logger.info({ userId, textLen: text.length }, 'Message sent to Claude');
   return true;
 }

@@ -25,7 +25,8 @@ async function main(): Promise<void> {
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
   const { cleanupIdleProcesses, getAllProcesses, killProcess } = await import('./claude/process-manager.js');
-  const { logger, notify } = await import('./utils/logger.js');
+  const { logger, notify, setDashboardOutput } = await import('./utils/logger.js');
+  const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule } = await import('./utils/dashboard.js');
 
   // Initialize database
   const db = initDb();
@@ -235,6 +236,19 @@ async function main(): Promise<void> {
   // Start all cron jobs
   startScheduler();
 
+  // Prepare dashboard schedule refresh (called after initDashboard in onStart)
+  const { getAllJobs: getAllCronJobs, setOnChange } = await import('./scheduler/cron-store.js');
+  const { getNextRunTimes } = await import('./scheduler/scheduler.js');
+  const refreshScheduleDashboard = () => {
+    const jobs = getAllCronJobs();
+    const nextRuns = getNextRunTimes();
+    updateSchedule(jobs.map(j => {
+      const nextRun = nextRuns.get(j.id) ?? (j.once && j.runAt ? new Date(j.runAt) : null);
+      return { name: j.name, schedule: j.schedule, isPaused: j.isPaused, once: j.once, runAt: j.runAt, nextRun };
+    }));
+  };
+  setOnChange(refreshScheduleDashboard);
+
   // Periodic cleanup of idle processes
   const cleanupInterval = setInterval(() => {
     cleanupIdleProcesses();
@@ -266,28 +280,15 @@ async function main(): Promise<void> {
   // Start polling
   await bot.start({
     onStart: (botInfo) => {
-      console.clear();
-      const BLUE = '\x1b[38;5;69m';
-      const ORANGE = '\x1b[38;5;208m';
-      const WHITE = '\x1b[90m';
-      const R = '\x1b[0m';
-      const SHADOW = '╔╗╚╝═║╣╠╬╦╩╥╨╞╡╟╢';
-      const colorize = (line: string, fill: string) =>
-        [...line].map(ch => SHADOW.includes(ch) ? `${WHITE}${ch}` : ch === ' ' ? ch : `${fill}${ch}`).join('') + R;
-      const TEL_LEN = 24;
-      const lines = [
-        '████████╗███████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗',
-        '╚══██╔══╝██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝',
-        '   ██║   █████╗  ██║     ███████║██║   ██║██║  ██║█████╗',
-        '   ██║   ██╔══╝  ██║     ██╔══██║██║   ██║██║  ██║██╔══╝',
-        '   ██║   ███████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗',
-        '   ╚═╝   ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝',
-      ];
-      console.log('\n' + lines.map(l => colorize(l.slice(0, TEL_LEN), BLUE) + colorize(l.slice(TEL_LEN), ORANGE)).join('\n') + '\n');
+      // Initialize TUI dashboard
+      initDashboard();
+      setDashboardOutput(dashboardLog, dashboardError);
+      updateSession({ botUsername: botInfo.username });
       notify(`Bot online: @${botInfo.username}`);
       if (isFirstRun) {
         notify('Enter the auth code in Telegram to activate.');
       }
+      refreshScheduleDashboard();
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 
       // Notify authorized users on dev restart
@@ -300,10 +301,13 @@ async function main(): Promise<void> {
 
         // Send reload notification to Claude session if /reload was used
         import('./bot/commands/stop.js').then(({ consumeReloadFlag }) => {
-          const uid = consumeReloadFlag();
-          if (uid) {
+          const flag = consumeReloadFlag();
+          if (flag) {
+            const stdin = flag.message
+              ? `[The user has restarted the application]\nUser said: ${flag.message}`
+              : '[The user has restarted the application]';
             import('./bot/handlers/message.js').then(({ queueOrLaunch }) => {
-              queueOrLaunch(uid, uid, '[The user has restarted the application]', bot.api);
+              queueOrLaunch(flag.userId, flag.userId, stdin, bot.api);
             });
           }
         });

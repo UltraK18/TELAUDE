@@ -25,8 +25,12 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  // Leave flag so post-restart sends stdin notification
-  fs.writeFileSync(RELOAD_FLAG, String(userId));
+  // Extract message after /reload command
+  const text = ctx.message?.text ?? '';
+  const userMsg = text.replace(/^\/reload\s*/, '').trim();
+
+  // Leave flag so post-restart sends stdin notification (userId\nmessage)
+  fs.writeFileSync(RELOAD_FLAG, userMsg ? `${userId}\n${userMsg}` : String(userId));
 
   await ctx.reply('Restarting bot process...');
   setTimeout(() => process.exit(0), 500);
@@ -41,11 +45,15 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   setTimeout(() => process.exit(0), 500);
 }
 
-export function consumeReloadFlag(): number | null {
+export function consumeReloadFlag(): { userId: number; message?: string } | null {
   try {
-    const userId = Number(fs.readFileSync(RELOAD_FLAG, 'utf-8').trim());
+    const raw = fs.readFileSync(RELOAD_FLAG, 'utf-8').trim();
     fs.unlinkSync(RELOAD_FLAG);
-    return userId || null;
+    const [uidStr, ...rest] = raw.split('\n');
+    const userId = Number(uidStr);
+    if (!userId) return null;
+    const message = rest.join('\n').trim() || undefined;
+    return { userId, message };
   } catch {
     return null;
   }

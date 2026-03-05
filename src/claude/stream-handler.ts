@@ -5,7 +5,8 @@ import { formatToolWithInput, formatToolStart } from './tool-formatter.js';
 import { updateCost } from './cost-tracker.js';
 import { createSession } from '../db/session-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
-import { logger } from '../utils/logger.js';
+import { logger, notify, notifyError } from '../utils/logger.js';
+import { updateSession } from '../utils/dashboard.js';
 import type { UserProcess } from './process-manager.js';
 
 const TELEGRAM_MAX_LEN = 4000;
@@ -62,6 +63,7 @@ export class StreamHandler {
           this.up.sessionId = sessionId;
           createSession(this.userId, sessionId, this.up.workingDir, this.up.model);
           logger.info({ userId: this.userId, sessionId }, 'Session captured');
+          updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir });
         }
       });
 
@@ -162,6 +164,7 @@ export class StreamHandler {
           await this.flushText();
 
           if (event.is_error && event.result && !this.silent) {
+            notifyError(`CLI error: ${event.result.slice(0, 100)}`);
             try {
               await this.api.sendMessage(this.chatId, `\u274C ${event.result}`);
             } catch (err) {
@@ -170,6 +173,8 @@ export class StreamHandler {
           }
 
           const sessionId = event.session_id ?? this.up.sessionId;
+          const costStr = event.total_cost_usd != null ? ` $${event.total_cost_usd.toFixed(4)}` : '';
+          notify(`Response done (${this.textBuffer.length} chars${costStr})`);
           logger.info({ sessionId, total_cost_usd: event.total_cost_usd, usage: event.usage, num_turns: event.num_turns }, 'Result event received');
           if (sessionId && (event.cost_usd != null || event.total_cost_usd != null)) {
             const costVal = event.total_cost_usd ?? event.cost_usd ?? 0;

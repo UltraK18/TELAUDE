@@ -147,6 +147,17 @@ export function reloadAll(): void {
 }
 
 /**
+ * Get next run time for each active cron job.
+ */
+export function getNextRunTimes(): Map<string, Date | null> {
+  const result = new Map<string, Date | null>();
+  for (const [jobId, cron] of activeCrons) {
+    result.set(jobId, cron.nextRun() ?? null);
+  }
+  return result;
+}
+
+/**
  * Schedule a specific job by ID (after add/update).
  */
 export function scheduleJob(jobId: string): void {

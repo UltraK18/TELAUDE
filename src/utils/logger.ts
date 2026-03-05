@@ -12,32 +12,39 @@ const targets: pino.TransportTargetOptions[] = [
   { target: 'pino/file', options: { destination: logFile }, level: 'info' },      // always log to file
 ];
 
-if (isDev) {
-  targets.push({ target: 'pino/file', options: { destination: 1 }, level: 'info' });  // stdout in dev only
-} else {
-  targets.push({ target: 'pino/file', options: { destination: 2 }, level: 'error' }); // stderr errors in production
-}
-
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
   transport: { targets },
 });
 
-const GRAY = '\x1b[90m';
-const RESET = '\x1b[0m';
-
-function timestamp(): string {
+function tsRaw(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${GRAY}[${String(d.getFullYear()).slice(2)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}] (${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())})${RESET}`;
+  return `[${String(d.getFullYear()).slice(2)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}] (${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())})`;
+}
+
+let _dashboardLog: ((msg: string) => void) | null = null;
+let _dashboardError: ((msg: string) => void) | null = null;
+
+export function setDashboardOutput(log: (msg: string) => void, error: (msg: string) => void): void {
+  _dashboardLog = log;
+  _dashboardError = error;
 }
 
 /** Print to console regardless of environment (for important events) */
 export function notify(msg: string): void {
-  console.log(`${timestamp()} ${msg}`);
+  if (_dashboardLog) {
+    _dashboardLog(`{gray-fg}${tsRaw()}{/gray-fg} ${msg}`);
+  } else {
+    console.log(`\x1b[90m${tsRaw()}\x1b[0m ${msg}`);
+  }
 }
 
 /** Print error to console regardless of environment */
 export function notifyError(msg: string): void {
-  console.error(`${timestamp()} ❌ ${msg}`);
+  if (_dashboardError) {
+    _dashboardError(`{gray-fg}${tsRaw()}{/gray-fg} {red-fg}❌ ${msg}{/red-fg}`);
+  } else {
+    console.error(`\x1b[90m${tsRaw()}\x1b[0m ❌ ${msg}`);
+  }
 }

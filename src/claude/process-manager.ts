@@ -132,9 +132,9 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   args.push('-p');
 
   const mode = opts?.mode ?? 'user';
-  if (mode !== 'user' && mode !== 'poke') {
+  {
     const resumeLabel = opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId.slice(0, 8)}...)` : ' (new)';
-    notify(`Claude CLI spawned${resumeLabel} [${mode}]`);
+    notify(`CLI spawned${resumeLabel} [${mode}]`);
   }
   logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
 
@@ -168,6 +168,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   }
 
   child.on('exit', (code, signal) => {
+    notify(`CLI exited (code=${code ?? 'null'})`);
     logger.info({ userId: up.telegramUserId, code, signal }, 'Claude CLI process exited');
     // Don't reset state if reload is pending — message handler will re-spawn
     if (!up.reloadPending) {

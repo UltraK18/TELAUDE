@@ -1,7 +1,18 @@
 import { type Context } from 'grammy';
+import { execSync } from 'child_process';
 import { getAllProcesses, getUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { getCost } from '../../claude/cost-tracker.js';
+
+function getGitInfo(): { branch: string; commit: string } {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+    const commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    return { branch, commit };
+  } catch {
+    return { branch: 'unknown', commit: 'unknown' };
+  }
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -45,8 +56,10 @@ export async function statsCommand(ctx: Context): Promise<void> {
   const active = [...processes.values()].filter(p => p.process !== null);
   const mem = process.memoryUsage();
 
+  const git = getGitInfo();
   const systemBlock =
     `<b>System</b>\n` +
+    `Version: <code>${git.branch}</code> @ <code>${git.commit}</code>\n` +
     `Processes: ${active.length} active / ${processes.size} total\n` +
     `Memory: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}MB\n` +
     `Uptime: ${formatUptime(process.uptime())}`;

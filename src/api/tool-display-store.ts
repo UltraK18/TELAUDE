@@ -1,21 +1,61 @@
 /**
- * In-memory store for external MCP tool display settings.
- * External MCP servers register their tool display preferences via /mcp/tool-display.
+ * Tool display settings loaded from ~/.telaude/telaude-mcp-settings.json.
+ * Determines which tools are hidden and custom icon overrides.
  */
 
-export interface ToolDisplayConfig {
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { logger } from '../utils/logger.js';
+
+interface IconObject {
+  emojiId: string;
+  fallback: string;
+}
+
+interface ToolConfig {
   hidden?: boolean;
-  icon?: string;       // custom tg-emoji tag or plain emoji
+  icon?: string | IconObject;
 }
 
-const store = new Map<string, ToolDisplayConfig>();
-
-export function setToolDisplay(toolName: string, config: ToolDisplayConfig): void {
-  store.set(toolName, config);
+interface SettingsFile {
+  tools?: Record<string, ToolConfig>;
 }
 
-export function getToolDisplay(toolName: string): ToolDisplayConfig | undefined {
-  return store.get(toolName);
+/** Generate premium emoji HTML tag */
+function tge(emojiId: string, fallback: string): string {
+  return `<tg-emoji emoji-id="${emojiId}">${fallback}</tg-emoji>`;
+}
+
+const CONFIG_PATH = path.join(os.homedir(), '.telaude', 'telaude-mcp-settings.json');
+
+let store = new Map<string, ToolConfig>();
+
+function resolveIcon(icon: string | IconObject): string {
+  if (typeof icon === 'string') return icon;
+  return tge(icon.emojiId, icon.fallback);
+}
+
+export function loadToolDisplaySettings(): void {
+  store.clear();
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) return;
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
+    let parsed: SettingsFile;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      logger.warn(`Invalid JSON in ${CONFIG_PATH}`);
+      return;
+    }
+    if (parsed.tools && typeof parsed.tools === 'object') {
+      for (const [name, config] of Object.entries(parsed.tools)) {
+        store.set(name, config);
+      }
+    }
+  } catch (err) {
+    logger.warn(`Failed to load tool display settings: ${err}`);
+  }
 }
 
 export function isToolHidden(toolName: string): boolean {
@@ -35,17 +75,16 @@ export function isToolHidden(toolName: string): boolean {
 
 export function getToolCustomIcon(toolName: string): string | undefined {
   const exact = store.get(toolName);
-  if (exact?.icon) return exact.icon;
+  if (exact?.icon) return resolveIcon(exact.icon);
 
   const mcpMatch = toolName.match(/^mcp__[^_]+__(.+)$/);
   if (mcpMatch) {
     const suffix = store.get(mcpMatch[1]);
-    if (suffix?.icon) return suffix.icon;
+    if (suffix?.icon) return resolveIcon(suffix.icon);
   }
 
   return undefined;
 }
 
-export function clearToolDisplay(): void {
-  store.clear();
-}
+// Load settings on import
+loadToolDisplaySettings();

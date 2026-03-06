@@ -5,7 +5,6 @@ import { type Api, InputFile, InlineKeyboard } from 'grammy';
 import { decryptFile, encryptFile, isEncrypted } from '../utils/machine-lock.js';
 import { registerRoute } from './internal-server.js';
 import { createAsk, setAskMessageId } from './ask-queue.js';
-import { setToolDisplay, type ToolDisplayConfig } from './tool-display-store.js';
 import {
   getAllJobs, getJob, addJob, updateJob, removeJob, getCompletedJobs,
 } from '../scheduler/cron-store.js';
@@ -142,19 +141,6 @@ export function registerAllRoutes(api: Api): void {
 
     await api.sendSticker(chatId, stickerId);
     return { ok: true };
-  });
-
-  registerRoute('/mcp/tool-display', async (body) => {
-    const tools = body.tools as Record<string, ToolDisplayConfig> | undefined;
-    if (!tools || typeof tools !== 'object') {
-      throw new Error('Missing "tools" object in body');
-    }
-    let count = 0;
-    for (const [name, cfg] of Object.entries(tools)) {
-      setToolDisplay(name, cfg);
-      count++;
-    }
-    return { ok: true, registered: count };
   });
 
   registerRoute('/mcp/zip-and-send', async (body) => {

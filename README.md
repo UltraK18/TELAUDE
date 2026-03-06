@@ -79,7 +79,26 @@ Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 
 | `POST /mcp/ask` | `{ question, choices? }` | 사용자에게 질문 |
 | `POST /mcp/pin-message` | `{}` | 메시지 고정 |
 | `POST /mcp/unpin-message` | `{}` | 고정 해제 |
-| `POST /mcp/tool-display` | `{ tools: { name: { hidden?, icon? } } }` | 도구 표시 설정 |
+
+### Tool Display Settings
+
+`~/.telaude/telaude-mcp-settings.json`으로 도구의 표시 여부와 아이콘을 설정할 수 있다:
+
+```jsonc
+{
+  "tools": {
+    "yvonne_selfie": { "hidden": true },
+    "yvonne_sticker": { "hidden": true },
+    "some_tool": { "icon": "🚀" },
+    "fancy_tool": { "icon": { "emojiId": "5206186681346039457", "fallback": "🧑‍🎓" } }
+  }
+}
+```
+
+- `hidden: true` — 텔레그램 도구 호출 메시지에서 숨김
+- `icon` (문자열) — 유니코드 이모지로 아이콘 변경
+- `icon` (객체) — 텔레그램 프리미엄 커스텀 이모지 (emojiId + fallback)
+- MCP 도구는 접미사로 매칭 (`mcp__server__tool` → `tool`)
 
 ### Usage Example
 

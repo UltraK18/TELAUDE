@@ -1,6 +1,6 @@
 {
   "name": "telaude",
-  "version": "1.0.2.1",
+  "version": "dev-1.0.2.2-000",
   "description": "Telegram Claude Code Bridge",
   "type": "module",
   "main": "dist/index.js",

@@ -11,7 +11,7 @@ export interface CliSession {
 
 /**
  * Encode a working directory path to Claude Code's project folder name.
- * D:\Development\MyProject → D--Development-Telaude-code
+ * e.g. D:\Development\MyProject → D--Development-MyProject
  */
 function encodeCwd(cwd: string): string {
   // D:\path\to\dir → D--path-to-dir (Claude Code's project folder naming)

@@ -7,4 +7,5 @@ logs/
 *.db
 *.db-journal
 sandbox/
+ref/
 CLAUDE.md

@@ -16,6 +16,10 @@ Telegram에서 Claude Code CLI를 원격 제어하는 봇.
 - **이모지 리액션** — 양방향 리액션 (유저→봇 메시지, 봇→유저 메시지)
 - **보안** — 비밀번호 인증 + OS 네이티브 암호화 (.env)
 
+## Documentation
+
+자세한 사용법과 설정은 **[docs/index.md](./docs/index.md)** 를 참고한다.
+
 ## Quick Start
 
 ```bash

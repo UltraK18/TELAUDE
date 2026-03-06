@@ -30,10 +30,26 @@ function tge(emojiId: string, fallback: string): string {
 const CONFIG_PATH = path.join(os.homedir(), '.telaude', 'telaude-mcp-settings.json');
 
 let store = new Map<string, ToolConfig>();
+let lastMtimeMs = 0;
 
 function resolveIcon(icon: string | IconObject): string {
   if (typeof icon === 'string') return icon;
   return tge(icon.emojiId, icon.fallback);
+}
+
+/** Reload settings from file if mtime changed */
+function ensureFresh(): void {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      if (store.size > 0) { store.clear(); lastMtimeMs = 0; }
+      return;
+    }
+    const mtime = fs.statSync(CONFIG_PATH).mtimeMs;
+    if (mtime !== lastMtimeMs) {
+      lastMtimeMs = mtime;
+      loadToolDisplaySettings();
+    }
+  } catch { /* ignore stat errors */ }
 }
 
 export function loadToolDisplaySettings(): void {
@@ -53,12 +69,14 @@ export function loadToolDisplaySettings(): void {
         store.set(name, config);
       }
     }
+    lastMtimeMs = fs.statSync(CONFIG_PATH).mtimeMs;
   } catch (err) {
     logger.warn(`Failed to load tool display settings: ${err}`);
   }
 }
 
 export function isToolHidden(toolName: string): boolean {
+  ensureFresh();
   // Check exact match first
   const exact = store.get(toolName);
   if (exact?.hidden) return true;
@@ -74,6 +92,7 @@ export function isToolHidden(toolName: string): boolean {
 }
 
 export function getToolCustomIcon(toolName: string): string | undefined {
+  ensureFresh();
   const exact = store.get(toolName);
   if (exact?.icon) return resolveIcon(exact.icon);
 

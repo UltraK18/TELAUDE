@@ -1,8 +1,12 @@
 import { type Context } from 'grammy';
 import { execSync } from 'child_process';
+import { createRequire } from 'module';
 import { getAllProcesses, getUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { getCost } from '../../claude/cost-tracker.js';
+
+const require = createRequire(import.meta.url);
+const { version } = require('../../../package.json');
 
 function getGitInfo(): { branch: string; commit: string } {
   try {
@@ -59,7 +63,7 @@ export async function statsCommand(ctx: Context): Promise<void> {
   const git = getGitInfo();
   const systemBlock =
     `<b>System</b>\n` +
-    `Version: <code>${git.branch}</code> @ <code>${git.commit}</code>\n` +
+    `Version: <b>${version}</b> (<code>${git.branch}</code> @ <code>${git.commit}</code>)\n` +
     `Processes: ${active.length} active / ${processes.size} total\n` +
     `Memory: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}MB\n` +
     `Uptime: ${formatUptime(process.uptime())}`;

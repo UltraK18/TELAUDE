@@ -159,4 +159,16 @@ export function registerSchedulingTools(server: McpServer): void {
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
   );
+
+  server.tool(
+    'schedule_nothing_to_report',
+    'Report that a scheduled/heartbeat job found nothing to report. The turn (stdin + response) will be deleted from conversation history to save context. Use only during scheduled or heartbeat spawns when there is nothing meaningful to tell the user.',
+    {
+      type: z.enum(['cron', 'heartbeat']).describe('Which scheduled task type triggered this spawn'),
+    },
+    async ({ type }) => {
+      await mcpPost('/mcp/turn-delete', { type });
+      return { content: [{ type: 'text', text: `${type} OK — turn will be cleaned up` }] };
+    }
+  );
 }

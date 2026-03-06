@@ -3,7 +3,6 @@ import path from 'path';
 import { type Api, InputFile, InlineKeyboard } from 'grammy';
 import { registerRoute } from './internal-server.js';
 import { createAsk, setAskMessageId } from './ask-queue.js';
-import { readHeartbeat, writeHeartbeat } from '../scheduler/heartbeat.js';
 import {
   getAllJobs, getJob, addJob, updateJob, removeJob, getCompletedJobs,
 } from '../scheduler/cron-store.js';
@@ -191,24 +190,6 @@ export function registerAllRoutes(api: Api): void {
       os: `${os.type()} ${os.release()}`,
       platform: os.platform(),
     };
-  });
-
-  // --- Heartbeat routes ---
-
-  registerRoute('/mcp/heartbeat/check', async (body) => {
-    const userId = body._userId as number;
-    const up = getUserProcess(userId);
-    const workingDir = up?.workingDir ?? process.cwd();
-    const content = readHeartbeat(workingDir);
-    return { content };
-  });
-
-  registerRoute('/mcp/heartbeat/update', async (body) => {
-    const userId = body._userId as number;
-    const up = getUserProcess(userId);
-    const workingDir = up?.workingDir ?? process.cwd();
-    writeHeartbeat(workingDir, body.checklist);
-    return { ok: true };
   });
 
   // --- Cron routes ---

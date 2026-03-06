@@ -13,6 +13,7 @@ Telegram에서 Claude Code CLI를 원격 제어하는 봇.
 - **외부 MCP 연동** — 다른 MCP 서버가 Telaude의 텔레그램 전송 기능을 사용 가능
 - **cron/스케줄** — 예약 작업 실행 (반복/일회성)
 - **Poke** — 무응답 시 자동 follow-up
+- **이모지 리액션** — 양방향 리액션 (유저→봇 메시지, 봇→유저 메시지)
 - **보안** — 비밀번호 인증 + OS 네이티브 암호화 (.env)
 
 ## Quick Start
@@ -77,12 +78,16 @@ Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 
 | `POST /mcp/send-sticker` | `{ sticker_id }` | 스티커 전송 (Telegram file_id) |
 | `POST /mcp/zip-and-send` | `{ dir }` | 디렉토리 zip 후 전송 |
 | `POST /mcp/ask` | `{ question, choices? }` | 사용자에게 질문 |
+| `POST /mcp/set-reaction` | `{ emoji }` | 유저의 최근 메시지에 이모지 리액션 |
 | `POST /mcp/pin-message` | `{}` | 메시지 고정 |
 | `POST /mcp/unpin-message` | `{}` | 고정 해제 |
 
 ### Tool Display Settings
 
-`~/.telaude/telaude-mcp-settings.json`으로 도구의 표시 여부와 아이콘을 설정할 수 있다:
+설정 파일로 도구의 표시 여부와 아이콘을 설정할 수 있다. 프로젝트별 설정이 전역보다 우선한다.
+
+- **전역**: `~/.telaude/telaude-mcp-settings.json`
+- **프로젝트**: `<cwd>/.telaude/telaude-mcp-settings.json` (우선)
 
 ```jsonc
 {
@@ -99,6 +104,7 @@ Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 
 - `icon` (문자열) — 유니코드 이모지로 아이콘 변경
 - `icon` (객체) — 텔레그램 프리미엄 커스텀 이모지 (emojiId + fallback)
 - MCP 도구는 접미사로 매칭 (`mcp__server__tool` → `tool`)
+- 파일 변경 시 핫리로드 (재시작 불필요)
 
 ### Usage Example
 

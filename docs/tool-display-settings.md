@@ -4,7 +4,10 @@
 
 ## 설정 파일
 
-`~/.telaude/telaude-mcp-settings.json`
+프로젝트별 설정이 전역보다 우선한다.
+
+- **전역**: `~/.telaude/telaude-mcp-settings.json`
+- **프로젝트**: `<cwd>/.telaude/telaude-mcp-settings.json` (우선)
 
 ```jsonc
 {
@@ -58,8 +61,8 @@ MCP 도구는 접미사로 매칭된다:
 
 ## 적용 시점
 
-- Telaude **시작 시** 한 번 로드
-- 설정 변경 후에는 **Telaude 재시작** 필요
+- 파일 변경 시 **핫리로드** (mtime 비교, 재시작 불필요)
+- cwd 변경 시 프로젝트 설정도 자동 재감지
 
 ## 오류 처리
 

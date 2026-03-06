@@ -29,6 +29,7 @@ X-Telaude-User-Id: <TELAUDE_USER_ID>
 | `POST /mcp/send-sticker` | `{ sticker_id: string }` | 스티커 전송 (Telegram file_id) |
 | `POST /mcp/zip-and-send` | `{ dir: string }` | 디렉토리 zip 압축 후 전송 |
 | `POST /mcp/ask` | `{ question: string, choices?: string[] }` | 사용자에게 질문하고 답변 대기 |
+| `POST /mcp/set-reaction` | `{ emoji: string }` | 유저의 최근 메시지에 이모지 리액션 |
 | `POST /mcp/pin-message` | `{}` | 최근 봇 메시지 고정 |
 | `POST /mcp/unpin-message` | `{}` | 고정 메시지 해제 |
 

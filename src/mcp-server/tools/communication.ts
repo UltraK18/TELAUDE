@@ -24,6 +24,16 @@ export function registerCommunicationTools(server: McpServer): void {
   );
 
   server.tool(
+    'send_sticker',
+    'Send a Telegram sticker to the user by sticker file_id',
+    { sticker_id: z.string().describe('Telegram sticker file_id') },
+    async ({ sticker_id }) => {
+      await mcpPost('/mcp/send-sticker', { sticker_id });
+      return { content: [{ type: 'text', text: 'Sticker sent' }] };
+    }
+  );
+
+  server.tool(
     'ask',
     'Ask the user a question via Telegram and wait for their reply. Optionally provide choices as inline buttons. User can click a button or type freely. Times out after 5 minutes.',
     {

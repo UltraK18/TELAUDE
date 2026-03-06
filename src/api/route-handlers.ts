@@ -134,6 +134,15 @@ export function registerAllRoutes(api: Api): void {
     return { ok: true, fileName };
   });
 
+  registerRoute('/mcp/send-sticker', async (body) => {
+    const userId = body._userId as number;
+    const chatId = getChatId(userId);
+    const stickerId = body.sticker_id as string;
+
+    await api.sendSticker(chatId, stickerId);
+    return { ok: true };
+  });
+
   registerRoute('/mcp/zip-and-send', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);

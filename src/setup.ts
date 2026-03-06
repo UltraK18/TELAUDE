@@ -144,6 +144,16 @@ export async function runSetup(): Promise<void> {
     const { encryptFile } = await import('./utils/machine-lock.js');
     encryptFile(ENV_PATH);
 
+    // Reset DB auth (new .env = new auth code, old sessions invalid)
+    const dbPath = path.join(os.homedir(), '.telaude', 'data', 'telaude.db');
+    if (fs.existsSync(dbPath)) {
+      const Database = (await import('better-sqlite3')).default;
+      const db = Database(dbPath);
+      db.exec('UPDATE auth_tokens SET is_authorized = 0');
+      db.close();
+      print('\u2713 Auth reset (new credentials).');
+    }
+
     print('\u2713 .env file created (encrypted).');
     print('Starting bot...');
     print('');

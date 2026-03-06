@@ -1,3 +1,5 @@
+import { getToolCustomIcon } from '../api/tool-display-store.js';
+
 // tg-emoji wrapper for premium animated emoji
 function tge(emojiId: string, fallback: string): string {
   return `<tg-emoji emoji-id="${emojiId}">${fallback}</tg-emoji>`;
@@ -30,6 +32,10 @@ const MCP_TOOL_ICONS: Record<string, string> = {
 };
 
 function getToolIcon(toolName: string): string {
+  // Custom icon from /mcp/tool-display takes priority
+  const custom = getToolCustomIcon(toolName);
+  if (custom) return custom;
+
   if (TOOL_ICONS[toolName]) return TOOL_ICONS[toolName];
   // MCP tools: mcp__server__tool → extract tool suffix
   const mcpMatch = toolName.match(/^mcp__[^_]+__(.+)$/);

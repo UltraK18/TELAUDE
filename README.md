@@ -79,6 +79,7 @@ Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 
 | `POST /mcp/ask` | `{ question, choices? }` | 사용자에게 질문 |
 | `POST /mcp/pin-message` | `{}` | 메시지 고정 |
 | `POST /mcp/unpin-message` | `{}` | 고정 해제 |
+| `POST /mcp/tool-display` | `{ tools: { name: { hidden?, icon? } } }` | 도구 표시 설정 |
 
 ### Usage Example
 

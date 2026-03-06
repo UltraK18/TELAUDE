@@ -2,6 +2,7 @@ import { type Api } from 'grammy';
 import { config } from '../config.js';
 import { markdownToTelegramHtml } from '../utils/markdown-to-html.js';
 import { formatToolWithInput, formatToolStart } from './tool-formatter.js';
+import { isToolHidden } from '../api/tool-display-store.js';
 import { updateCost } from './cost-tracker.js';
 import { createSession } from '../db/session-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
@@ -99,6 +100,9 @@ export class StreamHandler {
 
       parser.on('tool_use', (name: string, input: unknown, toolId?: string, parentToolUseId?: string | null) => {
         this.enqueue(async () => {
+
+          // Skip hidden tools (registered via /mcp/tool-display)
+          if (name !== 'Agent' && isToolHidden(name)) return;
 
           // Finalize any pending text before switching to tool mode
           await this.flushText();

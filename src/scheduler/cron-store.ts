@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { logger } from '../utils/logger.js';
 
 let _onChange: (() => void) | null = null;
@@ -44,8 +45,8 @@ export interface CronJob {
   history: CronJobHistory[];
 }
 
-const STORE_PATH = path.join(process.cwd(), '.telaude', 'data', 'cron-jobs.json');
-const HISTORY_PATH = path.join(process.cwd(), '.telaude', 'data', 'cron-history.json');
+const STORE_PATH = path.join(os.homedir(), '.telaude', 'data', 'cron-jobs.json');
+const HISTORY_PATH = path.join(os.homedir(), '.telaude', 'data', 'cron-history.json');
 
 function readStore(): CronJob[] {
   try {

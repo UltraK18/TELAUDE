@@ -1,8 +1,9 @@
 import pino from 'pino';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const logDir = path.join(process.cwd(), '.telaude', 'data');
+const logDir = path.join(os.homedir(), '.telaude', 'data');
 if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
 const logFile = path.join(logDir, 'bot.log');

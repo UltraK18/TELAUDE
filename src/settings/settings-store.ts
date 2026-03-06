@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const SETTINGS_FILE = path.join(process.cwd(), '.telaude', 'data', 'settings.json');
+const SETTINGS_FILE = path.join(os.homedir(), '.telaude', 'data', 'settings.json');
 
 export interface TelaudeSettings {
   /** Tools disabled by user (added to --disallowedTools) */

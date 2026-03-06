@@ -16,9 +16,20 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Now load .env into process.env
+  // Now load .env into process.env (supports encrypted .env)
   const dotenv = await import('dotenv');
-  dotenv.config({ path: path.join(process.cwd(), '.telaude', '.env') });
+  const { decryptFile } = await import('./utils/machine-lock.js');
+  const os = await import('os');
+  const envPath = path.join(os.homedir(), '.telaude', '.env');
+  const envContent = decryptFile(envPath);
+  if (envContent === null) {
+    console.error('Failed to decrypt .env — wrong machine or corrupted file.');
+    process.exit(1);
+  }
+  const parsed = dotenv.parse(envContent);
+  for (const [key, value] of Object.entries(parsed)) {
+    process.env[key] = value;
+  }
 
   // Load config (reads from process.env)
   const { loadConfig } = await import('./config.js');

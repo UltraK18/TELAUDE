@@ -3,8 +3,9 @@ import crypto from 'crypto';
 import readline from 'readline';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
-const ENV_PATH = path.join(process.cwd(), '.telaude', '.env');
+const ENV_PATH = path.join(os.homedir(), '.telaude', '.env');
 
 function print(msg: string): void {
   process.stdout.write(msg + '\n');
@@ -131,7 +132,7 @@ export async function runSetup(): Promise<void> {
       'STREAM_UPDATE_MIN_CHARS=200',
       '',
       '# Database',
-      'DB_PATH=./.telaude/data/telaude.db',
+      `DB_PATH=${path.join(os.homedir(), '.telaude', 'data', 'telaude.db')}`,
       '',
       '# Logging',
       'LOG_LEVEL=info',
@@ -139,7 +140,11 @@ export async function runSetup(): Promise<void> {
 
     fs.writeFileSync(ENV_PATH, envContent, 'utf-8');
 
-    print('\u2713 .env file created.');
+    // Encrypt .env with machine-bound key
+    const { encryptFile } = await import('./utils/machine-lock.js');
+    encryptFile(ENV_PATH);
+
+    print('\u2713 .env file created (encrypted).');
     print('Starting bot...');
     print('');
   } catch (err) {

@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { type Context } from 'grammy';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
 
-const RELOAD_FLAG = path.join(process.cwd(), '.telaude', 'data', '.reload-flag');
+const RELOAD_FLAG = path.join(os.homedir(), '.telaude', 'data', '.reload-flag');
 
 export async function stopCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;

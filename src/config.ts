@@ -1,4 +1,5 @@
 import path from 'path';
+import os from 'os';
 
 function required(key: string): string {
   const value = process.env[key];
@@ -57,7 +58,7 @@ function buildConfig() {
     },
 
     db: {
-      path: optional('DB_PATH', './.telaude/data/telaude.db'),
+      path: optional('DB_PATH', path.join(os.homedir(), '.telaude', 'data', 'telaude.db')),
     },
 
     logging: {

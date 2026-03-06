@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { type Api, InputFile, InlineKeyboard } from 'grammy';
+import { decryptFile, encryptFile, isEncrypted } from '../utils/machine-lock.js';
 import { registerRoute } from './internal-server.js';
 import { createAsk, setAskMessageId } from './ask-queue.js';
 import {
@@ -35,22 +37,30 @@ export function getChatId(userId: number): number {
   return config.telegram.chatId ?? userChatMap.get(userId) ?? userId;
 }
 
-/** Write CHAT_ID to .env file (add or update) */
+/** Write CHAT_ID to .env file (add or update, supports encrypted .env) */
 function persistChatId(chatId: number): void {
-  const envPath = path.join(process.cwd(), '.telaude', '.env');
+  const envPath = path.join(os.homedir(), '.telaude', '.env');
   try {
-    let content = fs.readFileSync(envPath, 'utf-8');
+    const wasEncrypted = isEncrypted(envPath);
+
+    let content = wasEncrypted ? decryptFile(envPath) : fs.readFileSync(envPath, 'utf-8');
+    if (!content) {
+      logger.error('Failed to decrypt .env for CHAT_ID persistence');
+      return;
+    }
+
     if (/^CHAT_ID=/m.test(content)) {
       content = content.replace(/^CHAT_ID=.*/m, `CHAT_ID=${chatId}`);
     } else {
-      // Insert after TELEGRAM_BOT_TOKEN line
       content = content.replace(
         /^(TELEGRAM_BOT_TOKEN=.*)$/m,
         `$1\nCHAT_ID=${chatId}`,
       );
     }
+
     fs.writeFileSync(envPath, content, 'utf-8');
-    // Update runtime config
+    if (wasEncrypted) encryptFile(envPath);
+
     (config.telegram as any).chatId = chatId;
     logger.info({ chatId }, 'CHAT_ID persisted to .env');
   } catch (err) {

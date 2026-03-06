@@ -1,8 +1,9 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import sharp from 'sharp';
 
-const CACHE_DIR = path.join(process.cwd(), '.telaude', 'data', 'sticker-cache');
+const CACHE_DIR = path.join(os.homedir(), '.telaude', 'data', 'sticker-cache');
 const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 
 function ensureCacheDir(): void {

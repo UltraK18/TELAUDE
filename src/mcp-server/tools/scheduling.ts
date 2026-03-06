@@ -26,7 +26,7 @@ function nextRunStr(schedule?: string, runAt?: string): string {
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
     'schedule_add',
-    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call schedule_ok() only if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
+    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call schedule_nothing_to_report() if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
     {
       name: z.string().describe('Job name'),
       schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),

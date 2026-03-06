@@ -227,11 +227,11 @@ export class StreamHandler {
           // Store last response
           if (this.textBuffer.length > 0) {
             if (this.silent) {
-              if (this.up.silentOkCalled) {
-                // cron_ok/heartbeat_ok was called — save to reportText for history, not for auto-report
+              if (this.up.nothingToReport) {
+                // schedule_nothing_to_report was called — save to reportText for history, not for auto-report
                 this.up.lastReportText = this.textBuffer;
               } else {
-                // ok not called — save for auto-report on exit
+                // nothing_to_report not called — save for auto-report on exit
                 this.up.lastResponseText = this.textBuffer;
               }
             } else {

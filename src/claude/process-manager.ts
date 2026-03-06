@@ -25,11 +25,11 @@ export interface UserProcess {
   reloadPending: boolean;
   /** Message to inject via stdin after reload re-spawn */
   reloadMessage: string | null;
-  /** Set to true when cron_ok/heartbeat_ok is called — silent exit won't send response */
-  silentOkCalled: boolean;
-  /** Last response text from Claude (used by silent mode to send on exit if ok not called) */
+  /** Set to true when schedule_nothing_to_report is called — silent exit won't send response */
+  nothingToReport: boolean;
+  /** Last response text from Claude (used by silent mode to send on exit if nothing_to_report not called) */
   lastResponseText: string | null;
-  /** Preserved response text after cron_ok (for history, not sent to user) */
+  /** Preserved response text after nothing_to_report (for history, not sent to user) */
   lastReportText: string | null;
   /** Deferred turn deletion — JSONL cleaned after process exits to avoid race condition */
   pendingTurnDelete: 'heartbeat' | 'cron' | 'poke' | null;
@@ -69,7 +69,7 @@ export function createUserProcess(
     lastActivity: Date.now(),
     reloadPending: false,
     reloadMessage: null,
-    silentOkCalled: false,
+    nothingToReport: false,
     lastResponseText: null,
     lastReportText: null,
     pendingTurnDelete: null,

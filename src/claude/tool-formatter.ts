@@ -25,11 +25,8 @@ const MCP_TOOL_ICONS: Record<string, string> = {
   schedule_pause: tge('5413879192267805083', '🗓'),
   schedule_resume: tge('5413879192267805083', '🗓'),
   schedule_history: tge('5413879192267805083', '🗓'),
-  schedule_ok: tge('5413879192267805083', '🗓'),
   schedule_completed: tge('5413879192267805083', '🗓'),
-  heartbeat_check: tge('5413879192267805083', '🗓'),
-  heartbeat_update: tge('5413879192267805083', '🗓'),
-  heartbeat_ok: tge('5413879192267805083', '🗓'),
+  schedule_nothing_to_report: tge('5413879192267805083', '🗓'),
 };
 
 function getToolIcon(toolName: string): string {

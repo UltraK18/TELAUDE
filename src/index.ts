@@ -107,7 +107,7 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call cron_ok() if there is truly nothing to report — it suppresses the response.\n${job.message}`;
+    const wrappedMessage = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call schedule_nothing_to_report() if there is truly nothing to report — it suppresses the response.\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');
@@ -153,15 +153,15 @@ async function main(): Promise<void> {
           up!.pendingTurnDelete = null;
         }
 
-        // lastResponseText = text before cron_ok; lastReportText = text preserved after cron_ok
+        // lastResponseText = text before nothing_to_report; lastReportText = text preserved after
         const responseText = up!.lastResponseText ?? up!.lastReportText;
 
-        // Send report if Claude produced any text response (and ok wasn't called)
+        // Send report if Claude produced any text response (and nothing_to_report wasn't called)
         if (up!.lastResponseText) {
           bot.api.sendMessage(getChatId(job.userId), `🔔 ${up!.lastResponseText}`)
             .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
         }
-        up!.silentOkCalled = false;
+        up!.nothingToReport = false;
         up!.lastResponseText = null;
         up!.lastReportText = null;
 
@@ -231,7 +231,7 @@ async function main(): Promise<void> {
           bot.api.sendMessage(getChatId(userId), up!.lastResponseText)
             .catch(err => logger.error({ err, userId }, 'Failed to send poke message'));
         }
-        up!.silentOkCalled = false;
+        up!.nothingToReport = false;
         up!.lastResponseText = null;
         up!.lastReportText = null;
         up!.isProcessing = false;

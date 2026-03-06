@@ -277,7 +277,7 @@ export function registerAllRoutes(api: Api): void {
     const userId = body._userId as number;
     const up = getUserProcess(userId);
     if (up) {
-      up.silentOkCalled = true;
+      up.nothingToReport = true;
       // Preserve response for history, but prevent auto-report to Telegram
       up.lastReportText = up.lastResponseText;
       up.lastResponseText = null;

@@ -269,13 +269,13 @@ function drainScheduledQueue(userId: number, api: Api): void {
       up.pendingTurnDelete = null;
     }
 
-    // Send report if Claude produced any text response (and ok wasn't called)
+    // Send report if Claude produced any text response (and nothing_to_report wasn't called)
     if (up.lastResponseText) {
       const prefix = task.mode === 'poke' ? '' : '🔔 ';
       api.sendMessage(task.chatId, `${prefix}${up.lastResponseText}`)
         .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
     }
-    up.silentOkCalled = false;
+    up.nothingToReport = false;
     up.lastResponseText = null;
     up.lastReportText = null;
 
@@ -293,7 +293,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
     }
   });
 
-  const okTool = task.mode === 'heartbeat' ? 'heartbeat_ok()' : task.mode === 'poke' ? 'poke_ok()' : 'schedule_ok()';
+  const okTool = task.mode === 'poke' ? 'poke_ok()' : 'schedule_nothing_to_report()';
   // Poke uses the text as-is (already has system-reminder), others get wrapped
   const wrappedText = task.mode === 'poke'
     ? task.text

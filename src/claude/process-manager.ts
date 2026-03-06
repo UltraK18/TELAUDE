@@ -187,6 +187,13 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     const resumeLabel = opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId.slice(0, 8)}...)` : ' (new)';
     notify(`CLI spawned${resumeLabel} [${mode}]`);
   }
+  // Validate cwd exists — fallback to Telaude root if not
+  if (!fs.existsSync(up.workingDir)) {
+    const fallback = config.paths.defaultWorkingDir ?? process.cwd();
+    logger.warn({ oldCwd: up.workingDir, fallback }, 'Working directory does not exist, falling back');
+    up.workingDir = fallback;
+  }
+
   logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination

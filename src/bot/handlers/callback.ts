@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { type Context, InlineKeyboard } from 'grammy';
 import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
@@ -7,6 +8,7 @@ import { upsertUserConfig, getUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { scanCliSessions } from '../../utils/cli-sessions.js';
+import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
 
@@ -181,7 +183,8 @@ export async function callbackHandler(ctx: Context): Promise<void> {
 function getCurrentDir(userId: number): string {
   const up = getUserProcess(userId);
   const cfg = getUserConfig(userId);
-  return up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+  const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
+  return candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 }
 
 async function refreshBotSessions(ctx: Context, userId: number): Promise<void> {

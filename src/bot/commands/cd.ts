@@ -111,7 +111,20 @@ export async function cdCommand(ctx: Context): Promise<void> {
 
   // No path given: show folder browser
   const up = getUserProcess(userId);
-  const currentDir = up?.workingDir ?? getUserConfig(userId).default_working_dir ?? config.paths.defaultWorkingDir;
+  const candidates = [
+    up?.workingDir,
+    getUserConfig(userId).default_working_dir,
+    config.paths.defaultWorkingDir,
+    process.cwd(),
+  ];
+  const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
+
+  // If the stored dir was invalid, update the process to use the fallback
+  if (up && up.workingDir !== currentDir) {
+    up.workingDir = currentDir;
+    up.sessionId = null;
+    deactivateAllUserSessions(userId);
+  }
 
   const browser = buildBrowserKeyboard(currentDir, 0);
   if (!browser) {

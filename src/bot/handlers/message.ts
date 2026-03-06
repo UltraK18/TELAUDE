@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { type Api, type Context } from 'grammy';
 import {
   getUserProcess,
@@ -55,14 +56,28 @@ function getOrCreateUp(userId: number): UserProcess {
   if (!up) {
     const cfg = getUserConfig(userId);
     const lastSession = getActiveSession(userId);
+    const candidates = [
+      lastSession?.working_dir,
+      cfg.default_working_dir,
+      config.paths.defaultWorkingDir,
+      process.cwd(),
+    ];
+    const workingDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
     up = createUserProcess(
       userId,
-      lastSession?.working_dir ?? cfg.default_working_dir ?? process.cwd(),
+      workingDir,
       lastSession?.model ?? cfg.default_model,
     );
     if (lastSession) {
       up.sessionId = lastSession.session_id;
     }
+  } else if (!fs.existsSync(up.workingDir)) {
+    // Existing UP has invalid path (e.g. folder renamed) — fix it
+    const cfg = getUserConfig(userId);
+    const fallback = [cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()]
+      .find(d => d && fs.existsSync(d)) ?? process.cwd();
+    logger.warn({ userId, oldDir: up.workingDir, fallback }, 'UP workingDir does not exist, falling back');
+    up.workingDir = fallback;
   }
   return up;
 }

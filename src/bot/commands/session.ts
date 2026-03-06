@@ -1,8 +1,10 @@
 import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
+import fs from 'fs';
 import { getUserProcess, killProcess, removeUserProcess, createUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession } from '../../db/session-repo.js';
 import { getUserConfig } from '../../db/config-repo.js';
+import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 
@@ -49,7 +51,8 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
 
   const up = getUserProcess(userId);
   const cfg = getUserConfig(userId);
-  const currentDir = up?.workingDir ?? cfg.default_working_dir ?? process.cwd();
+  const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
+  const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 
   const sessions = getRecentSessions(userId, 10, currentDir);
   const list = buildSessionList(sessions);
@@ -77,7 +80,16 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
     );
   }
   up.sessionId = sessionId;
-  up.workingDir = session?.working_dir ?? up.workingDir;
+  // Validate DB working_dir — fallback if path no longer exists (e.g. folder renamed)
+  const dbDir = session?.working_dir;
+  if (dbDir && fs.existsSync(dbDir)) {
+    up.workingDir = dbDir;
+  } else if (dbDir) {
+    const fallback = cfg.default_working_dir && fs.existsSync(cfg.default_working_dir)
+      ? cfg.default_working_dir
+      : config.paths.defaultWorkingDir ?? process.cwd();
+    up.workingDir = fallback;
+  }
   up.model = session?.model ?? up.model;
 
   // Mark this session active in DB (deactivates others) so it survives bot restart

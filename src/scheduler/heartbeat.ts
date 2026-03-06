@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 const HEARTBEAT_FILENAME = 'HEARTBEAT.md';
 
 function getHeartbeatPath(workingDir: string): string {
-  return path.join(workingDir, HEARTBEAT_FILENAME);
+  return path.join(workingDir, '.telaude', HEARTBEAT_FILENAME);
 }
 
 export function readHeartbeat(workingDir: string): string | null {

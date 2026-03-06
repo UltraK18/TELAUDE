@@ -4,7 +4,7 @@ import readline from 'readline';
 import fs from 'fs';
 import path from 'path';
 
-const ENV_PATH = path.join(process.cwd(), '.env');
+const ENV_PATH = path.join(process.cwd(), '.telaude', '.env');
 
 function print(msg: string): void {
   process.stdout.write(msg + '\n');
@@ -100,6 +100,10 @@ export async function runSetup(): Promise<void> {
     await ask(rl, 'Press Enter to start the bot...');
     rl.close();
 
+    // Ensure .telaude directory exists
+    const telaudeDir = path.dirname(ENV_PATH);
+    if (!fs.existsSync(telaudeDir)) fs.mkdirSync(telaudeDir, { recursive: true });
+
     // Write .env
     const envContent = [
       '# Telegram',
@@ -127,7 +131,7 @@ export async function runSetup(): Promise<void> {
       'STREAM_UPDATE_MIN_CHARS=200',
       '',
       '# Database',
-      'DB_PATH=./data/telaude.db',
+      'DB_PATH=./.telaude/data/telaude.db',
       '',
       '# Logging',
       'LOG_LEVEL=info',

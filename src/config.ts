@@ -57,7 +57,7 @@ function buildConfig() {
     },
 
     db: {
-      path: optional('DB_PATH', './data/telaude.db'),
+      path: optional('DB_PATH', './.telaude/data/telaude.db'),
     },
 
     logging: {

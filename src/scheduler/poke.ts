@@ -33,6 +33,7 @@ type PokeCallback = (userId: number, stdin: string, workingDir: string, sessionI
 
 // --- Constants ---
 
+const POKE_DIR = '.telaude';
 const POKE_FILENAME = 'POKE.md';
 
 const INTENSITY_DELAY: Record<Level, [number, number]> = {
@@ -154,7 +155,7 @@ export function isPokeActive(): boolean {
 }
 
 export function pokeExists(workingDir: string): boolean {
-  return fs.existsSync(path.join(workingDir, POKE_FILENAME));
+  return fs.existsSync(path.join(workingDir, POKE_DIR, POKE_FILENAME));
 }
 
 export function stopAllPokes(): void {
@@ -462,7 +463,7 @@ function resolveContextFile(workingDir: string, contextPath: string): string {
 // --- POKE.md Parsing ---
 
 function readPokeConfig(workingDir: string): PokeConfig | null {
-  const filePath = path.join(workingDir, POKE_FILENAME);
+  const filePath = path.join(workingDir, POKE_DIR, POKE_FILENAME);
   try {
     if (!fs.existsSync(filePath)) return null;
 
@@ -542,7 +543,7 @@ function watchPokeMd(userId: number, workingDir: string, state: PokeState): void
     state.watcher = null;
   }
 
-  const filePath = path.join(workingDir, POKE_FILENAME);
+  const filePath = path.join(workingDir, POKE_DIR, POKE_FILENAME);
   const dir = path.dirname(filePath);
 
   if (!fs.existsSync(dir)) return;

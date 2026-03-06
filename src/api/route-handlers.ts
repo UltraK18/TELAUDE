@@ -38,7 +38,7 @@ export function getChatId(userId: number): number {
 
 /** Write CHAT_ID to .env file (add or update) */
 function persistChatId(chatId: number): void {
-  const envPath = path.join(process.cwd(), '.env');
+  const envPath = path.join(process.cwd(), '.telaude', '.env');
   try {
     let content = fs.readFileSync(envPath, 'utf-8');
     if (/^CHAT_ID=/m.test(content)) {

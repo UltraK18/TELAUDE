@@ -18,7 +18,7 @@ async function main(): Promise<void> {
 
   // Now load .env into process.env
   const dotenv = await import('dotenv');
-  dotenv.config({ path: path.join(process.cwd(), '.env') });
+  dotenv.config({ path: path.join(process.cwd(), '.telaude', '.env') });
 
   // Load config (reads from process.env)
   const { loadConfig } = await import('./config.js');

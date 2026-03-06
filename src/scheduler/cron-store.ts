@@ -44,8 +44,8 @@ export interface CronJob {
   history: CronJobHistory[];
 }
 
-const STORE_PATH = path.join(process.cwd(), 'data', 'cron-jobs.json');
-const HISTORY_PATH = path.join(process.cwd(), 'data', 'cron-history.json');
+const STORE_PATH = path.join(process.cwd(), '.telaude', 'data', 'cron-jobs.json');
+const HISTORY_PATH = path.join(process.cwd(), '.telaude', 'data', 'cron-history.json');
 
 function readStore(): CronJob[] {
   try {

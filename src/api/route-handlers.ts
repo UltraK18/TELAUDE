@@ -143,6 +143,23 @@ export function registerAllRoutes(api: Api): void {
     return { ok: true };
   });
 
+  registerRoute('/mcp/set-reaction', async (body) => {
+    const userId = body._userId as number;
+    const chatId = getChatId(userId);
+    const up = getUserProcess(userId);
+    const messageId = up?.lastUserMessageId;
+    if (!messageId) throw new Error('No recent user message to react to');
+
+    const emoji = body.emoji as string;
+    if (!emoji) {
+      throw new Error('Missing "emoji" string (e.g. "👍")');
+    }
+
+    const reaction = [{ type: 'emoji' as const, emoji }] as any;
+    await api.setMessageReaction(chatId, messageId, reaction);
+    return { ok: true };
+  });
+
   registerRoute('/mcp/zip-and-send', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);

@@ -448,6 +448,10 @@ export async function messageHandler(ctx: Context): Promise<void> {
   logMessage(userId, 'user');
   setUserChat(userId, chatId);
 
+  // Track last user message ID for set_reaction
+  const up = getOrCreateUp(userId);
+  up.lastUserMessageId = ctx.message!.message_id;
+
   // Forwarded message → batch with ForwardCollector
   const fwdSource = getForwardSource(ctx);
   if (fwdSource) {
@@ -463,7 +467,16 @@ export async function messageHandler(ctx: Context): Promise<void> {
   }
 
   const replyCtx = getReplyContext(ctx);
-  const fullText = replyCtx ? `${replyCtx}\n${text}` : text;
+  let fullText = replyCtx ? `${replyCtx}\n${text}` : text;
+
+  // Prepend queued reaction if present
+  if (up.reactionQueue) {
+    const { emojis, messagePreview } = up.reactionQueue;
+    const emojiStr = emojis.join('');
+    fullText = `<The user reacted ${emojiStr} to your message "${messagePreview}...">\n${fullText}`;
+    up.reactionQueue = null;
+  }
+
   queueOrLaunch(userId, chatId, fullText, ctx.api);
 }
 
@@ -474,6 +487,10 @@ export async function mediaHandler(ctx: Context): Promise<void> {
 
   logMessage(userId, 'user');
   setUserChat(userId, chatId);
+
+  // Track last user message ID for set_reaction
+  const upMedia = getOrCreateUp(userId);
+  upMedia.lastUserMessageId = ctx.message!.message_id;
 
   const media = extractMediaInfo(ctx);
   if (!media) return;

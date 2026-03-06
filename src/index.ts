@@ -309,6 +309,7 @@ async function main(): Promise<void> {
 
   // Start polling
   await bot.start({
+    allowed_updates: ['message', 'callback_query', 'message_reaction'],
     onStart: (botInfo) => {
       // Initialize TUI dashboard
       initDashboard();

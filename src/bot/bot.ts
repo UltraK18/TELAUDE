@@ -8,6 +8,7 @@ import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { messageHandler, mediaHandler } from './handlers/message.js';
 import { callbackHandler } from './handlers/callback.js';
+import { reactionHandler } from './handlers/reaction.js';
 import { askInterceptor } from './middleware/ask-interceptor.js';
 import { logger } from '../utils/logger.js';
 
@@ -42,6 +43,9 @@ export function createBot(): Bot {
 
   // Callback queries
   bot.on('callback_query:data', callbackHandler);
+
+  // Reactions on bot messages
+  bot.on('message_reaction', reactionHandler);
 
   // Text messages → Claude
   bot.on('message:text', messageHandler);

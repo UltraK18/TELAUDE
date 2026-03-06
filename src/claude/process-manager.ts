@@ -41,6 +41,10 @@ export interface UserProcess {
   lastBotMessageId: number | null;
   /** Message from /stop <text> — sent as new input after process exits */
   stopMessage: string | null;
+  /** Last user message ID in Telegram (for set_reaction) */
+  lastUserMessageId: number | null;
+  /** Queued reactions from user on bot's last text message */
+  reactionQueue: { emojis: string[]; messagePreview: string } | null;
 }
 
 const processes = new Map<number, UserProcess>();
@@ -77,6 +81,8 @@ export function createUserProcess(
     currentMode: 'user',
     lastBotMessageId: null,
     stopMessage: null,
+    lastUserMessageId: null,
+    reactionQueue: null,
   };
   processes.set(userId, up);
   return up;

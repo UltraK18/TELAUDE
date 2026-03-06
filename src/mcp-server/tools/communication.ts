@@ -57,6 +57,16 @@ export function registerCommunicationTools(server: McpServer): void {
   );
 
   server.tool(
+    'set_reaction',
+    'React to the user\'s most recent message with an emoji.',
+    { emoji: z.string().describe('Single emoji to react with (e.g. "👍", "❤", "🔥")') },
+    async ({ emoji }) => {
+      await mcpPost('/mcp/set-reaction', { emoji });
+      return { content: [{ type: 'text', text: `Reacted with ${emoji}` }] };
+    }
+  );
+
+  server.tool(
     'pin_message',
     'Pin the most recent bot message in the Telegram chat. Useful for important info the user should see.',
     {},

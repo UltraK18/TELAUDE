@@ -11,6 +11,11 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
   if (!userId) return;
 
   // Ignore service messages (pin notifications, member joins, etc.)
+  // Allow message_reaction updates through (they have no ctx.message)
+  if ((ctx.update as any).message_reaction) {
+    if (isUserAuthorized(userId)) { await next(); }
+    return;
+  }
   if (!ctx.message?.text && !ctx.message?.photo && !ctx.message?.document && !ctx.message?.voice && !ctx.callbackQuery) return;
 
   // Check if command is public

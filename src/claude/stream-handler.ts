@@ -226,7 +226,7 @@ export class StreamHandler {
 
       parser.on('result', (event: ResultEvent) => {
         this.enqueue(async () => {
-          logger.info({ userId: this.userId, responseLen: this.textBuffer.length, response: this.textBuffer.slice(0, 200) }, 'Claude response');
+          logger.info({ userId: this.userId, responseLen: this.textBuffer.length }, 'Claude response');
 
           // Store last response
           if (this.textBuffer.length > 0) {

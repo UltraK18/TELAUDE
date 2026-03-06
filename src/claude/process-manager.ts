@@ -194,7 +194,8 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     up.workingDir = fallback;
   }
 
-  logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
+  logger.debug({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
+  logger.info({ userId: up.telegramUserId, cwd: up.workingDir }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination
   const env = { ...process.env };

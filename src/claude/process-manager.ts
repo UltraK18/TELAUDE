@@ -112,17 +112,20 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   const mcpCommand = useTs ? 'npx' : 'node';
   const mcpArgs = useTs ? ['tsx', tsPath] : [jsPath];
 
+  // Shared env for Telaude internal API — injected into all MCP servers
+  const telaudeEnv = {
+    TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
+    TELAUDE_API_TOKEN: getApiToken(),
+    TELAUDE_USER_ID: String(up.telegramUserId),
+  };
+
   // Build MCP config: telaude (inline) + global servers from ~/.claude.json & ~/.claude/settings.json
   const mcpServers: Record<string, unknown> = {};
   if (!settings.disabledMcpServers.includes('telaude')) {
     mcpServers.telaude = {
       command: mcpCommand,
       args: mcpArgs,
-      env: {
-        TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
-        TELAUDE_API_TOKEN: getApiToken(),
-        TELAUDE_USER_ID: String(up.telegramUserId),
-      },
+      env: telaudeEnv,
     };
   }
 
@@ -138,7 +141,10 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
         if (raw.mcpServers) {
           for (const [name, cfg] of Object.entries(raw.mcpServers)) {
             if (name !== 'telaude' && !settings.disabledMcpServers.includes(name)) {
-              mcpServers[name] = cfg;
+              // Inject TELAUDE_* env vars so external MCP servers can use the internal API
+              const serverCfg = cfg as Record<string, unknown>;
+              const existingEnv = (serverCfg.env as Record<string, string>) ?? {};
+              mcpServers[name] = { ...serverCfg, env: { ...telaudeEnv, ...existingEnv } };
             }
           }
         }

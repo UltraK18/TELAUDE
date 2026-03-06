@@ -60,7 +60,7 @@ npm run dev:watch # 개발 모드 (tsx watch)
 
 Telaude는 내부 HTTP API를 통해 **외부 MCP 서버에도 텔레그램 전송 기능을 제공**한다.
 
-Claude CLI spawn 시 다음 환경변수가 자동 주입되며, MCP 서버로 상속된다:
+Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 MCP 서버에 다음 환경변수를 자동 주입**한다:
 
 | 변수 | 설명 |
 |------|------|
@@ -94,7 +94,7 @@ const res = await fetch(process.env.TELAUDE_API_URL + '/mcp/send-photo', {
 });
 ```
 
-Telaude 위에서 구동되는 Claude Code가 spawn한 MCP 서버에서 자동으로 작동한다. 로컬 단독 실행 시에는 환경변수가 없으므로 graceful fallback을 구현하면 된다.
+Telaude가 Claude CLI를 spawn할 때 `--mcp-config`에 포함된 모든 MCP 서버의 env에 `TELAUDE_*` 변수를 자동 주입한다. MCP 서버 자체의 env(예: `GOOGLE_API_KEY`)는 보존된다. 로컬 단독 실행 시에는 환경변수가 없으므로 `isTelaudeAvailable()` 같은 graceful fallback을 구현하면 된다.
 
 ## Architecture
 

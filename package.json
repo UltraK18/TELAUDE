@@ -1,6 +1,6 @@
 {
   "name": "telaude",
-  "version": "1.0.1.0-005",
+  "version": "1.0.1.0-006",
   "description": "Telegram Claude Code Bridge",
   "type": "module",
   "main": "dist/index.js",
@@ -13,6 +13,8 @@
   "dependencies": {
     "@grammyjs/auto-retry": "^2.0.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@napi-rs/keyring": "^1.2.0",
+    "@primno/dpapi": "^2.0.1",
     "archiver": "^7.0.1",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^11.6.0",

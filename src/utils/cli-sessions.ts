@@ -11,10 +11,10 @@ export interface CliSession {
 
 /**
  * Encode a working directory path to Claude Code's project folder name.
- * e.g. D:\Development\MyProject → D--Development-MyProject
+ * e.g. C:\Users\foo\project → C--Users-foo-project
  */
 function encodeCwd(cwd: string): string {
-  // D:\path\to\dir → D--path-to-dir (Claude Code's project folder naming)
+  // C:\path\to\dir → C--path-to-dir (Claude Code's project folder naming)
   return cwd
     .replace(/^([A-Za-z]):[\\/]/, '$1--')  // D:\ → D--
     .replace(/[\\/\s]/g, '-');              // \ and spaces → -

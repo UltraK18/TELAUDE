@@ -18,6 +18,30 @@ const BUILTIN_TOOLS = [
   'NotebookEdit',
 ];
 
+/** Telaude's own MCP tools — toggled via --disallowedTools with mcp__telaude__ prefix */
+const TELAUDE_MCP_TOOLS = [
+  'send_file',
+  'send_photo',
+  'send_sticker',
+  'ask',
+  'zip_and_send',
+  'set_reaction',
+  'pin_message',
+  'unpin_message',
+  'schedule_add',
+  'schedule_list',
+  'schedule_update',
+  'schedule_remove',
+  'schedule_pause',
+  'schedule_resume',
+  'schedule_history',
+  'schedule_completed',
+  'schedule_nothing_to_report',
+  'get_system_info',
+  'reload',
+  'poke_ok',
+];
+
 /** Built-in MCPs provided by Claude service (not in config files) */
 const BUILTIN_MCPS = [
   'claude.ai Gmail',
@@ -62,7 +86,7 @@ const MODELS = [
 interface MenuItem {
   label: string;
   type: 'toggle' | 'select';
-  category: 'mcp' | 'tool' | 'model';
+  category: 'mcp' | 'tool' | 'telaude-tool' | 'model';
   key: string; // server/tool name or model id
 }
 
@@ -72,6 +96,11 @@ function buildMenuItems(settings: TelaudeSettings, mcpServers: string[]): MenuIt
   // MCP Servers section
   for (const srv of mcpServers) {
     items.push({ label: srv, type: 'toggle', category: 'mcp', key: srv });
+  }
+
+  // Telaude MCP Tools section
+  for (const tool of TELAUDE_MCP_TOOLS) {
+    items.push({ label: tool, type: 'toggle', category: 'telaude-tool', key: `mcp__telaude__${tool}` });
   }
 
   // Tools section
@@ -93,7 +122,7 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
   if (item.type === 'toggle') {
     const disabled = item.category === 'mcp'
       ? settings.disabledMcpServers.includes(item.key)
-      : settings.disabledTools.includes(item.key);
+      : settings.disabledTools.includes(item.key); // works for both 'tool' and 'telaude-tool'
     const icon = disabled
       ? '{red-fg}○{/red-fg}'
       : '{green-fg}●{/green-fg}';
@@ -117,7 +146,8 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
 
   // Find section boundaries for headers
   const mcpStart = 0;
-  const toolStart = mcpServers.length;
+  const telaudeToolStart = mcpServers.length;
+  const toolStart = telaudeToolStart + TELAUDE_MCP_TOOLS.length;
   const modelStart = toolStart + BUILTIN_TOOLS.length;
 
   const overlay = blessed.box({
@@ -142,12 +172,18 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
     const lines: string[] = [];
 
     lines.push('{bold}{208-fg}MCP Servers{/208-fg}{/bold}');
-    for (let i = mcpStart; i < toolStart; i++) {
+    for (let i = mcpStart; i < telaudeToolStart; i++) {
       lines.push(formatLine(items[i], settings, i === selectedIdx));
     }
 
     lines.push('');
-    lines.push('{bold}{208-fg}Tools{/208-fg}{/bold}');
+    lines.push('{bold}{208-fg}Telaude Tools{/208-fg}{/bold}');
+    for (let i = telaudeToolStart; i < toolStart; i++) {
+      lines.push(formatLine(items[i], settings, i === selectedIdx));
+    }
+
+    lines.push('');
+    lines.push('{bold}{208-fg}Claude Tools{/208-fg}{/bold}');
     for (let i = toolStart; i < modelStart; i++) {
       lines.push(formatLine(items[i], settings, i === selectedIdx));
     }
@@ -169,7 +205,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
         const idx = settings.disabledMcpServers.indexOf(item.key);
         if (idx >= 0) settings.disabledMcpServers.splice(idx, 1);
         else settings.disabledMcpServers.push(item.key);
-      } else {
+      } else { // 'tool' and 'telaude-tool' both use disabledTools
         const idx = settings.disabledTools.indexOf(item.key);
         if (idx >= 0) settings.disabledTools.splice(idx, 1);
         else settings.disabledTools.push(item.key);

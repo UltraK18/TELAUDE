@@ -18,21 +18,35 @@ function getCachePath(fileUniqueId: string): string {
 
 /**
  * Get cached sticker JPG path, or null if not cached.
- * Touching atime on hit for expiry tracking.
+ * @param dir Optional custom directory (default: global cache)
  */
-export function getCachedSticker(fileUniqueId: string): string | null {
-  const cachePath = getCachePath(fileUniqueId);
+export function getCachedSticker(fileUniqueId: string, dir?: string): string | null {
+  const cachePath = dir
+    ? path.join(dir, `${fileUniqueId}.jpg`)
+    : getCachePath(fileUniqueId);
   if (fs.existsSync(cachePath)) {
-    // Touch access time
-    const now = new Date();
-    fs.utimesSync(cachePath, now, fs.statSync(cachePath).mtime);
     return cachePath;
   }
   return null;
 }
 
 /**
- * Convert WebP sticker buffer to 128x JPG and cache it.
+ * Convert WebP sticker buffer to 300px JPG and save to a custom directory.
+ */
+export async function cacheStickerTo(fileUniqueId: string, webpBuffer: Buffer, dir: string): Promise<string> {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const outPath = path.join(dir, `${fileUniqueId}.jpg`);
+
+  await sharp(webpBuffer)
+    .resize(300, 300, { fit: 'inside' })
+    .jpeg({ quality: 80 })
+    .toFile(outPath);
+
+  return outPath;
+}
+
+/**
+ * Convert WebP sticker buffer to 200px JPG and cache in global dir.
  */
 export async function cacheSticker(fileUniqueId: string, webpBuffer: Buffer): Promise<string> {
   ensureCacheDir();

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { type Api, type Context } from 'grammy';
 import {
   getUserProcess,
@@ -521,23 +522,29 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   if (fwdSource && !mediaGroupId) {
     let mediaText: string;
     if (media.mediaType === 'sticker') {
-      const { getCachedSticker, cacheSticker } = await import('../../utils/sticker-cache.js');
-      const uniqueId = media.fileUniqueId ?? media.fileId;
       const emoji = media.stickerEmoji ?? '';
-      let stickerPath = getCachedSticker(uniqueId);
-      if (!stickerPath) {
-        try {
+      const setName = media.stickerSetName ?? '';
+      let thumbPath: string | null = null;
+      try {
+        const { getCachedSticker, cacheStickerTo } = await import('../../utils/sticker-cache.js');
+        const uniqueId = media.fileUniqueId ?? media.fileId;
+        const stickerDir = path.join(up.workingDir, 'user_send', 'stickers');
+        thumbPath = getCachedSticker(uniqueId, stickerDir);
+        if (!thumbPath) {
           const fileId = media.stickerThumbnailFileId ?? media.fileId;
           const file = await ctx.api.getFile(fileId);
           const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
           const res = await fetch(url);
           const buffer = Buffer.from(await res.arrayBuffer());
-          stickerPath = await cacheSticker(uniqueId, buffer);
-        } catch {
-          stickerPath = null;
+          thumbPath = await cacheStickerTo(uniqueId, buffer, stickerDir);
         }
-      }
-      mediaText = stickerPath ? `[스티커: ${stickerPath}] ${emoji}` : `[스티커: ${emoji}]`;
+        if (thumbPath) thumbPath = path.relative(up.workingDir, thumbPath);
+      } catch { /* ignore */ }
+      const parts = [thumbPath ?? emoji];
+      if (thumbPath) parts.push(emoji);
+      if (setName) parts.push(`set: ${setName}`);
+      parts.push(`sticker_id: ${media.fileId}`);
+      mediaText = `[스티커: ${parts.join(' | ')}]`;
     } else if (media.mediaType === 'photo') {
       try {
         const savedPath = await downloadTelegramFile(ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType);
@@ -578,33 +585,37 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     return;
   }
 
-  // Sticker → convert webp to jpg thumbnail, cache by file_unique_id
+  // Sticker → download thumbnail + pass metadata
   if (media.mediaType === 'sticker') {
-    const { getCachedSticker, cacheSticker } = await import('../../utils/sticker-cache.js');
-    const uniqueId = media.fileUniqueId ?? media.fileId;
     const emoji = media.stickerEmoji ?? '';
+    const setName = media.stickerSetName ?? '';
 
-    let stickerPath = getCachedSticker(uniqueId);
-    if (!stickerPath) {
-      try {
-        // Try thumbnail first (always static webp), then fall back to original
+    // Download & convert to jpg thumbnail
+    let thumbPath: string | null = null;
+    try {
+      const { getCachedSticker, cacheStickerTo } = await import('../../utils/sticker-cache.js');
+      const uniqueId = media.fileUniqueId ?? media.fileId;
+      const stickerDir = path.join(up.workingDir, 'user_send', 'stickers');
+      thumbPath = getCachedSticker(uniqueId, stickerDir);
+      if (!thumbPath) {
         const fileId = media.stickerThumbnailFileId ?? media.fileId;
         const file = await ctx.api.getFile(fileId);
         const url = `https://api.telegram.org/file/bot${config.telegram.botToken}/${file.file_path}`;
         const res = await fetch(url);
         const buffer = Buffer.from(await res.arrayBuffer());
-        stickerPath = await cacheSticker(uniqueId, buffer);
-      } catch (err) {
-        logger.error({ err, userId }, 'Failed to convert sticker');
-        const text = `[스티커 수신: ${emoji}]`;
-        queueOrLaunch(userId, chatId, text, ctx.api);
-        return;
+        thumbPath = await cacheStickerTo(uniqueId, buffer, stickerDir);
       }
+      if (thumbPath) thumbPath = path.relative(up.workingDir, thumbPath);
+    } catch (err) {
+      logger.warn({ err, userId }, 'Failed to download sticker thumbnail');
     }
 
-    const text = caption
-      ? `[스티커 수신: ${stickerPath}] ${emoji}\n${caption}`
-      : `[스티커 수신: ${stickerPath}] ${emoji}`;
+    const parts = [thumbPath ?? emoji];
+    if (thumbPath) parts.push(emoji);
+    if (setName) parts.push(`set: ${setName}`);
+    parts.push(`sticker_id: ${media.fileId}`);
+    let text = `[스티커 수신: ${parts.join(' | ')}]`;
+    if (caption) text += `\n${caption}`;
     queueOrLaunch(userId, chatId, text, ctx.api);
     return;
   }

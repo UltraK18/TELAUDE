@@ -16,7 +16,9 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
     if (isUserAuthorized(userId)) { await next(); }
     return;
   }
-  if (!ctx.message?.text && !ctx.message?.photo && !ctx.message?.document && !ctx.message?.voice && !ctx.callbackQuery) return;
+  // Pass through all media types that have handlers (photo, document, audio, voice, video, video_note, sticker, animation)
+  const msg = ctx.message;
+  if (!msg?.text && !msg?.photo && !msg?.document && !msg?.voice && !msg?.audio && !msg?.video && !msg?.video_note && !msg?.sticker && !msg?.animation && !ctx.callbackQuery) return;
 
   // Check if command is public
   const text = ctx.message?.text ?? '';

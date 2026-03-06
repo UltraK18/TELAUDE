@@ -18,13 +18,17 @@ async function main(): Promise<void> {
 
   // Now load .env into process.env (supports encrypted .env)
   const dotenv = await import('dotenv');
-  const { decryptFile } = await import('./utils/machine-lock.js');
+  const { decryptFile, encryptFile, isEncrypted } = await import('./utils/machine-lock.js');
   const os = await import('os');
   const envPath = path.join(os.homedir(), '.telaude', '.env');
   const envContent = decryptFile(envPath);
   if (envContent === null) {
     console.error('Failed to decrypt .env — wrong machine or corrupted file.');
     process.exit(1);
+  }
+  // Auto-encrypt plaintext .env on first boot (e.g. after migration)
+  if (!isEncrypted(envPath)) {
+    encryptFile(envPath);
   }
   const parsed = dotenv.parse(envContent);
   for (const [key, value] of Object.entries(parsed)) {

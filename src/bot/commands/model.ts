@@ -26,11 +26,18 @@ export async function modelCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  // Kill current process since model change requires new process
-  killProcess(userId);
   upsertUserConfig(userId, { default_model: modelName });
 
   const up = getUserProcess(userId);
+  if (up?.isProcessing) {
+    // Don't kill — just update model for next spawn
+    up.model = modelName;
+    await ctx.reply(`Model will change to <b>${modelName}</b> after current task finishes.`, { parse_mode: 'HTML' });
+    return;
+  }
+
+  // Not processing — kill and apply immediately
+  killProcess(userId);
   if (up) up.model = modelName;
 
   // Update active session so model persists across bot restarts

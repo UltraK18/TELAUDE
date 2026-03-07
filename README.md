@@ -51,6 +51,8 @@ npm run dev
 | `/pwd` | 현재 디렉토리 |
 | `/model <name>` | 모델 변경 |
 | `/budget <usd>` | 예산 설정 |
+| `/compact [instructions]` | 대화 컨텍스트 압축 |
+| `/projects` | 허용된 프로젝트 경로 목록 |
 
 ## Build & Run
 

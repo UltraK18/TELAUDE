@@ -89,7 +89,7 @@ OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된
 
 ### 보안
 
-Telaude는 봇 설정 데이터를 OS 네이티브 보안 스토리지로 강력하게 보호한다 (Windows DPAPI / macOS Keychain / Linux). 비밀번호는 bcrypt 해시로 저장되며 평문으로 보관되지 않는다.
+Telaude는 `.env` 파일 전체를 OS 네이티브 암호화로 강력하게 보호한다 (Windows DPAPI / macOS Keychain / Linux). 동일 OS 계정이 아니면 복호화가 불가능하다.
 
 ## Internal MCP API Endpoints
 

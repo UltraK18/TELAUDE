@@ -1,7 +1,7 @@
 import { type Context, InlineKeyboard } from 'grammy';
 import path from 'path';
 import fs from 'fs';
-import { validatePath } from '../../utils/path-validator.js';
+import { validatePath, loadAllowedRoots } from '../../utils/path-validator.js';
 import { getUserProcess, killProcess, createUserProcess } from '../../claude/process-manager.js';
 import { getUserConfig, upsertUserConfig } from '../../db/config-repo.js';
 import { deactivateAllUserSessions } from '../../db/session-repo.js';
@@ -149,11 +149,12 @@ export async function pwdCommand(ctx: Context): Promise<void> {
 }
 
 export async function projectsCommand(ctx: Context): Promise<void> {
-  if (config.paths.allowedRoots.length === 0) {
+  const roots = loadAllowedRoots();
+  if (roots.length === 0) {
     await ctx.reply('All paths are allowed.');
     return;
   }
 
-  const list = config.paths.allowedRoots.map(r => `\u2022 <code>${r}</code>`).join('\n');
+  const list = roots.map(r => `\u2022 <code>${r}</code>`).join('\n');
   await ctx.reply(`<b>Allowed project paths:</b>\n${list}`, { parse_mode: 'HTML' });
 }

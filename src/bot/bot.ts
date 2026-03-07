@@ -68,7 +68,9 @@ export function createBot(): Bot {
     { command: 'stop', description: 'Stop current task' },
     { command: 'cd', description: 'Change working directory' },
     { command: 'pwd', description: 'Current directory' },
+    { command: 'projects', description: 'List allowed project paths' },
     { command: 'model', description: 'View/change model' },
+    { command: 'budget', description: 'Set token budget (USD)' },
     { command: 'compact', description: 'Compress context' },
     { command: 'help', description: 'Command list' },
   ];

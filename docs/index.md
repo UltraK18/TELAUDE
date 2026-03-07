@@ -13,7 +13,7 @@ Telaude의 설정 파일 및 데이터는 **git 추적 대상이 아닌** 별도
 
 ### 전역 디렉토리 (`~/.telaude/`)
 
-OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된다.
+OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된다. git 추적 대상이 아니므로 인스턴스마다 직접 생성해야 한다.
 
 | 경로 | 설명 |
 |------|------|
@@ -21,6 +21,7 @@ OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된
 | `~/.telaude/data/bot.log` | 봇 로그 파일 |
 | `~/.telaude/data/sticker-cache/` | 스티커 JPG 썸네일 캐시 |
 | `~/.telaude/telaude-mcp-settings.json` | 전역 도구 표시 설정 (hidden/icon) |
+| `~/.telaude/allowed_project_roots.json` | `/cd` 접근 허용 경로 목록 (없으면 제한 없음) |
 
 ### 프로젝트 디렉토리 (`.telaude/`)
 
@@ -30,8 +31,26 @@ OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된
 |------|------|
 | `.telaude/telaude-mcp-settings.json` | 프로젝트별 도구 표시 설정 (전역보다 우선) |
 
-> `.telaude/` 디렉토리는 `.gitignore`에 포함되어 있어 git에 추적되지 않는다.
-> 서버/인스턴스마다 독립적으로 설정하면 된다.
+> `.telaude/` 디렉토리는 `.gitignore`에 포함되어 있어 git에 추적되지 않는다. 인스턴스마다 독립적으로 설정하면 된다.
+
+#### allowed_project_roots.json
+
+`/cd` 명령으로 이동 가능한 경로를 제한한다. 파일이 없으면 모든 경로가 허용된다.
+
+```json
+[
+  "/home/user/projects",
+  "/home/user/work"
+]
+```
+
+Windows 예시:
+```json
+[
+  "C:\\Users\\user\\projects",
+  "C:\\work"
+]
+```
 
 ### 기타 데이터 파일
 
@@ -80,7 +99,6 @@ OS 사용자 홈 하위에 위치하며, 모든 프로젝트에 공통 적용된
 | `DEFAULT_MAX_BUDGET_USD` | `5.0` | 기본 예산 (USD) |
 | `DEFAULT_MAX_TURNS` | `50` | 기본 최대 턴 수 |
 | `DEFAULT_WORKING_DIR` | 실행 디렉토리 | 기본 작업 디렉토리 |
-| `ALLOWED_PROJECT_ROOTS` | (제한 없음) | 허용할 디렉토리 경로 (쉼표 구분) |
 | `SESSION_IDLE_TIMEOUT_MS` | `1800000` | 세션 유휴 타임아웃 (ms) |
 | `STREAM_UPDATE_INTERVAL_MS` | `500` | 스트리밍 업데이트 간격 (ms) |
 | `STREAM_UPDATE_MIN_CHARS` | `200` | 스트리밍 최소 업데이트 문자 수 |

@@ -115,14 +115,3 @@ export async function newCommand(ctx: Context): Promise<void> {
 
   await ctx.reply('New session started. Send a message.');
 }
-
-export async function clearCommand(ctx: Context): Promise<void> {
-  const userId = ctx.from?.id;
-  if (!userId) return;
-
-  cancelPokeTimer(userId);
-  removeUserProcess(userId);
-  deactivateAllUserSessions(userId);
-
-  await ctx.reply('Conversation cleared.');
-}

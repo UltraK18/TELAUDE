@@ -109,6 +109,13 @@ interface FxTweet {
     views?: number;
     media?: { photos?: Array<{ url?: string }> };
     created_at?: string;
+    article?: {
+      title?: string;
+      preview_text?: string;
+      content?: {
+        blocks?: Array<{ text?: string; type?: string }>;
+      };
+    };
   };
 }
 
@@ -135,10 +142,36 @@ async function fetchTwitterPreview(apiUrl: string): Promise<string | null> {
     const screenName = tweet.author?.screen_name ?? 'unknown';
     const lines: string[] = [];
 
-    lines.push(`[Link preview \u2014 X post by @${screenName}]`);
+    if (tweet.article?.title) {
+      lines.push(`[Link preview \u2014 X article by @${screenName}]`);
+      lines.push(tweet.article.title);
 
-    if (tweet.text) {
-      lines.push(tweet.text);
+      // Full article content from Draft.js blocks
+      if (tweet.article.content?.blocks?.length) {
+        lines.push('');
+        for (const block of tweet.article.content.blocks) {
+          if (!block.text?.trim()) continue;
+          const t = block.type;
+          if (t === 'header-two' || t === 'header-three') {
+            lines.push(`## ${block.text}`);
+          } else if (t === 'unordered-list-item') {
+            lines.push(`- ${block.text}`);
+          } else if (t === 'ordered-list-item') {
+            lines.push(`• ${block.text}`);
+          } else if (t === 'blockquote') {
+            lines.push(`> ${block.text}`);
+          } else if (t !== 'atomic') {
+            lines.push(block.text);
+          }
+        }
+      } else if (tweet.article.preview_text) {
+        lines.push(tweet.article.preview_text);
+      }
+    } else {
+      lines.push(`[Link preview \u2014 X post by @${screenName}]`);
+      if (tweet.text) {
+        lines.push(tweet.text);
+      }
     }
 
     // Engagement stats

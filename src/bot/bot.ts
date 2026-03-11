@@ -64,6 +64,7 @@ export function createBot(): Bot {
   const commands = [
     { command: 'new', description: 'New session' },
     { command: 'resume', description: 'Resume session' },
+    { command: 'rename', description: 'Rename current session' },
     { command: 'stats', description: 'Session stats & tokens' },
     { command: 'stop', description: 'Stop current task' },
     { command: 'cd', description: 'Change working directory' },

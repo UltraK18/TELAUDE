@@ -13,6 +13,7 @@ export interface SessionRecord {
   total_turns: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  session_name: string | null;
 }
 
 export function createSession(
@@ -101,6 +102,12 @@ export function deleteSession(sessionId: string): void {
   getDb()
     .prepare('DELETE FROM sessions WHERE session_id = ?')
     .run(sessionId);
+}
+
+export function renameSession(sessionId: string, name: string | null): void {
+  getDb()
+    .prepare('UPDATE sessions SET session_name = ? WHERE session_id = ?')
+    .run(name, sessionId);
 }
 
 export function deactivateAllUserSessions(userId: number): void {

@@ -21,6 +21,7 @@ import { logger, notify } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 import { logMessage } from '../../db/message-log-repo.js';
 import { startPokeTimer, resetPokeTimer } from '../../scheduler/poke.js';
+import { fetchLinkPreviews } from '../../utils/link-preview.js';
 
 // Per-user message queue: messages sent while processing are queued
 const messageQueues = new Map<number, { chatId: number; texts: string[] }>();
@@ -187,7 +188,7 @@ function launchAndSend(
           const queued = queue.texts.join('\n\n');
           queue.texts = [];
           messageQueues.delete(userId);
-          const combined = `<system-reminder>The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n${queued}\n</system-reminder>`;
+          const combined = `The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n---\n${queued}\n---`;
           logger.info({ userId, queueSize: queued.length }, 'Draining queued messages after exit');
           const nextResume = up.sessionId ?? undefined;
           if (!launchAndSend(up, combined, chatId, userId, api, nextResume)) {
@@ -493,6 +494,12 @@ export async function messageHandler(ctx: Context): Promise<void> {
     up.reactionQueue = null;
   }
 
+  // Fetch link previews for supported URLs (non-blocking with timeout)
+  const preview = await fetchLinkPreviews(text, entities);
+  if (preview) {
+    fullText = `${preview}\n\n${fullText}`;
+  }
+
   queueOrLaunch(userId, chatId, fullText, ctx.api);
 }
 
@@ -538,7 +545,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
           const buffer = Buffer.from(await res.arrayBuffer());
           thumbPath = await cacheStickerTo(uniqueId, buffer, stickerDir);
         }
-        if (thumbPath) thumbPath = path.relative(up.workingDir, thumbPath);
+        if (thumbPath) thumbPath = './' + path.relative(up.workingDir, thumbPath).replace(/\\/g, '/');
       } catch { /* ignore */ }
       const parts = [thumbPath ?? emoji];
       if (thumbPath) parts.push(emoji);
@@ -605,7 +612,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
         const buffer = Buffer.from(await res.arrayBuffer());
         thumbPath = await cacheStickerTo(uniqueId, buffer, stickerDir);
       }
-      if (thumbPath) thumbPath = path.relative(up.workingDir, thumbPath);
+      if (thumbPath) thumbPath = './' + path.relative(up.workingDir, thumbPath).replace(/\\/g, '/');
     } catch (err) {
       logger.warn({ err, userId }, 'Failed to download sticker thumbnail');
     }

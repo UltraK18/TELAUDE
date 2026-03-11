@@ -89,6 +89,9 @@ function migrate(db: Database.Database): void {
   if (!colNames.has('total_output_tokens')) {
     db.exec('ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER DEFAULT 0');
   }
+  if (!colNames.has('session_name')) {
+    db.exec("ALTER TABLE sessions ADD COLUMN session_name TEXT DEFAULT NULL");
+  }
 }
 
 export function closeDb(): void {

@@ -1,5 +1,6 @@
 import { type Api } from 'grammy';
 import { logger } from '../../utils/logger.js';
+import { fetchLinkPreviews } from '../../utils/link-preview.js';
 
 interface ForwardedMsg {
   text: string;
@@ -64,7 +65,7 @@ export class ForwardCollector {
     );
   }
 
-  private flush(userId: number): void {
+  private async flush(userId: number): Promise<void> {
     const group = this.pending.get(userId);
     if (!group) return;
 
@@ -80,7 +81,14 @@ export class ForwardCollector {
     // Single message → simple format
     if (group.messages.length === 1) {
       const msg = group.messages[0];
-      const result = `[Forwarded from ${msg.source}]\n${msg.text}`;
+      let result = `[Forwarded from ${msg.source}]\n${msg.text}`;
+
+      // Fetch link previews for URLs in forwarded text
+      const preview = await fetchLinkPreviews(msg.text);
+      if (preview) {
+        result = `${preview}\n\n${result}`;
+      }
+
       this.onComplete(group.userId, group.chatId, result, group.api);
       return;
     }
@@ -98,7 +106,15 @@ export class ForwardCollector {
       }
     }
 
-    const result = lines.join('\n');
+    let result = lines.join('\n');
+
+    // Fetch link previews for URLs across all forwarded messages
+    const allText = group.messages.map(m => m.text).join('\n');
+    const preview = await fetchLinkPreviews(allText);
+    if (preview) {
+      result = `${preview}\n\n${result}`;
+    }
+
     this.onComplete(group.userId, group.chatId, result, group.api);
   }
 

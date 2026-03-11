@@ -2,11 +2,16 @@ import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import fs from 'fs';
 import { getUserProcess, killProcess, removeUserProcess, createUserProcess } from '../../claude/process-manager.js';
-import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession } from '../../db/session-repo.js';
+import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession, renameSession } from '../../db/session-repo.js';
+import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 /** Track /resume list message per user (independent of UserProcess) */
 const sessionsMessages = new Map<number, { messageId: number; chatId: number }>();
@@ -29,9 +34,15 @@ export function buildSessionList(
   for (const s of sessions) {
     const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
     const shortId = s.session_id.slice(0, 8);
-    lines.push(`${active} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+    // session_name (Telaude DB) takes priority, fallback to customTitle (JSONL)
+    const displayName = s.session_name || readCustomTitle(s.session_id, s.working_dir) || null;
+    const nameStr = displayName ? ` <b>${escapeHtml(displayName)}</b>` : '';
+    lines.push(`${active}${nameStr} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+    const btnLabel = displayName
+      ? `${active} ${displayName}`
+      : `${active} ${shortId}... (${s.model})`;
     keyboard
-      .text(`${active} ${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.session_id}`)
+      .text(btnLabel, `${botInstanceHash}:resume:${s.session_id}`)
       .text('\u274C', `${botInstanceHash}:ds:${s.session_id}`)
       .row();
   }
@@ -99,6 +110,37 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
     `Session resumed: <code>${sessionId.slice(0, 8)}...</code>\nContinuing from next message.`,
     { parse_mode: 'HTML' },
   );
+}
+
+export async function renameCommand(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  if (!userId) return;
+
+  const args = ctx.message?.text?.split(/\s+/).slice(1).join(' ').trim();
+  if (!args) {
+    await ctx.reply('Usage: /rename <name>\nRenames the current active session.\nUse /rename clear to remove the name.');
+    return;
+  }
+
+  const session = getActiveSession(userId);
+  if (!session) {
+    await ctx.reply('No active session to rename.');
+    return;
+  }
+
+  const name = args.toLowerCase() === 'clear' ? null : args;
+
+  // Write to Telaude DB
+  renameSession(session.session_id, name);
+
+  // Write custom-title record to JSONL (same as Claude Code native /rename)
+  writeCustomTitle(session.session_id, name, session.working_dir);
+
+  if (name) {
+    await ctx.reply(`Session renamed to: <b>${escapeHtml(name)}</b>`, { parse_mode: 'HTML' });
+  } else {
+    await ctx.reply('Session name cleared.');
+  }
 }
 
 export async function newCommand(ctx: Context): Promise<void> {

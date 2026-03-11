@@ -222,9 +222,11 @@ async function showCliSessions(ctx: Context, userId: number): Promise<void> {
   for (const s of filtered) {
     const shortId = s.sessionId.slice(0, 8);
     const ago = formatTimeAgo(s.lastActive);
-    lines.push(`\u26AA <code>${shortId}...</code> ${s.model} | ${ago}`);
+    const nameStr = s.customTitle ? ` <b>${s.customTitle}</b>` : '';
+    lines.push(`\u26AA${nameStr} <code>${shortId}...</code> ${s.model} | ${ago}`);
+    const btnLabel = s.customTitle ? s.customTitle : `${shortId}... (${s.model})`;
     keyboard
-      .text(`${shortId}... (${s.model})`, `${botInstanceHash}:resume:${s.sessionId}`)
+      .text(btnLabel, `${botInstanceHash}:resume:${s.sessionId}`)
       .row();
   }
 

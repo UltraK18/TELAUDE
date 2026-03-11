@@ -7,6 +7,7 @@ export interface CliSession {
   sessionId: string;
   model: string;
   lastActive: Date;
+  customTitle?: string;
 }
 
 /**
@@ -65,6 +66,58 @@ function extractModel(line: string): string | null {
 }
 
 /**
+ * Extract customTitle from a JSONL line.
+ * Claude Code's /rename appends a {"type":"custom-title","customTitle":"...","sessionId":"..."} record.
+ */
+function extractCustomTitle(line: string): string | null {
+  try {
+    const obj = JSON.parse(line);
+    if (obj.type === 'custom-title' && typeof obj.customTitle === 'string' && obj.customTitle) {
+      return obj.customTitle;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/**
+ * Read customTitle for a single session by scanning its JSONL file.
+ * Returns null if no custom-title record found.
+ */
+export function readCustomTitle(sessionId: string, workingDir: string): string | null {
+  const encoded = encodeCwd(workingDir);
+  const filePath = path.join(os.homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+  if (!fs.existsSync(filePath)) return null;
+
+  try {
+    const lastLines = readLastLines(filePath, 20);
+    for (let i = lastLines.length - 1; i >= 0; i--) {
+      const t = extractCustomTitle(lastLines[i]);
+      if (t !== null) return t || null; // empty string → cleared → null
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+/**
+ * Append a custom-title record to a JSONL session file.
+ * This is equivalent to running /rename in Claude Code native.
+ */
+export function writeCustomTitle(sessionId: string, customTitle: string | null, workingDir: string): void {
+  const encoded = encodeCwd(workingDir);
+  const filePath = path.join(os.homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+  if (!fs.existsSync(filePath)) return;
+
+  if (customTitle === null) {
+    // Clearing: append empty custom-title to override previous
+    const record = JSON.stringify({ type: 'custom-title', customTitle: '', sessionId });
+    fs.appendFileSync(filePath, record + '\n', 'utf-8');
+  } else {
+    const record = JSON.stringify({ type: 'custom-title', customTitle, sessionId });
+    fs.appendFileSync(filePath, record + '\n', 'utf-8');
+  }
+}
+
+/**
  * Simplify model name for display.
  * claude-sonnet-4-6 → sonnet, claude-opus-4-6 → opus, etc.
  */
@@ -102,18 +155,27 @@ export function scanCliSessions(workingDir: string): CliSession[] {
     try {
       const stat = fs.statSync(filePath);
 
-      // Extract model from last few lines
+      // Extract model and customTitle from last few lines
       let model = 'unknown';
+      let customTitle: string | undefined;
       const lastLines = readLastLines(filePath, 10);
       for (let i = lastLines.length - 1; i >= 0; i--) {
-        const m = extractModel(lastLines[i]);
-        if (m) { model = simplifyModel(m); break; }
+        if (model === 'unknown') {
+          const m = extractModel(lastLines[i]);
+          if (m) model = simplifyModel(m);
+        }
+        if (customTitle === undefined) {
+          const t = extractCustomTitle(lastLines[i]);
+          if (t !== null) customTitle = t || undefined; // empty string → cleared
+        }
+        if (model !== 'unknown' && customTitle !== undefined) break;
       }
 
       sessions.push({
         sessionId,
         model,
         lastActive: stat.mtime,
+        customTitle,
       });
     } catch (err) {
       logger.warn({ err, file }, 'Failed to read CLI session file');

@@ -7,6 +7,9 @@ const TOTAL_TIMEOUT_MS = 5000;
 // Match x.com or twitter.com status URLs
 const TWITTER_RE = /^https?:\/\/(?:(?:www|mobile)\.)?(?:x\.com|twitter\.com)\/([\w]+)\/status\/(\d+)/i;
 
+// Match YouTube URLs (standard, short, embed)
+const YOUTUBE_RE = /^https?:\/\/(?:(?:www|m)\.youtube\.com\/watch\?.*v=|youtu\.be\/|(?:www\.)?youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/i;
+
 // Generic URL pattern for fallback extraction (when entities are unavailable)
 const URL_RE = /https?:\/\/[^\s<>"')\]]+/gi;
 
@@ -36,27 +39,49 @@ export function extractUrls(text: string, entities?: MessageEntity[]): string[] 
   return Array.from(urls);
 }
 
+type UrlType = 'twitter' | 'youtube' | 'og';
+
 interface ProxyMatch {
   proxyUrl: string;
-  type: string;
+  type: UrlType;
+  originalUrl: string;
 }
 
 /**
- * Convert a URL to its proxy API equivalent.
- * Returns null if no proxy is available for this URL type.
+ * Convert a URL to its proxy API equivalent, or mark for OG fallback.
  */
 function toProxyUrl(url: string): ProxyMatch | null {
-  const m = url.match(TWITTER_RE);
-  if (m) {
-    // Extract path from the original URL after the domain
+  // Twitter/X
+  if (TWITTER_RE.test(url)) {
     const urlObj = new URL(url);
-    const pathname = urlObj.pathname; // e.g. /username/status/1234567890
     return {
-      proxyUrl: `https://api.fxtwitter.com${pathname}`,
+      proxyUrl: `https://api.fxtwitter.com${urlObj.pathname}`,
       type: 'twitter',
+      originalUrl: url,
     };
   }
-  return null;
+
+  // YouTube
+  const ytMatch = url.match(YOUTUBE_RE);
+  if (ytMatch) {
+    const videoId = ytMatch[1];
+    return {
+      proxyUrl: `https://noembed.com/embed?url=https://www.youtube.com/watch?v=${videoId}`,
+      type: 'youtube',
+      originalUrl: url,
+    };
+  }
+
+  // Generic OG fallback — skip obvious non-HTML resources
+  if (/\.(png|jpe?g|gif|webp|svg|mp4|mp3|pdf|zip|exe|dmg)(\?.*)?$/i.test(url)) {
+    return null;
+  }
+
+  return {
+    proxyUrl: url,
+    type: 'og',
+    originalUrl: url,
+  };
 }
 
 /**
@@ -146,6 +171,114 @@ async function fetchTwitterPreview(apiUrl: string): Promise<string | null> {
   }
 }
 
+interface NoembedResponse {
+  title?: string;
+  author_name?: string;
+  provider_name?: string;
+  thumbnail_url?: string;
+  description?: string;
+  error?: string;
+}
+
+/**
+ * Fetch and format a YouTube video preview via noembed.com.
+ */
+async function fetchYoutubePreview(noembedUrl: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    const res = await fetch(noembedUrl, { signal: controller.signal });
+    clearTimeout(timer);
+
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as NoembedResponse;
+    if (data.error || !data.title) return null;
+
+    const lines: string[] = [];
+    lines.push(`[Link preview — YouTube]`);
+    lines.push(data.title);
+    if (data.author_name) lines.push(`Channel: ${data.author_name}`);
+
+    return lines.join('\n');
+  } catch (err) {
+    if (err instanceof Error && err.name !== 'AbortError') {
+      logger.warn({ err, url: noembedUrl }, 'noembed fetch failed');
+    }
+    return null;
+  }
+}
+
+/**
+ * Fetch and format a generic URL preview via OG meta tags.
+ */
+async function fetchOgPreview(url: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TelaudeBot/1.0)' },
+    });
+    clearTimeout(timer);
+
+    if (!res.ok) return null;
+
+    const contentType = res.headers.get('content-type') ?? '';
+    if (!contentType.includes('text/html')) return null;
+
+    // Read up to 50KB to find OG tags without loading the full page
+    const reader = res.body?.getReader();
+    if (!reader) return null;
+
+    let html = '';
+    let bytesRead = 0;
+    const MAX_BYTES = 50_000;
+
+    while (bytesRead < MAX_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += new TextDecoder().decode(value);
+      bytesRead += value.byteLength;
+      // Stop once we're past <head> — OG tags are always in head
+      if (html.includes('</head>')) break;
+    }
+    reader.cancel();
+
+    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1]
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i)?.[1]
+      ?? html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+
+    if (!ogTitle?.trim()) return null;
+
+    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1]
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:description["']/i)?.[1]
+      ?? html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1];
+
+    const siteName = html.match(/<meta[^>]+property=["']og:site_name["'][^>]+content=["']([^"']+)["']/i)?.[1]
+      ?? html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:site_name["']/i)?.[1];
+
+    const lines: string[] = [];
+    const label = siteName ? `Link preview — ${siteName}` : 'Link preview';
+    lines.push(`[${label}]`);
+    lines.push(ogTitle.trim());
+    if (ogDesc?.trim()) {
+      // Truncate long descriptions
+      const desc = ogDesc.trim().replace(/\s+/g, ' ');
+      lines.push(desc.length > 200 ? desc.slice(0, 197) + '...' : desc);
+    }
+
+    return lines.join('\n');
+  } catch (err) {
+    if (err instanceof Error && err.name !== 'AbortError') {
+      logger.warn({ err, url }, 'OG fetch failed');
+    }
+    return null;
+  }
+}
+
 /**
  * Fetch link previews for all supported URLs in a message.
  * Returns formatted text to prepend to Claude stdin, or null if no previews available.
@@ -162,6 +295,10 @@ export async function fetchLinkPreviews(text: string, entities?: MessageEntity[]
 
     if (proxy.type === 'twitter') {
       tasks.push(fetchTwitterPreview(proxy.proxyUrl));
+    } else if (proxy.type === 'youtube') {
+      tasks.push(fetchYoutubePreview(proxy.proxyUrl));
+    } else if (proxy.type === 'og') {
+      tasks.push(fetchOgPreview(proxy.originalUrl));
     }
   }
 

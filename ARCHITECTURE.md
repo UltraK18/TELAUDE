@@ -1,99 +1,137 @@
 # Telaude Architecture
 
-Telegram Claude Code Bridge - 텔레그램에서 Claude Code CLI를 제어하는 봇
+Telegram Claude Code Bridge — a bot that remotely controls the Claude Code CLI from Telegram.
 
 ## Tech Stack
 
 - **Runtime**: Node.js + TypeScript (ESM)
 - **Bot Framework**: grammY + @grammyjs/auto-retry
 - **Database**: better-sqlite3 (WAL mode)
-- **Auth**: bcrypt (비밀번호 해싱)
+- **Auth**: bcrypt (password hashing) + OS-native encryption (Windows DPAPI / macOS Keychain / Linux)
 - **Logging**: pino
 - **CLI**: Claude Code (`claude -p --output-format stream-json --verbose`)
+- **MCP**: Built-in MCP server (stdio) + internal HTTP API for external MCP integration
 
 ## Directory Structure
 
 ```
 src/
-├── index.ts              # 진입점 (.env 체크 → 셋업 or 봇 시작)
-├── setup.ts              # 첫 실행 인터랙티브 셋업 위저드
-├── config.ts             # 환경변수 → Config (Proxy lazy-load)
+├── index.ts              # Entry point (.env check → setup or bot start)
+├── setup.ts              # First-run interactive setup wizard
+├── config.ts             # Env → Config (Proxy lazy-load)
 │
-├── claude/               # Claude CLI 프로세스 관리
-│   ├── process-manager.ts  # spawn/kill/send, UserProcess 상태
+├── claude/               # Claude CLI process management
+│   ├── process-manager.ts  # spawn/kill/send, UserProcess state, queue
 │   ├── stream-parser.ts    # NDJSON stdout → EventEmitter
-│   ├── stream-handler.ts   # 파서 이벤트 → 텔레그램 메시지
-│   ├── tool-formatter.ts   # 도구 호출 HTML 포맷
-│   └── cost-tracker.ts     # 비용/턴 DB 업데이트
+│   ├── stream-handler.ts   # Parser events → Telegram messages (tool display + text streaming)
+│   ├── tool-formatter.ts   # Tool call HTML formatting (superscript counters, agent pinning)
+│   └── cost-tracker.ts     # Cost/turn DB updates
 │
-├── bot/                  # grammY 봇
-│   ├── bot.ts              # Bot 인스턴스 생성 + 미들웨어/핸들러 등록
-│   ├── commands/           # 슬래시 명령어 핸들러
-│   │   ├── index.ts          # registerCommands (모든 명령어 등록)
+├── bot/                  # grammY bot
+│   ├── bot.ts              # Bot instance + middleware/handler registration
+│   ├── commands/           # Slash command handlers
+│   │   ├── index.ts          # registerCommands (all commands)
 │   │   ├── start.ts          # /start
-│   │   ├── auth.ts           # /auth <비밀번호>
+│   │   ├── auth.ts           # /auth <password>
 │   │   ├── help.ts           # /help
-│   │   ├── session.ts        # /session, /sessions, /resume, /new, /clear
+│   │   ├── session.ts        # /resume, /new, /rename, buildSessionList
 │   │   ├── cd.ts             # /cd, /pwd, /projects
 │   │   ├── model.ts          # /model
 │   │   ├── budget.ts         # /budget
-│   │   ├── stop.ts           # /stop
-│   │   └── status.ts         # /status, /cost
+│   │   ├── stop.ts           # /stop, /stop <text>
+│   │   ├── status.ts         # /stats
+│   │   └── compact.ts        # /compact [instructions]
 │   ├── handlers/
-│   │   ├── message.ts        # 일반 텍스트 → Claude 프로세스
-│   │   └── callback.ts       # 인라인 키보드 콜백 (resume, delete)
+│   │   ├── message.ts        # Text/media → Claude process (session restore, queue, link preview)
+│   │   ├── callback.ts       # Inline keyboard callbacks (resume, delete, browse CLI sessions)
+│   │   ├── reaction.ts       # Emoji reaction handling (user↔bot)
+│   │   ├── forward-collector.ts  # Batches forwarded messages into single stdin
+│   │   ├── media-group-collector.ts # Batches media groups (albums) into single stdin
+│   │   └── media-types.ts    # MediaInfo extraction, labels, buildMediaText
 │   └── middleware/
-│       ├── auth.ts           # 인증 체크
-│       ├── logging.ts        # 요청 로깅
-│       ├── rate-limit.ts     # 속도 제한
-│       └── error-handler.ts  # 전역 에러 처리
+│       └── auth.ts           # Auth check + public commands bypass
 │
-├── db/                   # SQLite 데이터베이스
-│   ├── database.ts         # DB 초기화 + 마이그레이션
-│   ├── auth-repo.ts        # auth_tokens 테이블
-│   ├── session-repo.ts     # sessions 테이블 (upsert, 유니크 인덱스)
-│   └── config-repo.ts      # user_configs 테이블
+├── api/                  # Internal HTTP API (for external MCP servers)
+│   ├── internal-server.ts  # Express-like HTTP server on 127.0.0.1
+│   ├── route-handlers.ts   # /mcp/* routes (send-photo, send-file, ask, pin, etc.)
+│   ├── ask-queue.ts        # Ask tool queue (inline keyboard → response promise)
+│   └── tool-display-store.ts # Tool icon/hidden settings (hot-reload, mtime check)
+│
+├── mcp-server/           # Built-in MCP server (stdio, registered via --mcp-config)
+│   ├── index.ts            # MCP server setup + tool registration
+│   ├── http-client.ts      # HTTP client for internal API calls
+│   └── tools/
+│       ├── communication.ts  # send_file, send_photo, send_sticker, ask, pin/unpin, set_reaction, zip_and_send
+│       ├── scheduling.ts     # schedule_add/list/update/remove/pause/resume/history/completed/nothing_to_report
+│       ├── poke.ts           # poke_ok
+│       └── system.ts         # get_system_info, reload
+│
+├── scheduler/            # Cron & one-shot job scheduling
+│   ├── scheduler.ts        # Job runner (node-cron + one-shot timers)
+│   ├── cron-store.ts       # Job persistence (JSON file)
+│   ├── heartbeat.ts        # HEARTBEAT.md-based health check
+│   ├── poke.ts             # Proactive follow-up timer (stdin injection)
+│   └── turn-deleter.ts     # Auto-delete tool messages after N turns
+│
+├── settings/             # TUI settings panel
+│   ├── settings-store.ts   # Load/save settings JSON (~/.telaude/data/settings.json)
+│   └── settings-tui.ts     # Blessed overlay (keyboard-only, scroll, toggle tools/MCPs/model)
+│
+├── db/                   # SQLite database
+│   ├── database.ts         # DB init + migrations (unique indexes, column additions)
+│   ├── auth-repo.ts        # auth_tokens table
+│   ├── session-repo.ts     # sessions table (upsert, session_name, deduplication)
+│   ├── config-repo.ts      # user_configs table
+│   └── message-log-repo.ts # Message logging
 │
 └── utils/
-    ├── logger.ts           # pino 로거
-    ├── markdown-to-html.ts # Markdown → Telegram HTML 변환
-    ├── message-splitter.ts # 4000자 메시지 분할
-    └── path-validator.ts   # 경로 유효성 검증
+    ├── logger.ts             # pino logger (file + optional console)
+    ├── dashboard.ts          # Blessed TUI dashboard (banner, session, schedule, logs, status bar)
+    ├── link-preview.ts       # URL → context injection (X/fxtwitter, YouTube/noembed, OG meta tags)
+    ├── cli-sessions.ts       # Read/write Claude Code JSONL sessions (customTitle, slug)
+    ├── file-downloader.ts    # Telegram file download → user_send/ with project-relative paths
+    ├── sticker-cache.ts      # Sticker → JPG thumbnail cache
+    ├── markdown-to-html.ts   # Markdown → Telegram HTML conversion
+    ├── message-splitter.ts   # 4000-char message splitting (code block > paragraph > line)
+    ├── path-validator.ts     # Working directory validation + fallback chain
+    └── machine-lock.ts       # Single-instance lock (prevents duplicate bots)
 ```
 
 ## Core Flow
 
-### 첫 실행 (셋업 위저드)
+### First Run (Setup Wizard)
 
 ```
-npm start
-  → .env 없음 감지
+npm run dev
+  → .env not found
   → runSetup()
-    1. claude auth status → CLI 인증 확인
-    2. 텔레그램 봇 토큰 입력
-    3. AUTH 비밀번호 설정
-    4. 선택 설정 (모델, 작업 디렉토리 등)
-    5. .env 생성
-  → 봇 시작
+    1. claude auth status → check CLI auth
+    2. Telegram bot token input
+    3. AUTH password setup
+    4. Optional settings (model, working dir, etc.)
+    5. .env generated (OS-native encrypted)
+  → Bot starts
 ```
 
-### 메시지 처리 (Per-message Process Spawning)
+### Message Processing (Per-message Process Spawning)
 
 ```
-사용자 텍스트 메시지
+User text message
   → messageHandler
-  → UserProcess 가져오기/생성 (DB에서 마지막 세션 복원)
+  → Get/create UserProcess (restore last session from DB)
+  → Link preview: fetch URL context (X/YouTube/OG) → prepend to stdin
   → spawnClaudeProcess (claude -p --resume <sessionId>)
   → stdin.write(text) + stdin.end()
-  → StreamParser: stdout NDJSON 라인 파싱
-  → StreamHandler: 텔레그램으로 스트리밍
-    - tool_use → 단일 메시지 edit 애니메이션 (1초 간격)
-    - text → 별도 메시지 스트리밍 (500ms 간격)
-    - result → 도구 메시지 삭제 + 비용 요약
-  → 프로세스 종료
+  → StreamParser: parse stdout NDJSON lines
+  → StreamHandler: stream to Telegram
+    - tool_use → single message, edit animation (1s throttle, superscript counters)
+    - text start → delete tool message
+    - text → separate message, streaming edits (500ms / 200 char intervals)
+    - result → cost summary
+  → Process exits
 ```
 
-### Claude CLI 인터페이스
+### Claude CLI Interface
 
 ```bash
 claude --verbose \
@@ -101,42 +139,46 @@ claude --verbose \
        --dangerously-skip-permissions \
        --model <model> \
        --max-turns <turns> \
-       --resume <sessionId>  # 세션 이어가기 (선택)
-       -p                     # stdin에서 프롬프트 읽기
+       --resume <sessionId> \
+       --mcp-config <path>   # Telaude MCP + external MCPs with injected env
+       -p                    # Read prompt from stdin
 ```
 
-- **입력**: stdin에 평문 텍스트 → stdin.end()
-- **출력**: NDJSON (한 줄에 하나의 JSON 이벤트)
-- **환경변수 정리**: `CLAUDECODE`, `CLAUDE_CODE*`, `ANTHROPIC_API_KEY` 제거 (중첩 방지)
+- **Input**: Plain text via stdin → stdin.end()
+- **Output**: NDJSON (one JSON event per line)
+- **Env cleanup**: Remove `CLAUDECODE`, `CLAUDE_CODE*`, `ANTHROPIC_API_KEY` (prevent nesting)
 
-### 스트림 이벤트 형식
+### Stream Event Format
 
 ```
-system  → { type: "system", subtype: "init", session_id: "..." }
+system   → { type: "system", subtype: "init", session_id: "..." }
 assistant → { type: "assistant", message: { content: [{type:"text",...}, {type:"tool_use",...}] } }
-result  → { type: "result", cost_usd, total_cost_usd, num_turns, duration_ms, session_id }
+result   → { type: "result", cost_usd, total_cost_usd, num_turns, duration_ms, session_id }
 ```
 
-### 텔레그램 응답 표시
+### Telegram Display Strategy
 
-1. **도구 호출**: 단일 메시지에 edit으로 누적 표시 (1초 간격 throttle)
-2. **텍스트 응답**: 도구 메시지 삭제 후 별도 메시지로 스트리밍
-3. **비용 요약**: 완료 시 `💰 $0.0042 | 3 turns | 5.2s` 형태
-4. **메시지 분할**: 4000자 초과 시 자동 분할 (코드블록/문단/줄 단위)
+1. **Tool calls**: Single message with edit animation (1s throttle)
+   - Superscript counters: `🔍² Grep` (first tool has no superscript)
+   - Agent (subagent) tools pinned at top, regular tools at bottom
+2. **Text response**: Tool message deleted → separate message with streaming edits
+3. **Message splitting**: Auto-split at 4000 chars (code block > paragraph > line boundaries)
+4. **HTML parse failure**: Plain text fallback
+5. **Compacting animation**: 2s interval
 
 ## Database Schema
 
 ```sql
--- 사용자 인증
+-- User authentication
 auth_tokens (
   telegram_user_id INTEGER PRIMARY KEY,
   username TEXT,
-  auth_token_hash TEXT NOT NULL,  -- bcrypt 해시
+  auth_token_hash TEXT NOT NULL,  -- bcrypt hash
   is_authorized INTEGER DEFAULT 0,
   failed_attempts INTEGER DEFAULT 0
 )
 
--- 세션 관리 (session_id에 유니크 인덱스)
+-- Session management (UNIQUE index on session_id)
 sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   telegram_user_id INTEGER NOT NULL,
@@ -145,10 +187,13 @@ sessions (
   model TEXT DEFAULT 'sonnet',
   is_active INTEGER DEFAULT 1,
   total_cost_usd REAL DEFAULT 0.0,
-  total_turns INTEGER DEFAULT 0
+  total_turns INTEGER DEFAULT 0,
+  total_input_tokens INTEGER DEFAULT 0,
+  total_output_tokens INTEGER DEFAULT 0,
+  session_name TEXT DEFAULT NULL
 )
 
--- 사용자별 설정
+-- Per-user settings
 user_configs (
   telegram_user_id INTEGER PRIMARY KEY,
   default_working_dir TEXT,
@@ -160,11 +205,11 @@ user_configs (
 
 ## Config Loading
 
-`config.ts`는 Proxy 패턴으로 lazy-load:
+`config.ts` uses a Proxy pattern for lazy-loading:
 
 ```typescript
-// loadConfig() 호출 전: Proxy가 에러 throw
-// loadConfig() 호출 후: 정상 접근
+// Before loadConfig(): Proxy throws error
+// After loadConfig(): normal access
 export const config = new Proxy({} as Config, {
   get(_target, prop, receiver) {
     if (!_config) throw new Error('Config not loaded');
@@ -173,21 +218,70 @@ export const config = new Proxy({} as Config, {
 });
 ```
 
-이렇게 하면 `setup.ts`가 .env 생성 → `loadConfig()` → 나머지 모듈이 config에 접근 가능.
+This allows `setup.ts` to create .env → `loadConfig()` → other modules access config.
 
 ## Session Management
 
-- **자동 복원**: 봇 재시작 시 DB에서 마지막 활성 세션 로드 → `--resume` 플래그로 이어가기
-- **세션 목록**: `/sessions` → 인라인 키보드 (resume 버튼 + ❌ 삭제 버튼)
-- **중복 방지**: `createSession`이 upsert 패턴 (기존이면 UPDATE, 없으면 INSERT)
-- **유휴 정리**: 60초마다 idle 프로세스 체크 → 30분 초과 시 kill
+- **Auto-restore**: On bot restart, load last active session from DB → `--resume` flag
+- **Session list**: `/resume` → inline keyboard (resume button + delete button + browse CLI sessions)
+- **Session rename**: `/rename` → updates both DB `session_name` and Claude Code JSONL `custom-title` record
+- **Deduplication**: `createSession` uses upsert (existing → UPDATE, new → INSERT)
+- **Idle cleanup**: Check idle processes every 60s → kill after 30min
+
+## Internal API & External MCP Integration
+
+Telaude runs an HTTP server on `127.0.0.1:19816` that exposes Telegram messaging to external MCP servers.
+
+**Auto-injected env vars** (via `--mcp-config`):
+- `TELAUDE_API_URL` — Internal API address
+- `TELAUDE_API_TOKEN` — Runtime auth token (destroyed on exit)
+- `TELAUDE_USER_ID` — Telegram user ID
+
+**Endpoints**: send-photo, send-file, send-sticker, zip-and-send, ask, pin/unpin, set-reaction
+
+File paths are validated against allowed boundaries (workingDir, homedir, tmpdir).
+
+## Scheduler & Poke
+
+- **Cron jobs**: Recurring tasks via node-cron, persisted to JSON file
+- **One-shot jobs**: Single-fire timers with `runAt` timestamp
+- **Poke**: Auto follow-up when Claude goes silent — injects natural language into stdin via `--resume`
+- **Heartbeat**: HEARTBEAT.md-based health check (MCP tools: heartbeat_check/update/ok)
 
 ## Middleware Chain
 
 ```
-loggingMiddleware → rateLimitMiddleware → authMiddleware → handler
+authMiddleware → handler
 ```
 
-- `/start`, `/auth`, `/help`는 인증 불필요 (PUBLIC_COMMANDS)
-- ALLOWED_TELEGRAM_IDS가 설정되면 화이트리스트 체크
-- 그 외 모든 명령/메시지는 `/auth <비밀번호>`로 인증 필요
+- `/start`, `/auth`, `/help` bypass auth (PUBLIC_COMMANDS)
+- `ALLOWED_TELEGRAM_IDS` whitelist check (if configured)
+- All other commands/messages require `/auth <password>` first
+- `message_reaction` updates pass through without auth
+
+## Tool Display Settings
+
+Configurable via `telaude-mcp-settings.json` (global `~/.telaude/` or project `.telaude/`).
+
+- `hidden: true` — hide from Telegram tool messages
+- `icon` — Unicode emoji or Telegram Premium custom emoji (`emojiId` + `fallback`)
+- MCP tools matched by suffix (`mcp__server__tool` → `tool`)
+- Hot-reload via mtime comparison (no restart needed)
+
+## Link Preview
+
+URL detection → proxy API fetch → context prepend to Claude stdin.
+
+| Platform | Method | Data |
+|----------|--------|------|
+| X/Twitter | fxtwitter API | Full text, engagement stats, images, article body (Draft.js blocks) |
+| YouTube | noembed.com | Title, channel name |
+| Generic URL | OG meta tag parsing | Title, description, site name (50KB cap on HTML fetch) |
+
+## Security
+
+- `.env` encrypted with OS-native APIs (Windows DPAPI / macOS Keychain / Linux machine-id+UID)
+- Internal API binds to localhost only
+- Runtime tokens generated per process, never persisted
+- File path validation on all send-file/send-photo/zip-and-send routes
+- bcrypt password hashing with failed attempt tracking

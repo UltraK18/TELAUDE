@@ -138,17 +138,57 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
   return `${cursor}${icon} ${item.label}`;
 }
 
+/** Build a flat line list with section headers interleaved, mapping each item line to an item index */
+interface LineEntry {
+  text: string;        // rendered blessed markup
+  itemIdx: number | null; // null = header/spacer
+}
+
+function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: number, mcpServers: string[]): LineEntry[] {
+  const lines: LineEntry[] = [];
+  const telaudeToolStart = mcpServers.length;
+  const toolStart = telaudeToolStart + TELAUDE_MCP_TOOLS.length;
+  const modelStart = toolStart + BUILTIN_TOOLS.length;
+
+  const pushHeader = (label: string) => {
+    lines.push({ text: `{bold}{208-fg}${label}{/208-fg}{/bold}`, itemIdx: null });
+  };
+  const pushSpacer = () => {
+    lines.push({ text: '', itemIdx: null });
+  };
+
+  pushHeader('MCP Servers');
+  for (let i = 0; i < telaudeToolStart; i++) {
+    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+  }
+
+  pushSpacer();
+  pushHeader('Telaude Tools');
+  for (let i = telaudeToolStart; i < toolStart; i++) {
+    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+  }
+
+  pushSpacer();
+  pushHeader('Claude Tools');
+  for (let i = toolStart; i < modelStart; i++) {
+    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+  }
+
+  pushSpacer();
+  pushHeader('Model');
+  for (let i = modelStart; i < items.length; i++) {
+    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+  }
+
+  return lines;
+}
+
 export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
   let settings = loadSettings();
   const mcpServers = getMcpServers();
   const items = buildMenuItems(settings, mcpServers);
   let selectedIdx = 0;
-
-  // Find section boundaries for headers
-  const mcpStart = 0;
-  const telaudeToolStart = mcpServers.length;
-  const toolStart = telaudeToolStart + TELAUDE_MCP_TOOLS.length;
-  const modelStart = toolStart + BUILTIN_TOOLS.length;
+  let scrollTop = 0; // top line index in the viewport
 
   const overlay = blessed.box({
     parent: screen,
@@ -168,33 +208,41 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
     vi: false,
   });
 
+  function getViewportHeight(): number {
+    // height minus borders (2) minus padding top (1) minus scrollbar hint line (1)
+    const h = (overlay.height as number) - 4;
+    return Math.max(1, h);
+  }
+
   function render(): void {
-    const lines: string[] = [];
+    const lines = buildLines(items, settings, selectedIdx, mcpServers);
+    const vh = getViewportHeight();
+    const totalLines = lines.length;
 
-    lines.push('{bold}{208-fg}MCP Servers{/208-fg}{/bold}');
-    for (let i = mcpStart; i < telaudeToolStart; i++) {
-      lines.push(formatLine(items[i], settings, i === selectedIdx));
+    // Find the line index of the selected item to keep it visible
+    const selectedLineIdx = lines.findIndex((l) => l.itemIdx === selectedIdx);
+    if (selectedLineIdx >= 0) {
+      if (selectedLineIdx < scrollTop) {
+        scrollTop = selectedLineIdx;
+      } else if (selectedLineIdx >= scrollTop + vh) {
+        scrollTop = selectedLineIdx - vh + 1;
+      }
     }
+    scrollTop = Math.max(0, Math.min(scrollTop, Math.max(0, totalLines - vh)));
 
-    lines.push('');
-    lines.push('{bold}{208-fg}Telaude Tools{/208-fg}{/bold}');
-    for (let i = telaudeToolStart; i < toolStart; i++) {
-      lines.push(formatLine(items[i], settings, i === selectedIdx));
-    }
+    const visible = lines.slice(scrollTop, scrollTop + vh).map((l) => l.text);
 
-    lines.push('');
-    lines.push('{bold}{208-fg}Claude Tools{/208-fg}{/bold}');
-    for (let i = toolStart; i < modelStart; i++) {
-      lines.push(formatLine(items[i], settings, i === selectedIdx));
-    }
+    // Scroll indicator line
+    const canScrollUp = scrollTop > 0;
+    const canScrollDown = scrollTop + vh < totalLines;
+    let scrollHint = '';
+    if (canScrollUp && canScrollDown) scrollHint = '{gray-fg}↑↓ more{/gray-fg}';
+    else if (canScrollUp) scrollHint = '{gray-fg}↑ more above{/gray-fg}';
+    else if (canScrollDown) scrollHint = '{gray-fg}↓ more below{/gray-fg}';
 
-    lines.push('');
-    lines.push('{bold}{208-fg}Model{/208-fg}{/bold}');
-    for (let i = modelStart; i < items.length; i++) {
-      lines.push(formatLine(items[i], settings, i === selectedIdx));
-    }
+    if (scrollHint) visible.push(scrollHint);
 
-    overlay.setContent(lines.join('\n'));
+    overlay.setContent(visible.join('\n'));
     screen.render();
   }
 
@@ -205,7 +253,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
         const idx = settings.disabledMcpServers.indexOf(item.key);
         if (idx >= 0) settings.disabledMcpServers.splice(idx, 1);
         else settings.disabledMcpServers.push(item.key);
-      } else { // 'tool' and 'telaude-tool' both use disabledTools
+      } else {
         const idx = settings.disabledTools.indexOf(item.key);
         if (idx >= 0) settings.disabledTools.splice(idx, 1);
         else settings.disabledTools.push(item.key);
@@ -232,6 +280,18 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
       render();
     } else if (key.name === 'down' || key.name === 'j') {
       selectedIdx = (selectedIdx + 1) % items.length;
+      render();
+    } else if (key.name === 'pageup') {
+      selectedIdx = Math.max(0, selectedIdx - getViewportHeight());
+      render();
+    } else if (key.name === 'pagedown') {
+      selectedIdx = Math.min(items.length - 1, selectedIdx + getViewportHeight());
+      render();
+    } else if (key.name === 'home' || (key.name === 'g' && !key.shift)) {
+      selectedIdx = 0;
+      render();
+    } else if (key.name === 'end' || (key.name === 'g' && key.shift)) {
+      selectedIdx = items.length - 1;
       render();
     } else if (key.name === 'space' || key.name === 'return') {
       toggle();

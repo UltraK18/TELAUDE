@@ -12,7 +12,7 @@ import { StreamHandler } from '../../claude/stream-handler.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
-import { extractMediaInfo, buildMediaText } from './media-types.js';
+import { extractMediaInfo, buildMediaText, MEDIA_LABELS } from './media-types.js';
 import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { ForwardCollector } from './forward-collector.js';
@@ -557,7 +557,10 @@ export async function mediaHandler(ctx: Context): Promise<void> {
         const savedPath = await downloadTelegramFile(ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType);
         mediaText = `[사진: ${savedPath}]`;
       } catch {
-        mediaText = '[사진]';
+        const meta: string[] = [];
+        if (media.fileSize) meta.push(`${(media.fileSize / 1024 / 1024).toFixed(1)}MB`);
+        meta.push('download failed');
+        mediaText = `[사진: ${meta.join(', ')}]`;
       }
     } else {
       try {
@@ -566,7 +569,11 @@ export async function mediaHandler(ctx: Context): Promise<void> {
         mediaText = `[${label}: ${savedPath}]`;
       } catch {
         const label = (await import('./media-types.js')).MEDIA_LABELS[media.mediaType];
-        mediaText = `[${label}]`;
+        const meta: string[] = [];
+        if (media.originalFileName) meta.push(media.originalFileName);
+        if (media.fileSize) meta.push(`${(media.fileSize / 1024 / 1024).toFixed(1)}MB`);
+        meta.push('download failed');
+        mediaText = `[${label}: ${meta.join(', ')}]`;
       }
     }
     const fullText = rawCaption ? `${mediaText}\n${rawCaption}` : mediaText;
@@ -635,7 +642,15 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     );
   } catch (err) {
     logger.error({ err, userId, mediaType: media.mediaType }, 'Failed to download file');
-    await ctx.reply('\u274C 파일 다운로드에 실패했습니다.');
+    // Still send metadata to Claude so it knows what was sent
+    const label = MEDIA_LABELS[media.mediaType];
+    const meta: string[] = [];
+    if (media.originalFileName) meta.push(media.originalFileName);
+    if (media.fileSize) meta.push(`${(media.fileSize / 1024 / 1024).toFixed(1)}MB`);
+    meta.push('download failed — exceeds Bot API 20MB limit');
+    const fallbackText = `[${label} 수신: ${meta.join(', ')}]`;
+    const text = caption ? `${fallbackText}\n${caption}` : fallbackText;
+    queueOrLaunch(userId, chatId, text, ctx.api);
     return;
   }
 

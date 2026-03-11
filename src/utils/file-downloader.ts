@@ -55,8 +55,9 @@ export async function downloadTelegramFile(
 
   await writeFile(savePath, buffer);
 
-  const relativePath = './' + path.relative(workingDir, savePath).replace(/\\/g, '/');
-  logger.info({ relativePath, size: buffer.length }, 'File downloaded successfully');
+  const projectName = path.basename(workingDir);
+  const displayPath = `${projectName}/user_send/${fileName}`;
+  logger.info({ displayPath, size: buffer.length }, 'File downloaded successfully');
 
-  return relativePath;
+  return displayPath;
 }

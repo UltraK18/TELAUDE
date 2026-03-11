@@ -1,13 +1,13 @@
 # Tool Display Settings
 
-텔레그램에 표시되는 도구 호출 메시지의 숨김/아이콘을 설정한다.
+Configure visibility and icons for tool call messages displayed in Telegram.
 
-## 설정 파일
+## Configuration Files
 
-프로젝트별 설정이 전역보다 우선한다.
+Project-level settings take priority over global settings.
 
-- **전역**: `~/.telaude/telaude-mcp-settings.json`
-- **프로젝트**: `<cwd>/.telaude/telaude-mcp-settings.json` (우선)
+- **Global**: `~/.telaude/telaude-mcp-settings.json`
+- **Project**: `<cwd>/.telaude/telaude-mcp-settings.json` (takes priority)
 
 ```jsonc
 {
@@ -19,30 +19,30 @@
 }
 ```
 
-## 옵션
+## Options
 
 ### hidden
 
-`true`로 설정하면 해당 도구의 호출이 텔레그램 도구 메시지에 표시되지 않는다.
+Set to `true` to hide the tool's invocations from the Telegram tool message.
 
 ```jsonc
 { "hidden": true }
 ```
 
-### icon (유니코드 이모지)
+### icon (Unicode Emoji)
 
-도구 아이콘을 일반 유니코드 이모지로 변경한다.
+Change the tool's icon to a standard Unicode emoji.
 
 ```jsonc
 { "icon": "🚀" }
 ```
 
-### icon (프리미엄 커스텀 이모지)
+### icon (Premium Custom Emoji)
 
-텔레그램 프리미엄 커스텀 이모지(애니메이션 이모지 포함)를 사용한다.
+Use a Telegram Premium custom emoji (including animated emoji).
 
-- `emojiId`: 텔레그램 커스텀 이모지 ID
-- `fallback`: 프리미엄이 아닌 클라이언트에서 표시될 유니코드 이모지
+- `emojiId`: Telegram custom emoji ID
+- `fallback`: Unicode emoji displayed for non-Premium clients
 
 ```jsonc
 { "icon": { "emojiId": "5206186681346039457", "fallback": "🧑‍🎓" } }
@@ -50,22 +50,22 @@
 
 ### hidden + icon
 
-둘 다 설정 가능하다. `hidden: true`이면 아이콘은 무시된다.
+Both can be set simultaneously. If `hidden: true`, the icon is ignored.
 
-## MCP 도구 매칭
+## MCP Tool Matching
 
-MCP 도구는 접미사로 매칭된다:
+MCP tools are matched by suffix:
 
-- 설정에 `"ask"`를 등록하면 → `mcp__telaude__ask`, `mcp__other__ask` 모두 매칭
-- 정확한 이름 `"mcp__telaude__ask"`도 사용 가능 (exact match 우선)
+- Setting `"ask"` in the config matches both `mcp__telaude__ask` and `mcp__other__ask`
+- Exact names like `"mcp__telaude__ask"` can also be used (exact match takes priority)
 
-## 적용 시점
+## Hot-Reload Behavior
 
-- 파일 변경 시 **핫리로드** (mtime 비교, 재시작 불필요)
-- cwd 변경 시 프로젝트 설정도 자동 재감지
+- Settings are **hot-reloaded** on file changes (detected via mtime comparison, no restart required)
+- When the working directory (cwd) changes, project-level settings are automatically re-detected
 
-## 오류 처리
+## Error Handling
 
-- 파일이 없으면 → 기본 동작 (모든 도구 표시, 내장 아이콘 사용)
-- JSON 파싱 실패 → 경고 로그 출력, 기본 동작으로 fallback
-- `tools` 키가 없거나 잘못된 타입 → 기본 동작으로 fallback
+- **File not found** — falls back to default behavior (all tools visible, built-in icons used)
+- **JSON parse error** — logs a warning, falls back to default behavior
+- **Missing or invalid `tools` key** — falls back to default behavior

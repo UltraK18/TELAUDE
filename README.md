@@ -1,115 +1,121 @@
 # Telaude
 
-Telegram에서 Claude Code CLI를 원격 제어하는 봇.
+A Telegram bot that remotely controls the Claude Code CLI.
 
-텔레그램으로 메시지를 보내면, 서버에서 `claude -p` 프로세스를 spawn하여 결과를 스트리밍한다.
+Send a message via Telegram, and the server spawns a `claude -p` process, streaming the results back to your chat in real time.
 
 ## Features
 
-- **실시간 스트리밍** — Claude 응답을 텔레그램에 실시간으로 표시
-- **세션 관리** — 대화 이어가기, 세션 목록, 복원
-- **도구 호출 시각화** — Claude가 사용하는 도구를 텔레그램에 실시간 표시
-- **MCP 서버** — 스케줄링, 파일 전송, 사용자 질문 등 MCP 도구 제공
-- **외부 MCP 연동** — 다른 MCP 서버가 Telaude의 텔레그램 전송 기능을 사용 가능
-- **cron/스케줄** — 예약 작업 실행 (반복/일회성)
-- **Poke** — 무응답 시 자동 follow-up
-- **이모지 리액션** — 양방향 리액션 (유저→봇 메시지, 봇→유저 메시지)
-- **보안** — 비밀번호 인증 + OS 네이티브 암호화 (.env)
+- **Real-time Streaming** — Claude responses are streamed live to Telegram with incremental edits
+- **Session Management** — Resume conversations, list sessions, rename them, and restore previous context
+- **Tool Call Visualization** — See which tools Claude is using in real time, with counters and icons
+- **MCP Server** — Built-in MCP tools for scheduling, file sending, user prompts, and more
+- **External MCP Integration** — Other MCP servers can use Telaude's Telegram messaging capabilities
+- **Cron / Scheduling** — Run scheduled tasks (recurring cron or one-shot)
+- **Poke** — Automatic follow-up when Claude goes silent
+- **Emoji Reactions** — Bidirectional reactions (user-to-bot and bot-to-user messages)
+- **Link Preview** — Auto-fetches context for URLs shared in messages (X/Twitter via fxtwitter, YouTube via noembed, generic sites via OG meta tags)
+- **Forward Message Support** — Forwarded messages are collected and sent as context to Claude
+- **TUI Dashboard** — Terminal dashboard displaying session info, schedule status, logs, and settings
+- **Settings TUI** — Keyboard-only settings panel with scroll support for toggling MCP servers, tools, and model selection
+- **File Path Validation** — send-file, send-photo, and zip-and-send routes validate paths within allowed boundaries
+- **Security** — Password authentication + OS-native encryption (Windows DPAPI / macOS Keychain / Linux machine-id)
 
 ## Documentation
 
-자세한 사용법과 설정은 **[docs/index.md](./docs/index.md)** 를 참고한다.
+For detailed usage and configuration, see **[docs/index.md](./docs/index.md)**.
 
 ## Quick Start
 
 ```bash
-# 의존성 설치
+# Install dependencies
 npm install
 
-# 첫 실행 (셋업 위저드가 .env 생성을 안내)
+# First run (setup wizard guides you through .env creation)
 npm run dev
 ```
 
-셋업 위저드가 다음을 물어본다:
-1. Telegram Bot Token ([@BotFather](https://t.me/BotFather)에서 생성)
-2. 인증 비밀번호
-3. Claude CLI 인증 상태 확인
+The setup wizard will ask for:
+1. Telegram Bot Token (create one with [@BotFather](https://t.me/BotFather))
+2. Authentication password
+3. Claude CLI auth status verification
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `/start` | 봇 시작 안내 |
-| `/auth <pw>` | 비밀번호 인증 |
-| `/help` | 명령어 목록 |
-| `/new` | 새 세션 시작 |
-| `/stats` | 세션 정보 + 토큰 사용량 |
-| `/resume` | 최근 세션 목록 (재개/삭제) |
-| `/stop` | 현재 처리 중단 |
-| `/cd <path>` | 작업 디렉토리 변경 |
-| `/pwd` | 현재 디렉토리 |
-| `/model <name>` | 모델 변경 |
-| `/budget <usd>` | 예산 설정 |
-| `/compact [instructions]` | 대화 컨텍스트 압축 |
-| `/projects` | 허용된 프로젝트 경로 목록 |
+| `/start` | Bot welcome message |
+| `/auth <pw>` | Authenticate with password |
+| `/help` | List available commands |
+| `/new` | Start a new session |
+| `/stats` | Session info + token usage |
+| `/resume` | List recent sessions (resume / delete) |
+| `/stop` | Stop current processing |
+| `/stop <text>` | Stop and send new input |
+| `/rename <name>` | Rename the current session (syncs with Claude Code JSONL) |
+| `/compact [instructions]` | Compact conversation context |
+| `/cd <path>` | Change working directory |
+| `/pwd` | Show current directory |
+| `/projects` | List allowed project paths |
+| `/model [name]` | View or change the model |
+| `/budget [amount]` | View or set token budget |
 
 ## Build & Run
 
 ```bash
-npm run build     # TypeScript 빌드
-npm start         # 프로덕션 실행
-npm run dev       # 개발 모드 (tsx, stdin 가능)
-npm run dev:watch # 개발 모드 (tsx watch)
+npm run build     # TypeScript build
+npm start         # Production
+npm run dev       # Development (tsx, stdin supported)
+npm run dev:watch # Development (tsx watch, auto-reload)
 ```
 
 ## External MCP Integration
 
-Telaude는 내부 HTTP API를 통해 **외부 MCP 서버에도 텔레그램 전송 기능을 제공**한다.
+Telaude exposes an internal HTTP API that **lets external MCP servers send messages through Telegram**.
 
-Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 **모든 외부 MCP 서버에 다음 환경변수를 자동 주입**한다:
+When Telaude spawns a Claude CLI process, it injects the following environment variables into **all external MCP servers** via `--mcp-config`:
 
-| 변수 | 설명 |
-|------|------|
-| `TELAUDE_API_URL` | 내부 API 주소 (`http://127.0.0.1:19816`) |
-| `TELAUDE_API_TOKEN` | 요청 인증 토큰 (런타임 생성) |
-| `TELAUDE_USER_ID` | 텔레그램 유저 ID |
+| Variable | Description |
+|----------|-------------|
+| `TELAUDE_API_URL` | Internal API address (`http://127.0.0.1:19816`) |
+| `TELAUDE_API_TOKEN` | Request auth token (generated at runtime) |
+| `TELAUDE_USER_ID` | Telegram user ID |
 
 ### Available Endpoints
 
 | Endpoint | Body | Description |
 |----------|------|-------------|
-| `POST /mcp/send-photo` | `{ path }` | 이미지 전송 |
-| `POST /mcp/send-file` | `{ path }` | 파일 전송 |
-| `POST /mcp/send-sticker` | `{ sticker_id }` | 스티커 전송 (Telegram file_id) |
-| `POST /mcp/zip-and-send` | `{ dir }` | 디렉토리 zip 후 전송 |
-| `POST /mcp/ask` | `{ question, choices? }` | 사용자에게 질문 |
-| `POST /mcp/set-reaction` | `{ emoji }` | 유저의 최근 메시지에 이모지 리액션 |
-| `POST /mcp/pin-message` | `{}` | 메시지 고정 |
-| `POST /mcp/unpin-message` | `{}` | 고정 해제 |
+| `POST /mcp/send-photo` | `{ path }` | Send an image file (absolute path) |
+| `POST /mcp/send-file` | `{ path }` | Send a file (absolute path) |
+| `POST /mcp/send-sticker` | `{ sticker_id }` | Send a sticker (Telegram file_id) |
+| `POST /mcp/zip-and-send` | `{ dir }` | Zip a directory and send it |
+| `POST /mcp/ask` | `{ question, choices? }` | Ask the user a question (supports inline keyboard choices) |
+| `POST /mcp/set-reaction` | `{ emoji }` | React to the user's latest message with an emoji |
+| `POST /mcp/pin-message` | `{}` | Pin the bot's latest message |
+| `POST /mcp/unpin-message` | `{}` | Unpin the pinned message |
 
 ### Tool Display Settings
 
-설정 파일로 도구의 표시 여부와 아이콘을 설정할 수 있다. 프로젝트별 설정이 전역보다 우선한다.
+Configure tool visibility and icons via settings files. Project-level settings override global ones.
 
-- **전역**: `~/.telaude/telaude-mcp-settings.json`
-- **프로젝트**: `<cwd>/.telaude/telaude-mcp-settings.json` (우선)
+- **Global**: `~/.telaude/telaude-mcp-settings.json`
+- **Project**: `<cwd>/.telaude/telaude-mcp-settings.json` (takes priority)
 
 ```jsonc
 {
   "tools": {
-    "yvonne_selfie": { "hidden": true },
-    "yvonne_sticker": { "hidden": true },
+    "hidden_tool": { "hidden": true },
     "some_tool": { "icon": "🚀" },
     "fancy_tool": { "icon": { "emojiId": "5206186681346039457", "fallback": "🧑‍🎓" } }
   }
 }
 ```
 
-- `hidden: true` — 텔레그램 도구 호출 메시지에서 숨김
-- `icon` (문자열) — 유니코드 이모지로 아이콘 변경
-- `icon` (객체) — 텔레그램 프리미엄 커스텀 이모지 (emojiId + fallback)
-- MCP 도구는 접미사로 매칭 (`mcp__server__tool` → `tool`)
-- 파일 변경 시 핫리로드 (재시작 불필요)
+- `hidden: true` — Hide the tool from Telegram tool-call messages
+- `icon` (string) — Override the tool icon with a Unicode emoji
+- `icon` (object) — Use a Telegram Premium custom emoji (`emojiId` + `fallback`)
+- MCP tools are matched by suffix (`mcp__server__tool` matches `tool`)
+- Hot-reloads on file change (no restart needed)
 
 ### Usage Example
 
@@ -125,7 +131,7 @@ const res = await fetch(process.env.TELAUDE_API_URL + '/mcp/send-photo', {
 });
 ```
 
-Telaude가 Claude CLI를 spawn할 때 `--mcp-config`에 포함된 모든 MCP 서버의 env에 `TELAUDE_*` 변수를 자동 주입한다. MCP 서버 자체의 env(예: `GOOGLE_API_KEY`)는 보존된다. 로컬 단독 실행 시에는 환경변수가 없으므로 `isTelaudeAvailable()` 같은 graceful fallback을 구현하면 된다.
+Telaude automatically injects `TELAUDE_*` environment variables into all MCP servers listed in `--mcp-config` when spawning Claude CLI. Each MCP server's own env vars (e.g., `GOOGLE_API_KEY`) are preserved. For standalone local usage without Telaude, implement a graceful fallback using `isTelaudeAvailable()`.
 
 ## Architecture
 
@@ -143,4 +149,4 @@ Telegram Chat
 
 ## License
 
-Private
+MIT

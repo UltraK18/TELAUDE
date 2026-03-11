@@ -1,20 +1,20 @@
 # External MCP Integration
 
-Telaude는 내부 HTTP API (`127.0.0.1:19816`)를 통해 외부 MCP 서버에도 텔레그램 전송 기능을 제공한다.
+Telaude provides Telegram messaging capabilities to external MCP servers through its internal HTTP API (`127.0.0.1:19816`).
 
-## 환경변수 (자동 주입)
+## Environment Variables (Auto-Injected)
 
-Telaude가 Claude CLI를 spawn할 때, `--mcp-config`를 통해 모든 외부 MCP 서버의 env에 아래 변수를 자동 주입한다:
+When Telaude spawns the Claude CLI, it automatically injects the following variables into every external MCP server's environment via `--mcp-config`:
 
-| 변수 | 설명 |
-|------|------|
-| `TELAUDE_API_URL` | 내부 API 주소 (`http://127.0.0.1:19816`) |
-| `TELAUDE_API_TOKEN` | 요청 인증 토큰 (런타임 생성, 프로세스 종료 시 소멸) |
-| `TELAUDE_USER_ID` | 텔레그램 유저 ID |
+| Variable | Description |
+|----------|-------------|
+| `TELAUDE_API_URL` | Internal API address (`http://127.0.0.1:19816`) |
+| `TELAUDE_API_TOKEN` | Request authentication token (generated at runtime, destroyed on process exit) |
+| `TELAUDE_USER_ID` | Telegram user ID |
 
-## 사용 가능한 엔드포인트
+## Available Endpoints
 
-모든 요청에는 다음 헤더가 필요하다:
+All requests require the following headers:
 
 ```
 Content-Type: application/json
@@ -22,21 +22,21 @@ X-Telaude-Token: <TELAUDE_API_TOKEN>
 X-Telaude-User-Id: <TELAUDE_USER_ID>
 ```
 
-| Endpoint | Body | 설명 |
-|----------|------|------|
-| `POST /mcp/send-photo` | `{ path: string }` | 이미지 파일 전송 (절대 경로) |
-| `POST /mcp/send-file` | `{ path: string }` | 일반 파일 전송 (절대 경로) |
-| `POST /mcp/send-sticker` | `{ sticker_id: string }` | 스티커 전송 (Telegram file_id) |
-| `POST /mcp/zip-and-send` | `{ dir: string }` | 디렉토리 zip 압축 후 전송 |
-| `POST /mcp/ask` | `{ question: string, choices?: string[] }` | 사용자에게 질문하고 답변 대기 |
-| `POST /mcp/set-reaction` | `{ emoji: string }` | 유저의 최근 메시지에 이모지 리액션 |
-| `POST /mcp/pin-message` | `{}` | 최근 봇 메시지 고정 |
-| `POST /mcp/unpin-message` | `{}` | 고정 메시지 해제 |
+| Endpoint | Body | Description |
+|----------|------|-------------|
+| `POST /mcp/send-photo` | `{ path: string }` | Send an image file (absolute path) |
+| `POST /mcp/send-file` | `{ path: string }` | Send a file (absolute path) |
+| `POST /mcp/send-sticker` | `{ sticker_id: string }` | Send a sticker (Telegram file_id) |
+| `POST /mcp/zip-and-send` | `{ dir: string }` | Zip a directory and send the archive |
+| `POST /mcp/ask` | `{ question: string, choices?: string[] }` | Ask the user a question and wait for a response |
+| `POST /mcp/set-reaction` | `{ emoji: string }` | Set an emoji reaction on the user's most recent message |
+| `POST /mcp/pin-message` | `{}` | Pin the bot's most recent message |
+| `POST /mcp/unpin-message` | `{}` | Unpin the pinned message |
 
-## 호출 예시
+## Usage Examples
 
 ```typescript
-// MCP 서버 내부에서 Telaude API 사용
+// Using the Telaude API from within an MCP server
 const apiUrl = process.env.TELAUDE_API_URL;
 const headers = {
   'Content-Type': 'application/json',
@@ -44,30 +44,30 @@ const headers = {
   'X-Telaude-User-Id': process.env.TELAUDE_USER_ID!,
 };
 
-// 이미지 전송
+// Send an image
 await fetch(`${apiUrl}/mcp/send-photo`, {
   method: 'POST', headers,
   body: JSON.stringify({ path: '/tmp/image.png' }),
 });
 
-// 스티커 전송
+// Send a sticker
 await fetch(`${apiUrl}/mcp/send-sticker`, {
   method: 'POST', headers,
   body: JSON.stringify({ sticker_id: 'CAACAgIAAxkB...' }),
 });
 
-// 사용자에게 질문 (버튼 선택지 포함)
+// Ask the user a question (with button choices)
 const res = await fetch(`${apiUrl}/mcp/ask`, {
   method: 'POST', headers,
-  body: JSON.stringify({ question: '어떤 옵션?', choices: ['A', 'B', 'C'] }),
+  body: JSON.stringify({ question: 'Which option?', choices: ['A', 'B', 'C'] }),
 });
 const { answer } = await res.json();
 ```
 
-## 연동 조건
+## Integration Requirements
 
-- Telaude 위에서 구동되는 Claude Code 프로세스가 spawn한 MCP 서버에서만 사용 가능
-- 로컬 단독 테스트 시에는 `TELAUDE_API_TOKEN`이 없음 → graceful fallback 권장
+- Only available from MCP servers spawned by Claude Code processes running under Telaude
+- When testing locally without Telaude, `TELAUDE_API_TOKEN` will not be set — graceful fallback is recommended
 
 ```typescript
 function isTelaudeAvailable(): boolean {
@@ -75,8 +75,8 @@ function isTelaudeAvailable(): boolean {
 }
 ```
 
-## 보안
+## Security
 
-- **localhost 전용**: `127.0.0.1`에만 바인딩, 외부 접근 불가
-- **런타임 토큰**: Telaude 프로세스 시작 시 생성, 종료 시 소멸 (디스크 저장 없음)
-- MCP 서버의 기존 env (예: `GOOGLE_API_KEY`)는 보존됨
+- **Localhost only**: Binds to `127.0.0.1` exclusively — no external access possible
+- **Runtime tokens**: Generated when the Telaude process starts, destroyed on exit (never persisted to disk)
+- Existing MCP server environment variables (e.g., `GOOGLE_API_KEY`) are preserved

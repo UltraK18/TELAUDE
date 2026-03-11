@@ -13,3 +13,4 @@ user_send/
 POKE.md.disabled
 *.txt
 CLAUDE.md
+.claude/

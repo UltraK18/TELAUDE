@@ -267,7 +267,7 @@ async function fetchOgPreview(url: string): Promise<string | null> {
     if (ogDesc?.trim()) {
       // Truncate long descriptions
       const desc = ogDesc.trim().replace(/\s+/g, ' ');
-      lines.push(desc.length > 200 ? desc.slice(0, 197) + '...' : desc);
+      lines.push(desc.length > 400 ? desc.slice(0, 397) + '...' : desc);
     }
 
     return lines.join('\n');

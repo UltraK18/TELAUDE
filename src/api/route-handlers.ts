@@ -68,6 +68,33 @@ function persistChatId(chatId: number): void {
   }
 }
 
+/** Validate that a file path is within allowed boundaries (workingDir, homedir, tmpdir) */
+function validateFilePath(filePath: string, userId: number): string {
+  const resolved = path.resolve(filePath);
+  const up = getUserProcess(userId);
+  const allowed = [
+    up?.workingDir,
+    os.homedir(),
+    os.tmpdir(),
+  ].filter(Boolean) as string[];
+
+  const normalized = resolved.replace(/\\/g, '/').toLowerCase();
+  const isAllowed = allowed.some(root => {
+    const normalizedRoot = path.resolve(root).replace(/\\/g, '/').toLowerCase();
+    return normalized.startsWith(normalizedRoot + '/') || normalized === normalizedRoot;
+  });
+
+  if (!isAllowed) {
+    throw new Error(`Access denied: path "${filePath}" is outside allowed directories`);
+  }
+  return resolved;
+}
+
+/** Validate that a directory path is within allowed boundaries */
+function validateDirPath(dirPath: string, userId: number): string {
+  return validateFilePath(dirPath, userId);
+}
+
 /**
  * Register all route handlers. Must be called after bot is created.
  * @param api - grammY Bot API instance for sending messages
@@ -105,7 +132,7 @@ export function registerAllRoutes(api: Api): void {
   registerRoute('/mcp/send-file', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);
-    const filePath = body.path as string;
+    const filePath = validateFilePath(body.path as string, userId);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -121,7 +148,7 @@ export function registerAllRoutes(api: Api): void {
   registerRoute('/mcp/send-photo', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);
-    const filePath = body.path as string;
+    const filePath = validateFilePath(body.path as string, userId);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -163,7 +190,7 @@ export function registerAllRoutes(api: Api): void {
   registerRoute('/mcp/zip-and-send', async (body) => {
     const userId = body._userId as number;
     const chatId = getChatId(userId);
-    const dirPath = body.dir as string;
+    const dirPath = validateDirPath(body.dir as string, userId);
 
     if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
       throw new Error(`Directory not found: ${dirPath}`);

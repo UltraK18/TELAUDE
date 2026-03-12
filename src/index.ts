@@ -3,6 +3,7 @@ import path from 'path';
 // from activating when NODE_ENV leaks from the parent terminal session
 const isBunExe = /\.exe$/i.test(process.execPath) && !process.execPath.toLowerCase().includes('bun');
 if (isBunExe) process.env.NODE_ENV = 'production';
+process.title = 'TELAUDE';
 import { needsSetup, runSetup } from './setup.js';
 
 // MCP server mode: when invoked as `TELAUDE.exe --mcp`, run MCP server only

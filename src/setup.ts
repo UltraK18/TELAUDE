@@ -30,6 +30,21 @@ interface ClaudeAuthStatus {
   subscriptionType?: string;
 }
 
+function getClaudeVersion(): string | null {
+  try {
+    const output = execSync('claude --version', {
+      encoding: 'utf-8',
+      timeout: 10000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    // Output format: "2.1.74 (Claude Code)"
+    const match = output.trim().match(/^([\d.]+)/);
+    return match ? match[1] : null;
+  } catch {
+    return null;
+  }
+}
+
 function checkClaudeAuth(): ClaudeAuthStatus {
   try {
     const output = execSync('claude auth status', {
@@ -60,6 +75,33 @@ export async function runSetup(): Promise<void> {
 
   // Step 1: Claude CLI auth
   print('[1/3] Checking Claude CLI auth...');
+
+  const cliVersion = getClaudeVersion();
+  if (!cliVersion) {
+    print('');
+    print('\u2716 Claude CLI not found.');
+    print('');
+    print('  Install Claude Code first:');
+    print('  $ npm install -g @anthropic-ai/claude-code');
+    print('');
+    process.exit(1);
+  }
+
+  // claude auth status requires v2.1.41+
+  const [major, minor, patch] = cliVersion.split('.').map(Number);
+  const versionNum = major * 10000 + minor * 100 + (patch || 0);
+  const minVersion = 2 * 10000 + 1 * 100 + 41; // 2.1.41
+
+  if (versionNum < minVersion) {
+    print('');
+    print(`\u2716 Claude CLI version ${cliVersion} is too old.`);
+    print('');
+    print('  Telaude requires Claude Code v2.1.41 or later.');
+    print('  $ npm update -g @anthropic-ai/claude-code');
+    print('');
+    process.exit(1);
+  }
+
   const auth = checkClaudeAuth();
 
   if (!auth.loggedIn) {

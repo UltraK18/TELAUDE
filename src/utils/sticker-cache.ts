@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import sharp from 'sharp';
+import { Transformer } from '@napi-rs/image';
 
 const CACHE_DIR = path.join(os.homedir(), '.telaude', 'data', 'sticker-cache');
 const CACHE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -37,10 +37,8 @@ export async function cacheStickerTo(fileUniqueId: string, webpBuffer: Buffer, d
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   const outPath = path.join(dir, `${fileUniqueId}.jpg`);
 
-  await sharp(webpBuffer)
-    .resize(300, 300, { fit: 'inside' })
-    .jpeg({ quality: 80 })
-    .toFile(outPath);
+  const jpgBuf = await new Transformer(webpBuffer).resize(300, 300).jpeg(80);
+  fs.writeFileSync(outPath, jpgBuf);
 
   return outPath;
 }
@@ -52,10 +50,8 @@ export async function cacheSticker(fileUniqueId: string, webpBuffer: Buffer): Pr
   ensureCacheDir();
   const cachePath = getCachePath(fileUniqueId);
 
-  await sharp(webpBuffer)
-    .resize(200, 200, { fit: 'inside' })
-    .jpeg({ quality: 80 })
-    .toFile(cachePath);
+  const jpgBuf = await new Transformer(webpBuffer).resize(200, 200).jpeg(80);
+  fs.writeFileSync(cachePath, jpgBuf);
 
   return cachePath;
 }

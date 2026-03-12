@@ -15,6 +15,7 @@
   "dependencies": {
     "@grammyjs/auto-retry": "^2.0.2",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@napi-rs/image": "^1.12.0",
     "@napi-rs/keyring": "^1.2.0",
     "@primno/dpapi": "^2.0.1",
     "archiver": "^7.0.1",
@@ -25,7 +26,6 @@
     "grammy": "^1.30.0",
     "ignore": "^7.0.5",
     "pino": "^9.5.0",
-    "sharp": "^0.34.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

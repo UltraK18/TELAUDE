@@ -68,7 +68,7 @@ bun run build        # TypeScript build
 bun start            # Production
 bun run dev          # Development (stdin supported)
 bun run dev:watch    # Development (auto-reload, no stdin)
-bun run build:exe    # Compile single executable (telaude.exe)
+bun run build:exe    # Compile single executable (TELAUDE.exe)
 ```
 
 ## External MCP Integration

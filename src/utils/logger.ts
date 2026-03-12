@@ -9,14 +9,13 @@ if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'bot.log');
 const isDev = process.env.NODE_ENV === 'development';
 
-const targets: pino.TransportTargetOptions[] = [
-  { target: 'pino/file', options: { destination: logFile }, level: 'info' },      // always log to file
-];
+// Use stream mode instead of transport mode — transports require
+// pino/lib/worker.js on filesystem, which doesn't exist in compiled exe
+const logStream = fs.createWriteStream(logFile, { flags: 'a' });
 
 export const logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: { targets },
-});
+}, logStream);
 
 function tsRaw(): string {
   const d = new Date();

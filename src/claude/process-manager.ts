@@ -111,12 +111,21 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   }
 
   // MCP config for telaude tools
-  // Detect dev (tsx → src/) vs prod (node → dist/) and pick correct MCP entry
-  const jsPath = path.resolve(__dirname, '..', 'mcp-server', 'index.js');
-  const tsPath = jsPath.replace(/\.js$/, '.ts');
-  const useTs = !fs.existsSync(jsPath) && fs.existsSync(tsPath);
-  const mcpCommand = useTs ? 'npx' : 'node';
-  const mcpArgs = useTs ? ['tsx', tsPath] : [jsPath];
+  // Detect runtime: compiled exe uses itself with --mcp flag, dev uses bun + source
+  const isBunExe = !!process.execPath && /\.exe$/i.test(process.execPath) && !process.execPath.includes('bun');
+  let mcpCommand: string;
+  let mcpArgs: string[];
+  if (isBunExe) {
+    // Single binary mode: re-invoke self with --mcp
+    mcpCommand = process.execPath;
+    mcpArgs = ['--mcp'];
+  } else {
+    // Dev/source mode: bun run the TS source directly
+    const tsPath = path.resolve(__dirname, '..', 'mcp-server', 'index.ts');
+    const jsPath = tsPath.replace(/\.ts$/, '.js');
+    mcpCommand = 'bun';
+    mcpArgs = [fs.existsSync(tsPath) ? tsPath : jsPath];
+  }
 
   // Shared env for Telaude internal API — injected into all MCP servers
   const telaudeEnv = {

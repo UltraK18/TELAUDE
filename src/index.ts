@@ -1,6 +1,12 @@
 import path from 'path';
 import { needsSetup, runSetup } from './setup.js';
 
+// MCP server mode: when invoked as `TELAUDE.exe --mcp`, run MCP server only
+if (process.argv.includes('--mcp')) {
+  await import('./mcp-server/index.js');
+  // MCP server runs until parent process kills it — never reaches main()
+} else {
+
 async function main(): Promise<void> {
   // First-run setup: if no .env, launch interactive wizard
   const isFirstRun = needsSetup();
@@ -387,3 +393,5 @@ main().catch((err) => {
   console.error('Fatal error:', err);
   process.exit(1);
 });
+
+} // end of else (non-MCP mode)

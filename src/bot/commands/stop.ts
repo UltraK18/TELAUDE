@@ -48,6 +48,9 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  // Write reload flag without user message (silent — no stdin injection)
+  fs.writeFileSync(RELOAD_FLAG, String(userId));
+
   await ctx.reply('Restarting bot process...');
   setTimeout(() => process.exit(0), 500);
 }

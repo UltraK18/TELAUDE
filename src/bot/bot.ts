@@ -10,6 +10,7 @@ import { messageHandler, mediaHandler } from './handlers/message.js';
 import { callbackHandler } from './handlers/callback.js';
 import { reactionHandler } from './handlers/reaction.js';
 import { askInterceptor } from './middleware/ask-interceptor.js';
+import { staleUpdateFilter } from './middleware/stale-update-filter.js';
 import { logger } from '../utils/logger.js';
 
 export function createBot(): Bot {
@@ -22,6 +23,7 @@ export function createBot(): Bot {
   bot.catch(errorHandler);
 
   // Middleware chain
+  bot.use(staleUpdateFilter);
   bot.use(loggingMiddleware);
   bot.use(rateLimitMiddleware);
   bot.use(authMiddleware);

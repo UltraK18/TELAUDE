@@ -133,15 +133,15 @@ export async function runSetup(): Promise<void> {
 
     // Step 3: Generate auth code
     const authCode = generateAuthCode();
+    rl.close();
     print('');
     print('[3/3] Auth Code Generated');
     print('');
     print(`  Auth code: ${authCode}`);
     print('');
     print('  Send this code to your bot on Telegram to authenticate.');
+    print('  The bot will start automatically...');
     print('');
-    await ask(rl, 'Press Enter to start the bot...');
-    rl.close();
 
     // Ensure .telaude directory exists
     const telaudeDir = path.dirname(ENV_PATH);

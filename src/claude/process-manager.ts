@@ -112,7 +112,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
 
   // MCP config for telaude tools
   // Detect runtime: compiled exe uses itself with --mcp flag, dev uses bun + source
-  const isBunExe = !!process.execPath && /\.exe$/i.test(process.execPath) && !process.execPath.includes('bun');
+  const isBunExe = !!process.execPath && /\.exe$/i.test(process.execPath) && !process.execPath.toLowerCase().includes('bun');
   let mcpCommand: string;
   let mcpArgs: string[];
   if (isBunExe) {

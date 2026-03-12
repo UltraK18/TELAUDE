@@ -44,7 +44,10 @@ export async function historyCommand(ctx: Context): Promise<void> {
       lines.push(`<b>👤 User</b>`);
       lines.push(escapeHtml(truncate(t.user, MAX_USER_LEN)));
       lines.push(`<b>🤖 Claude</b>`);
-      lines.push(escapeHtml(truncate(t.assistant, MAX_ASST_LEN)));
+      const asstText = t.assistant === '(waiting…)'
+        ? '<i>(waiting…)</i>'
+        : escapeHtml(truncate(t.assistant, MAX_ASST_LEN));
+      lines.push(asstText);
     }
     text = lines.join('\n');
     if (text.length <= TG_MSG_LIMIT) break;

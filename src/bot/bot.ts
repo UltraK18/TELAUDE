@@ -78,7 +78,7 @@ export function createBot(): Bot {
     { command: 'history', description: 'Last 5 conversation turns' },
     { command: 'help', description: 'Command list' },
   ];
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env['NODE_ENV'] === 'development') {
     commands.push(
       { command: 'reload', description: 'Restart bot (notify Claude)' },
       { command: 'reload_sil', description: 'Restart bot (silent)' },

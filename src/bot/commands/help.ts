@@ -1,6 +1,6 @@
 import { type Context } from 'grammy';
 
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env['NODE_ENV'] === 'development';
 
 const HELP_TEXT = `<b>Telaude Commands</b>
 

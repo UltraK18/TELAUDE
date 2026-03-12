@@ -187,9 +187,10 @@ export function readConversationHistory(sessionId: string, workingDir: string, t
     // Pair: user message with first assistant text response
     const result: ConversationTurn[] = [];
     for (let i = 0; i < userMsgs.length; i++) {
-      if (assistantMsgs[i].length > 0) {
-        result.push({ user: userMsgs[i], assistant: assistantMsgs[i][0] });
-      }
+      result.push({
+        user: userMsgs[i],
+        assistant: assistantMsgs[i].length > 0 ? assistantMsgs[i][0] : '(waiting…)',
+      });
     }
 
     return result.slice(-turns);

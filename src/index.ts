@@ -1,8 +1,8 @@
 import path from 'path';
-// Force production mode in compiled exe — prevents dev-only features (reload, etc.)
-// from activating when NODE_ENV leaks from the parent terminal session
-const isBunExe = /\.exe$/i.test(process.execPath) && !process.execPath.toLowerCase().includes('bun');
-if (isBunExe) process.env.NODE_ENV = 'production';
+// Enforce production mode unless explicitly set to development by dev-loop
+// Use bracket notation to prevent Bun bundler from inlining NODE_ENV at build time
+const _env = process.env;
+if (_env['NODE_ENV'] !== 'development') _env['NODE_ENV'] = 'production';
 process.title = 'TELAUDE';
 import { needsSetup, runSetup } from './setup.js';
 
@@ -379,15 +379,15 @@ async function main(): Promise<void> {
 
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 
-      // Notify authorized users on dev restart
-      if (process.env.NODE_ENV === 'development') {
-        import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
-          for (const uid of getAuthorizedUserIds()) {
-            bot.api.sendMessage(getChatId(uid), '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
-          }
-        });
+      // Notify authorized users that bot is online
+      import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
+        for (const uid of getAuthorizedUserIds()) {
+          bot.api.sendMessage(getChatId(uid), '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
+        }
+      });
 
-        // Send reload notification to Claude session if /reload was used (not /reload_sil)
+      // Send reload notification to Claude session if /reload was used (dev only)
+      if (process.env['NODE_ENV'] === 'development') {
         import('./bot/commands/stop.js').then(({ consumeReloadFlag }) => {
           const flag = consumeReloadFlag();
           if (flag && flag.message !== '__silent__') {

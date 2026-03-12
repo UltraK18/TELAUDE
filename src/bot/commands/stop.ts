@@ -28,7 +28,7 @@ export async function stopCommand(ctx: Context): Promise<void> {
 
 
 export async function reloadCommand(ctx: Context): Promise<void> {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (process.env['NODE_ENV'] !== 'development') return;
   const userId = ctx.from?.id;
   if (!userId) return;
 
@@ -44,7 +44,7 @@ export async function reloadCommand(ctx: Context): Promise<void> {
 }
 
 export async function reloadSilentCommand(ctx: Context): Promise<void> {
-  if (process.env.NODE_ENV !== 'development') return;
+  if (process.env['NODE_ENV'] !== 'development') return;
   const userId = ctx.from?.id;
   if (!userId) return;
 

@@ -25,7 +25,7 @@ export function registerCommands(bot: Bot): void {
   bot.command('new', newCommand);
 
   bot.command('stop', stopCommand);
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env['NODE_ENV'] === 'development') {
     bot.command('reload', reloadCommand);
     bot.command('reload_sil', reloadSilentCommand);
   }

@@ -7,7 +7,7 @@ const logDir = path.join(os.homedir(), '.telaude', 'data');
 if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
 const logFile = path.join(logDir, 'bot.log');
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env['NODE_ENV'] === 'development';
 
 // Use stream mode instead of transport mode — transports require
 // pino/lib/worker.js on filesystem, which doesn't exist in compiled exe

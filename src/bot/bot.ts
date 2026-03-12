@@ -75,6 +75,7 @@ export function createBot(): Bot {
     { command: 'model', description: 'View/change model' },
     { command: 'budget', description: 'Set token budget (USD)' },
     { command: 'compact', description: 'Compress context' },
+    { command: 'history', description: 'Last 5 conversation turns' },
     { command: 'help', description: 'Command list' },
   ];
   if (process.env.NODE_ENV === 'development') {

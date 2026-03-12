@@ -9,6 +9,7 @@ import { modelCommand } from './model.js';
 import { budgetCommand } from './budget.js';
 import { statsCommand } from './status.js';
 import { compactCommand } from './compact.js';
+import { historyCommand } from './history.js';
 
 export function registerCommands(bot: Bot): void {
   bot.command('start', startCommand);
@@ -32,4 +33,5 @@ export function registerCommands(bot: Bot): void {
   bot.command('budget', budgetCommand);
   bot.command('stats', statsCommand);
   bot.command('compact', compactCommand);
+  bot.command('history', historyCommand);
 }

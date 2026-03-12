@@ -22,6 +22,24 @@ function encodeCwd(cwd: string): string {
 }
 
 /**
+ * Read the last N bytes of a file, split into complete lines.
+ * Discards the first (potentially incomplete) line.
+ */
+function readLastBytes(filePath: string, bytes: number): string[] {
+  const stat = fs.statSync(filePath);
+  const readSize = Math.min(bytes, stat.size);
+  const fd = fs.openSync(filePath, 'r');
+  const buf = Buffer.alloc(readSize);
+  fs.readSync(fd, buf, 0, readSize, stat.size - readSize);
+  fs.closeSync(fd);
+  const text = buf.toString('utf8');
+  const lines = text.split('\n').filter(l => l.trim());
+  // If we didn't read from the start, discard first (likely incomplete) line
+  if (readSize < stat.size && lines.length > 0) lines.shift();
+  return lines;
+}
+
+/**
  * Read the last N lines of a file efficiently (reads from end).
  */
 function readLastLines(filePath: string, maxLines: number): string[] {
@@ -114,6 +132,69 @@ export function writeCustomTitle(sessionId: string, customTitle: string | null, 
   } else {
     const record = JSON.stringify({ type: 'custom-title', customTitle, sessionId });
     fs.appendFileSync(filePath, record + '\n', 'utf-8');
+  }
+}
+
+export interface ConversationTurn {
+  user: string;
+  assistant: string;
+}
+
+/**
+ * Read the last N conversation turns from a session JSONL file.
+ * A turn = user text message + first assistant text response that follows.
+ * Skips tool_use/tool_result blocks, only includes human-readable text.
+ */
+export function readConversationHistory(sessionId: string, workingDir: string, turns: number = 5): ConversationTurn[] {
+  const encoded = encodeCwd(workingDir);
+  const filePath = path.join(os.homedir(), '.claude', 'projects', encoded, `${sessionId}.jsonl`);
+  if (!fs.existsSync(filePath)) return [];
+
+  try {
+    // Read last ~1MB of the file to capture enough turns (tool calls inflate size)
+    const lines = readLastBytes(filePath, 1024 * 1024);
+
+    // Collect user text messages and assistant text messages in order
+    const userMsgs: string[] = [];
+    const assistantMsgs: string[][] = []; // assistantMsgs[i] = texts after userMsgs[i]
+
+    for (const line of lines) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj.type === 'user' && obj.message?.role === 'user') {
+          const content = obj.message.content;
+          // Only plain text, skip tool_result arrays and system-injected messages
+          if (typeof content === 'string' && content.trim() && !content.startsWith('<')) {
+            userMsgs.push(content.trim());
+            assistantMsgs.push([]);
+          }
+        } else if (obj.type === 'assistant' && obj.message?.role === 'assistant' && userMsgs.length > 0) {
+          const content = obj.message.content;
+          if (Array.isArray(content)) {
+            const textParts = content
+              .filter((c: any) => c.type === 'text' && c.text)
+              .map((c: any) => c.text.trim())
+              .filter(Boolean);
+            if (textParts.length > 0) {
+              // Append to the most recent user's assistant responses
+              assistantMsgs[assistantMsgs.length - 1].push(textParts.join('\n'));
+            }
+          }
+        }
+      } catch { /* skip malformed lines */ }
+    }
+
+    // Pair: user message with first assistant text response
+    const result: ConversationTurn[] = [];
+    for (let i = 0; i < userMsgs.length; i++) {
+      if (assistantMsgs[i].length > 0) {
+        result.push({ user: userMsgs[i], assistant: assistantMsgs[i][0] });
+      }
+    }
+
+    return result.slice(-turns);
+  } catch {
+    return [];
   }
 }
 

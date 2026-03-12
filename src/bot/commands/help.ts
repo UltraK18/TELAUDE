@@ -19,6 +19,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 /new - New session
 /stop - Stop current task
 /clear - Clear conversation
+/history - Last 5 turns
 
 <b>Settings</b>
 /model [name] - View/change model

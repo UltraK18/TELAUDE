@@ -19,7 +19,7 @@
     "@napi-rs/keyring": "^1.2.0",
     "@primno/dpapi": "^2.0.1",
     "archiver": "^7.0.1",
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^3.0.3",
     "blessed": "^0.1.81",
     "croner": "^10.0.1",
     "dotenv": "^16.4.7",
@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^3.0.0",
     "@types/blessed": "^0.1.27",
     "@types/bun": "^1.2.0",
     "@types/node": "^22.10.0",

@@ -11,6 +11,12 @@ execSync(
   { cwd: root, stdio: 'inherit' }
 );
 
+console.log('[build] Scrubbing build paths...');
+execSync(
+  `python "${resolve(root, 'scripts', 'scrub-paths.py')}" "${resolve(root, 'TELAUDE.exe')}"`,
+  { cwd: root, stdio: 'inherit' }
+);
+
 console.log('[build] Applying icon...');
 execSync(
   `python "${resolve(root, 'scripts', 'apply-icon.py')}" "${resolve(root, 'TELAUDE.exe')}" "${resolve(root, 'TELAUDE.ico')}"`,

@@ -366,10 +366,10 @@ async function main(): Promise<void> {
           }
         });
 
-        // Send reload notification to Claude session if /reload was used
+        // Send reload notification to Claude session if /reload was used (not /reload_sil)
         import('./bot/commands/stop.js').then(({ consumeReloadFlag }) => {
           const flag = consumeReloadFlag();
-          if (flag) {
+          if (flag && flag.message !== '__silent__') {
             const stdin = flag.message
               ? `[The user has restarted the application]\nUser said: ${flag.message}`
               : '[The user has restarted the application]';

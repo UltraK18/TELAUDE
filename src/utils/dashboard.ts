@@ -52,11 +52,13 @@ let statusBar: blessed.Widgets.BoxElement | null = null;
 let startTime: Date | null = null;
 
 export function initDashboard(): void {
+  // Windows cmd.exe has no TERM env — set it so blessed can initialize
+  if (!process.env.TERM) process.env.TERM = 'xterm-256color';
+
   screen = blessed.screen({
     smartCSR: true,
     title: 'Telaude',
     fullUnicode: true,
-    terminal: 'xterm-256color',
   });
 
   // Top banner box

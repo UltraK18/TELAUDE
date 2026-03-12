@@ -7,7 +7,7 @@
   "scripts": {
     "postinstall": "bun scripts/patch-blessed.js",
     "build": "tsc",
-    "build:exe": "bun build --compile src/index.ts --outfile telaude.exe --external mock-aws-s3 --external aws-sdk --external nock --external @napi-rs/keyring --external term.js --external pty.js",
+    "build:exe": "bun build --compile src/index.ts --outfile TELAUDE.exe --icon TELAUDE.ico --external mock-aws-s3 --external aws-sdk --external nock --external @napi-rs/keyring --external term.js --external pty.js",
     "start": "bun src/index.ts",
     "dev": "bun scripts/dev-loop.mjs",
     "dev:watch": "cross-env NODE_ENV=development bun --watch src/index.ts"

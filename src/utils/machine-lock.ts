@@ -8,9 +8,13 @@
 import crypto from 'crypto';
 import os from 'os';
 import fs from 'fs';
-import { createRequire } from 'module';
 
-const require = createRequire(import.meta.url);
+// Native modules: loaded at top level so Bun's bundler can statically trace them.
+// Each is optional — only the current platform's module needs to exist at runtime.
+let Dpapi: any;
+let KeyringEntry: any;
+try { ({ Dpapi } = require('@primno/dpapi')); } catch {}
+try { ({ Entry: KeyringEntry } = require('@napi-rs/keyring')); } catch {}
 
 const ENC_HEADER = 'TELAUDE_ENC:';
 const ENC_HEADER_V2 = 'TELAUDE_ENCv2:';
@@ -23,7 +27,7 @@ interface CryptoBackend {
 }
 
 function getWindowsBackend(): CryptoBackend {
-  const { Dpapi } = require('@primno/dpapi');
+  if (!Dpapi) throw new Error('@primno/dpapi not available — required on Windows');
   return {
     encrypt(data: Buffer): Buffer {
       return Buffer.from(Dpapi.protectData(data, null, 'CurrentUser'));
@@ -39,13 +43,13 @@ function getWindowsBackend(): CryptoBackend {
 }
 
 function getMacBackend(): CryptoBackend {
-  const { Entry } = require('@napi-rs/keyring');
+  if (!KeyringEntry) throw new Error('@napi-rs/keyring not available — required on macOS');
   const SERVICE = 'com.telaude.env';
   const ACCOUNT = 'encryption-key';
 
   // Get or create a persistent AES key stored in macOS Keychain
   function getOrCreateKey(): Buffer {
-    const entry = new Entry(SERVICE, ACCOUNT);
+    const entry = new KeyringEntry(SERVICE, ACCOUNT);
     try {
       const existing = entry.getPassword();
       return Buffer.from(existing, 'base64');

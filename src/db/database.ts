@@ -1,19 +1,19 @@
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import path from 'path';
 import fs from 'fs';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
-let db: Database.Database;
+let db: Database;
 
-export function getDb(): Database.Database {
+export function getDb(): Database {
   if (!db) {
     throw new Error('Database not initialized. Call initDb() first.');
   }
   return db;
 }
 
-export function initDb(): Database.Database {
+export function initDb(): Database {
   const dbPath = path.resolve(config.db.path);
   const dbDir = path.dirname(dbPath);
 
@@ -22,15 +22,15 @@ export function initDb(): Database.Database {
   }
 
   db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
+  db.exec('PRAGMA journal_mode = WAL');
+  db.exec('PRAGMA foreign_keys = ON');
 
   migrate(db);
   logger.info({ dbPath }, 'Database initialized');
   return db;
 }
 
-function migrate(db: Database.Database): void {
+function migrate(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS auth_tokens (
       telegram_user_id INTEGER PRIMARY KEY,
@@ -81,7 +81,7 @@ function migrate(db: Database.Database): void {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_session_id ON sessions(session_id)`);
 
   // Add token columns if missing
-  const cols = db.pragma('table_info(sessions)') as { name: string }[];
+  const cols = db.query('PRAGMA table_info(sessions)').all() as { name: string }[];
   const colNames = new Set(cols.map(c => c.name));
   if (!colNames.has('total_input_tokens')) {
     db.exec('ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER DEFAULT 0');

@@ -147,8 +147,8 @@ export async function runSetup(): Promise<void> {
     // Reset DB auth (new .env = new auth code, old sessions invalid)
     const dbPath = path.join(os.homedir(), '.telaude', 'data', 'telaude.db');
     if (fs.existsSync(dbPath)) {
-      const Database = (await import('better-sqlite3')).default;
-      const db = Database(dbPath);
+      const { Database } = await import('bun:sqlite');
+      const db = new Database(dbPath);
       db.exec('UPDATE auth_tokens SET is_authorized = 0');
       db.close();
       print('\u2713 Auth reset (new credentials).');

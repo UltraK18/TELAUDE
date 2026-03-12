@@ -131,17 +131,9 @@ export async function runSetup(): Promise<void> {
       if (!botToken) print('Token is required.');
     }
 
-    // Step 3: Generate auth code
+    // Step 3: Generate auth code (displayed after bot comes online)
     const authCode = generateAuthCode();
     rl.close();
-    print('');
-    print('[3/3] Auth Code Generated');
-    print('');
-    print(`  Auth code: ${authCode}`);
-    print('');
-    print('  Send this code to your bot on Telegram to authenticate.');
-    print('  The bot will start automatically...');
-    print('');
 
     // Ensure .telaude directory exists
     const telaudeDir = path.dirname(ENV_PATH);

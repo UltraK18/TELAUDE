@@ -17,14 +17,7 @@ async function main(): Promise<void> {
   const isFirstRun = needsSetup();
   if (isFirstRun) {
     await runSetup();
-    // Restart process with clean terminal state for TUI
-    const { spawn } = await import('child_process');
-    const child = spawn(process.argv[0], process.argv.slice(1), {
-      stdio: 'inherit',
-      env: process.env,
-    });
-    child.on('exit', (code) => process.exit(code ?? 0));
-    return;
+    // Continue directly — no process restart needed since readline is already closed
   }
 
   // Now load .env into process.env (supports encrypted .env)
@@ -280,7 +273,7 @@ async function main(): Promise<void> {
   setOnChange(refreshScheduleDashboard);
 
   // Pre-load modules for initial dashboard display
-  const { getAuthorizedUserIds: getAuthIds } = await import('./db/auth-repo.js');
+  const { getAuthorizedUserIds: getAuthIds, setOnFirstAuth } = await import('./db/auth-repo.js');
   const { getActiveSession: getActive, getRecentSessions: getRecent } = await import('./db/session-repo.js');
   const { loadSettings: loadSets } = await import('./settings/settings-store.js');
   const { config: cfg } = await import('./config.js');
@@ -322,50 +315,67 @@ async function main(): Promise<void> {
   await bot.start({
     allowed_updates: ['message', 'callback_query', 'message_reaction'],
     onStart: (botInfo) => {
-      // Initialize TUI dashboard
-      initDashboard();
-      setDashboardOutput(dashboardLog, dashboardError);
+      const startTUI = () => {
+        // Initialize TUI dashboard
+        initDashboard();
+        setDashboardOutput(dashboardLog, dashboardError);
 
-      // Load last session from DB for initial dashboard display
-      const authIds = getAuthIds();
-      let lastDir = cfg.paths.defaultWorkingDir;
-      let lastModel = loadSets().model ?? cfg.claude.defaultModel;
-      let lastSessionId: string | null = null;
+        // Load last session from DB for initial dashboard display
+        const authIds = getAuthIds();
+        let lastDir = cfg.paths.defaultWorkingDir;
+        let lastModel = loadSets().model ?? cfg.claude.defaultModel;
+        let lastSessionId: string | null = null;
 
-      for (const uid of authIds) {
-        const active = getActive(uid);
-        if (active) {
-          lastDir = active.working_dir;
-          lastModel = active.model;
-          lastSessionId = active.session_id;
-          break;
+        for (const uid of authIds) {
+          const active = getActive(uid);
+          if (active) {
+            lastDir = active.working_dir;
+            lastModel = active.model;
+            lastSessionId = active.session_id;
+            break;
+          }
+          const recent = getRecent(uid, 1);
+          if (recent.length > 0) {
+            lastDir = recent[0].working_dir;
+            lastModel = recent[0].model;
+            lastSessionId = recent[0].session_id;
+            break;
+          }
         }
-        const recent = getRecent(uid, 1);
-        if (recent.length > 0) {
-          lastDir = recent[0].working_dir;
-          lastModel = recent[0].model;
-          lastSessionId = recent[0].session_id;
-          break;
-        }
-      }
 
-      updateSession({
-        botUsername: botInfo.username,
-        model: lastModel,
-        dir: lastDir,
-        ...(lastSessionId ? { id: lastSessionId } : {}),
-      });
-      notify(`Bot online: @${botInfo.username}`);
+        updateSession({
+          botUsername: botInfo.username,
+          model: lastModel,
+          dir: lastDir,
+          ...(lastSessionId ? { id: lastSessionId } : {}),
+        });
+        refreshScheduleDashboard();
+
+        // Status bar: heartbeat & poke indicators (use last session dir)
+        setStatusCheckers(() => ({
+          heartbeat: hbFileExists(lastDir),
+          poke: pokeFileExists(lastDir),
+        }));
+      };
+
       if (isFirstRun) {
-        notify('Enter the auth code in Telegram to activate.');
+        // Don't show TUI yet — wait for Telegram auth
+        console.log('');
+        console.log(`  Bot online: @${botInfo.username}`);
+        console.log('');
+        console.log(`  Auth code: ${cfg.auth.password}`);
+        console.log('');
+        console.log('  Send this code to your bot on Telegram to authenticate.');
+        console.log('  Waiting for Telegram authentication...');
+        console.log('');
+        setOnFirstAuth(startTUI);
+      } else {
+        startTUI();
       }
-      refreshScheduleDashboard();
 
-      // Status bar: heartbeat & poke indicators (use last session dir)
-      setStatusCheckers(() => ({
-        heartbeat: hbFileExists(lastDir),
-        poke: pokeFileExists(lastDir),
-      }));
+      if (!isFirstRun) {
+        notify(`Bot online: @${botInfo.username}`);
+      }
 
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 

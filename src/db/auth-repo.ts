@@ -1,6 +1,13 @@
 import bcrypt from 'bcryptjs';
 import { getDb } from './database.js';
 
+let _onFirstAuthCallback: (() => void) | null = null;
+
+/** Register a one-shot callback that fires when the first user authorizes (setup flow). */
+export function setOnFirstAuth(callback: () => void): void {
+  _onFirstAuthCallback = callback;
+}
+
 interface AuthRecord {
   telegram_user_id: number;
   username: string | null;
@@ -62,6 +69,12 @@ export async function authorizeUser(
           failed_attempts = 0, username = ?
       WHERE telegram_user_id = ?
     `).run(hash, now, username ?? null, userId);
+    // Trigger first-auth callback (TUI initialization on first run)
+    if (_onFirstAuthCallback) {
+      const cb = _onFirstAuthCallback;
+      _onFirstAuthCallback = null; // one-shot
+      cb();
+    }
     return true;
   }
 

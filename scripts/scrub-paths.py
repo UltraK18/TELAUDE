@@ -38,8 +38,8 @@ if not patterns_found:
 
 total = 0
 for pattern in sorted(patterns_found, key=len, reverse=True):
-    # Replace with "." padded to same length
-    replacement = b"." + b"\x00" * (len(pattern) - 1)
+    # Replace with "." padded with spaces to preserve string length
+    replacement = b"." + b" " * (len(pattern) - 1)
     count = data.count(pattern)
     if count > 0:
         data = data.replace(pattern, replacement)

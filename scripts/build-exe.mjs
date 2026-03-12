@@ -11,11 +11,9 @@ execSync(
   { cwd: root, stdio: 'inherit' }
 );
 
-console.log('[build] Scrubbing build paths...');
-execSync(
-  `python "${resolve(root, 'scripts', 'scrub-paths.py')}" "${resolve(root, 'TELAUDE.exe')}"`,
-  { cwd: root, stdio: 'inherit' }
-);
+// Note: path scrubbing disabled — it breaks blessed's terminfo lookup.
+// Build path (D:\Development\TELAUDE) contains no personal info.
+// If building from a path with personal info, use scrub-paths.py manually.
 
 console.log('[build] Applying icon...');
 execSync(

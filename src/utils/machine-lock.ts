@@ -28,6 +28,8 @@ interface CryptoBackend {
 
 function getWindowsBackend(): CryptoBackend {
   if (!Dpapi) throw new Error('@primno/dpapi not available — required on Windows');
+  // Smoke-test: call protectData to ensure native binary actually works
+  Dpapi.protectData(Buffer.from('test'), null, 'CurrentUser');
   return {
     encrypt(data: Buffer): Buffer {
       return Buffer.from(Dpapi.protectData(data, null, 'CurrentUser'));
@@ -88,9 +90,26 @@ function getMacBackend(): CryptoBackend {
 }
 
 function getLinuxBackend(): CryptoBackend {
-  // Derive key from machine-id + UID (headless server compatible, no D-Bus needed)
+  // Derive key from machine-specific identifiers (no native modules needed)
   function deriveKey(): Buffer {
     let machineId = 'unknown';
+
+    if (process.platform === 'win32') {
+      // Windows: read MachineGuid from registry + username
+      try {
+        const { execSync } = require('child_process');
+        const guid = execSync(
+          'reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+          { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+        );
+        const match = guid.match(/MachineGuid\s+REG_SZ\s+(\S+)/);
+        if (match) machineId = match[1];
+      } catch { /* fallback to hostname */ }
+      const fingerprint = `${machineId}:${os.userInfo().username}:telaude`;
+      return crypto.scryptSync(fingerprint, 'telaude-win-fallback-v1', 32);
+    }
+
+    // Linux / other: machine-id + UID
     for (const p of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
       try {
         machineId = fs.readFileSync(p, 'utf-8').trim();
@@ -134,10 +153,20 @@ function getBackend(): CryptoBackend {
 
   switch (process.platform) {
     case 'win32':
-      _backend = getWindowsBackend();
+      try {
+        _backend = getWindowsBackend();
+      } catch {
+        // DPAPI native binary not available (e.g. compiled exe without node_modules)
+        // Fall back to machine-fingerprint encryption
+        _backend = getLinuxBackend();
+      }
       break;
     case 'darwin':
-      _backend = getMacBackend();
+      try {
+        _backend = getMacBackend();
+      } catch {
+        _backend = getLinuxBackend();
+      }
       break;
     default:
       _backend = getLinuxBackend();

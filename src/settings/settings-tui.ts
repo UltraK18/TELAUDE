@@ -38,7 +38,6 @@ const TELAUDE_MCP_TOOLS = [
   'schedule_completed',
   'schedule_nothing_to_report',
   'get_system_info',
-  'reload',
   'poke_ok',
 ];
 

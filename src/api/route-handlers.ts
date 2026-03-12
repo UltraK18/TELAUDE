@@ -11,7 +11,7 @@ import {
 import {
   reloadAll, getNextRun, scheduleJob, unscheduleJob,
 } from '../scheduler/scheduler.js';
-import { getUserProcess, killForReload } from '../claude/process-manager.js';
+import { getUserProcess } from '../claude/process-manager.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 
@@ -369,23 +369,4 @@ export function registerAllRoutes(api: Api): void {
     return { ok: true };
   });
 
-  // --- Reload ---
-
-  registerRoute('/mcp/reload', async (body) => {
-    const userId = body._userId as number;
-    const up = getUserProcess(userId);
-    if (!up?.process) {
-      return { ok: false, error: 'No active Claude CLI process to reload' };
-    }
-
-    // Also reload cron jobs
-    reloadAll();
-
-    // Schedule kill after HTTP response is sent (MCP server needs to receive the response first)
-    setTimeout(() => {
-      killForReload(userId, body.message);
-    }, 300);
-
-    return { ok: true, message: 'Claude CLI will restart with updated MCP configuration. A confirmation message will be injected into the new session.' };
-  });
 }

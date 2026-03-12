@@ -64,7 +64,7 @@ Windows example:
 
 ### First Run
 
-Running `npm run dev` automatically launches the setup wizard, which guides you through the following steps:
+Running `bun run dev` automatically launches the setup wizard, which guides you through the following steps:
 
 1. **Telegram Bot Token** — obtain one from [@BotFather](https://t.me/BotFather)
 2. **Authentication password** — set a password for bot access

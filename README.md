@@ -29,10 +29,10 @@ For detailed usage and configuration, see **[docs/index.md](./docs/index.md)**.
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # First run (setup wizard guides you through .env creation)
-npm run dev
+bun run dev
 ```
 
 The setup wizard will ask for:
@@ -63,10 +63,11 @@ The setup wizard will ask for:
 ## Build & Run
 
 ```bash
-npm run build     # TypeScript build
-npm start         # Production
-npm run dev       # Development (tsx, stdin supported)
-npm run dev:watch # Development (tsx watch, auto-reload)
+bun run build        # TypeScript build
+bun start            # Production
+bun run dev          # Development (stdin supported)
+bun run dev:watch    # Development (auto-reload, no stdin)
+bun run build:exe    # Compile single executable (telaude.exe)
 ```
 
 ## External MCP Integration

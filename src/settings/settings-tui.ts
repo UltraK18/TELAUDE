@@ -192,7 +192,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
 
   // Disable mouse while settings overlay is open (prevents SSH coordinate issues
   // and click-through from dashboard widgets)
-  (screen as any).disableMouse();
+  (screen as any).program?.disableMouse();
 
   const overlay = blessed.box({
     parent: screen,
@@ -276,7 +276,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
     if (key.name === 'escape' || key.name === 'q') {
       active = false;
       overlay.detach();
-      (screen as any).enableMouse();
+      (screen as any).program?.enableMouse();
       screen.render();
       return;
     }

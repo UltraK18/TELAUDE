@@ -54,6 +54,7 @@ The setup wizard will ask for:
 | `/stop <text>` | Stop and send new input |
 | `/rename <name>` | Rename the current session (syncs with Claude Code JSONL) |
 | `/compact [instructions]` | Compact conversation context |
+| `/history` | Show last 5 conversation turns |
 | `/cd <path>` | Change working directory |
 | `/pwd` | Show current directory |
 | `/projects` | List allowed project paths |

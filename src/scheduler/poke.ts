@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { getLastUserMessageTime, getLastClaudeMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
+import { buildSessionKey } from '../claude/process-manager.js';
 
 // --- Types ---
 
@@ -27,9 +28,11 @@ interface PokeState {
   watcher: fs.FSWatcher | null;
   watchDebounce: ReturnType<typeof setTimeout> | null;
   lastPokeTime: number | null;
+  chatId: number;
+  threadId: number;
 }
 
-type PokeCallback = (userId: number, stdin: string, workingDir: string, sessionId: string | null) => Promise<void>;
+type PokeCallback = (userId: number, stdin: string, workingDir: string, sessionId: string | null, chatId: number, threadId: number) => Promise<void>;
 
 // --- Constants ---
 
@@ -70,7 +73,7 @@ const SLEEP_PROBABILITY: Record<Level, [number, number, number]> = {
 
 // --- State ---
 
-const pokeStates = new Map<number, PokeState>();
+const pokeStates = new Map<string, PokeState>();
 let pokeCallback: PokeCallback | null = null;
 
 // --- Public API ---
@@ -79,15 +82,18 @@ export function setPokeCallback(cb: PokeCallback): void {
   pokeCallback = cb;
 }
 
-export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null, lastResponse?: string | null): void {
+export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null, lastResponse?: string | null, chatId?: number, threadId?: number): void {
+  const cid = chatId ?? userId;
+  const tid = threadId ?? 0;
+  const key = buildSessionKey(userId, cid, tid);
   const config = readPokeConfig(workingDir);
   if (!config) {
     // No POKE.md or invalid — clean up any existing state
-    cancelPokeTimer(userId);
+    cancelPokeTimer(userId, cid, tid);
     return;
   }
 
-  let state = pokeStates.get(userId);
+  let state = pokeStates.get(key);
   if (!state) {
     state = {
       timer: null,
@@ -100,8 +106,10 @@ export function startPokeTimer(userId: number, workingDir: string, sessionId: st
       watcher: null,
       watchDebounce: null,
       lastPokeTime: null,
+      chatId: cid,
+      threadId: tid,
     };
-    pokeStates.set(userId, state);
+    pokeStates.set(key, state);
   } else {
     state.config = config;
     state.workingDir = workingDir;
@@ -112,14 +120,15 @@ export function startPokeTimer(userId: number, workingDir: string, sessionId: st
   }
 
   // Start/restart file watcher
-  watchPokeMd(userId, workingDir, state);
+  watchPokeMd(key, workingDir, state);
 
   // Schedule next poke
-  scheduleNextPoke(userId, state);
+  scheduleNextPoke(key, userId, state);
 }
 
-export function resetPokeTimer(userId: number): void {
-  const state = pokeStates.get(userId);
+export function resetPokeTimer(userId: number, chatId?: number, threadId?: number): void {
+  const key = buildSessionKey(userId, chatId ?? userId, threadId ?? 0);
+  const state = pokeStates.get(key);
   if (!state) return;
 
   if (state.timer) {
@@ -127,11 +136,12 @@ export function resetPokeTimer(userId: number): void {
     state.timer = null;
   }
   state.count = 0;
-  logger.info({ userId }, 'Poke timer reset (user message received)');
+  logger.info({ userId, key }, 'Poke timer reset (user message received)');
 }
 
-export function cancelPokeTimer(userId: number): void {
-  const state = pokeStates.get(userId);
+export function cancelPokeTimer(userId: number, chatId?: number, threadId?: number): void {
+  const key = buildSessionKey(userId, chatId ?? userId, threadId ?? 0);
+  const state = pokeStates.get(key);
   if (!state) return;
 
   if (state.timer) {
@@ -146,8 +156,8 @@ export function cancelPokeTimer(userId: number): void {
     clearTimeout(state.watchDebounce);
     state.watchDebounce = null;
   }
-  pokeStates.delete(userId);
-  logger.info({ userId }, 'Poke timer cancelled');
+  pokeStates.delete(key);
+  logger.info({ userId, key }, 'Poke timer cancelled');
 }
 
 export function isPokeActive(): boolean {
@@ -159,15 +169,18 @@ export function pokeExists(workingDir: string): boolean {
 }
 
 export function stopAllPokes(): void {
-  for (const [userId] of pokeStates) {
-    cancelPokeTimer(userId);
+  for (const [key, state] of pokeStates) {
+    if (state.timer) clearTimeout(state.timer);
+    if (state.watcher) state.watcher.close();
+    if (state.watchDebounce) clearTimeout(state.watchDebounce);
   }
+  pokeStates.clear();
   logger.info('All poke timers stopped');
 }
 
 // --- Internal ---
 
-function scheduleNextPoke(userId: number, state: PokeState): void {
+function scheduleNextPoke(key: string, userId: number, state: PokeState): void {
   if (state.timer) {
     clearTimeout(state.timer);
     state.timer = null;
@@ -189,7 +202,7 @@ function scheduleNextPoke(userId: number, state: PokeState): void {
 
   state.timer = setTimeout(async () => {
     state.timer = null;
-    await firePoke(userId, state);
+    await firePoke(key, userId, state);
   }, delay);
 
   logger.info({ userId, delayMs: delay, count: state.count, intensity: state.config.intensity }, 'Poke scheduled');
@@ -208,14 +221,14 @@ function calculateDelay(intensity: Level, count: number): number {
   return Math.round(base);
 }
 
-async function firePoke(userId: number, state: PokeState): Promise<void> {
+async function firePoke(key: string, userId: number, state: PokeState): Promise<void> {
   if (!state.config || !pokeCallback) return;
 
   // Re-check POKE.md exists — file may have been removed/renamed since scheduling
   const freshConfig = readPokeConfig(state.workingDir);
   if (!freshConfig) {
     logger.info({ userId }, 'Poke cancelled (POKE.md removed)');
-    cancelPokeTimer(userId);
+    cancelPokeTimer(userId, state.chatId, state.threadId);
     return;
   }
   state.config = freshConfig;
@@ -231,7 +244,7 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
       const delay = wakeDelay + jitter;
       state.timer = setTimeout(async () => {
         state.timer = null;
-        await firePoke(userId, state);
+        await firePoke(key, userId, state);
       }, delay);
       logger.info({ userId, delayMs: delay, wakeDelayMs: wakeDelay, jitterMs: jitter }, 'Poke scheduled near wake-up');
     }
@@ -244,13 +257,13 @@ async function firePoke(userId: number, state: PokeState): Promise<void> {
     state.count++;
     state.lastPokeTime = Date.now();
     logger.info({ userId, count: state.count }, 'Firing poke');
-    await pokeCallback(userId, stdin, state.workingDir, state.sessionId);
+    await pokeCallback(userId, stdin, state.workingDir, state.sessionId, state.chatId, state.threadId);
   } catch (err) {
     logger.error({ err, userId }, 'Poke callback failed');
   }
 
   // Schedule next poke after current one completes
-  scheduleNextPoke(userId, state);
+  scheduleNextPoke(key, userId, state);
 }
 
 function shouldSkipForSleep(userId: number, config: PokeConfig): boolean {
@@ -536,7 +549,7 @@ function parsePokeMd(raw: string): PokeConfig | null {
 
 // --- fs.watch ---
 
-function watchPokeMd(userId: number, workingDir: string, state: PokeState): void {
+function watchPokeMd(key: string, workingDir: string, state: PokeState): void {
   // Close existing watcher if any
   if (state.watcher) {
     state.watcher.close();
@@ -556,15 +569,17 @@ function watchPokeMd(userId: number, workingDir: string, state: PokeState): void
       if (state.watchDebounce) clearTimeout(state.watchDebounce);
       state.watchDebounce = setTimeout(() => {
         state.watchDebounce = null;
-        logger.info({ userId, workingDir }, 'POKE.md changed — reloading');
+        logger.info({ key, workingDir }, 'POKE.md changed — reloading');
         const newConfig = readPokeConfig(workingDir);
         if (newConfig) {
           state.config = newConfig;
           state.maxCount = FREQUENCY_MAX[newConfig.frequency];
-          scheduleNextPoke(userId, state);
+          // Extract userId from key for scheduling
+          const userId = parseInt(key.split(':')[0], 10);
+          scheduleNextPoke(key, userId, state);
         } else {
-          // POKE.md deleted or invalid
-          cancelPokeTimer(userId);
+          const userId = parseInt(key.split(':')[0], 10);
+          cancelPokeTimer(userId, state.chatId, state.threadId);
         }
       }, 500);
     });

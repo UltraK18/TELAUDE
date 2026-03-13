@@ -36,6 +36,7 @@ export interface StreamHandlerOptions {
 export class StreamHandler {
   private api: Api;
   private chatId: number;
+  private threadId: number;
   private userId: number;
   private up: UserProcess;
   private silent: boolean;
@@ -65,12 +66,20 @@ export class StreamHandler {
   private eventQueue: (() => Promise<void>)[] = [];
   private processingEvent = false;
 
-  constructor(api: Api, chatId: number, userId: number, up: UserProcess, opts?: StreamHandlerOptions) {
+  constructor(api: Api, chatId: number, threadId: number, userId: number, up: UserProcess, opts?: StreamHandlerOptions) {
     this.api = api;
     this.chatId = chatId;
+    this.threadId = threadId;
     this.userId = userId;
     this.up = up;
     this.silent = opts?.silent ?? false;
+  }
+
+  private threadOpts(extra?: Record<string, unknown>): Record<string, unknown> {
+    const opts: Record<string, unknown> = {};
+    if (this.threadId > 0) opts.message_thread_id = this.threadId;
+    if (extra) Object.assign(opts, extra);
+    return opts;
   }
 
   attachToParser(parser: StreamParser): Promise<void> {
@@ -81,7 +90,7 @@ export class StreamHandler {
         if (!this.sessionCaptured) {
           this.sessionCaptured = true;
           this.up.sessionId = sessionId;
-          createSession(this.userId, sessionId, this.up.workingDir, this.up.model);
+          createSession(this.userId, sessionId, this.up.workingDir, this.up.model, this.up.chatId, this.up.threadId);
           logger.info({ userId: this.userId, sessionId }, 'Session captured');
           updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir });
         }
@@ -188,7 +197,7 @@ export class StreamHandler {
         this.enqueue(async () => {
           if (this.silent) return;
           try {
-            const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Compacting.', { parse_mode: 'HTML' });
+            const msg = await this.api.sendMessage(this.chatId, '<tg-emoji emoji-id="5386367538735104399">⌛</tg-emoji> Compacting.', { parse_mode: 'HTML', ...this.threadOpts() });
             this.compactMessageId = msg.message_id;
             // Animate dots
             let dots = 1;
@@ -216,7 +225,7 @@ export class StreamHandler {
               await this.api.editMessageText(this.chatId, this.compactMessageId, text, { parse_mode: 'HTML' });
               this.compactMessageId = null;
             } else {
-              await this.api.sendMessage(this.chatId, text, { parse_mode: 'HTML' });
+              await this.api.sendMessage(this.chatId, text, { parse_mode: 'HTML', ...this.threadOpts() });
             }
           } catch (err) {
             logger.error({ err }, 'Failed to send compact end notification');
@@ -251,7 +260,7 @@ export class StreamHandler {
           if (event.is_error && event.result && !this.silent) {
             notifyError(`CLI error: ${event.result.slice(0, 100)}`);
             try {
-              await this.api.sendMessage(this.chatId, `\u274C ${event.result}`);
+              await this.api.sendMessage(this.chatId, `\u274C ${event.result}`, this.threadOpts());
             } catch (err) {
               logger.error({ err }, 'Failed to send error result');
             }
@@ -288,7 +297,7 @@ export class StreamHandler {
             } else if (!this.toolMessageId && !this.silent) {
               // No tool message visible — send standalone notice
               try {
-                await this.api.sendMessage(this.chatId, '❌ Interrupted');
+                await this.api.sendMessage(this.chatId, '❌ Interrupted', this.threadOpts());
               } catch { /* ignore */ }
             }
             // Don't reset up.interrupted here — message.ts reads it on next send
@@ -358,7 +367,7 @@ export class StreamHandler {
 
     try {
       if (!this.toolMessageId) {
-        const msg = await this.api.sendMessage(this.chatId, text, { parse_mode: 'HTML' });
+        const msg = await this.api.sendMessage(this.chatId, text, { parse_mode: 'HTML', ...this.threadOpts() });
         this.toolMessageId = msg.message_id;
       } else {
         await this.api.editMessageText(this.chatId, this.toolMessageId, text, {
@@ -454,6 +463,7 @@ export class StreamHandler {
       if (!this.textMessageId) {
         const msg = await this.api.sendMessage(this.chatId, html, {
           parse_mode: 'HTML',
+          ...this.threadOpts(),
         });
         this.textMessageId = msg.message_id;
         this.up.lastBotMessageId = msg.message_id;
@@ -487,7 +497,7 @@ export class StreamHandler {
   private async sendOrEditPlainText(text: string): Promise<void> {
     try {
       if (!this.textMessageId) {
-        const msg = await this.api.sendMessage(this.chatId, text);
+        const msg = await this.api.sendMessage(this.chatId, text, this.threadOpts());
         this.textMessageId = msg.message_id;
       } else {
         await this.api.editMessageText(this.chatId, this.textMessageId, text);

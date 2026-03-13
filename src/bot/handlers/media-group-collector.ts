@@ -12,6 +12,7 @@ interface PendingItem {
 interface PendingGroup {
   userId: number;
   chatId: number;
+  threadId: number;
   items: PendingItem[];
   caption: string;
   api: Api;
@@ -25,6 +26,7 @@ type GroupCompleteCallback = (
   chatId: number,
   text: string,
   api: Api,
+  threadId: number,
 ) => void;
 
 const DEBOUNCE_MS = 1500;
@@ -46,6 +48,7 @@ export class MediaGroupCollector {
     chatId: number,
     api: Api,
     workingDir: string,
+    threadId?: number,
   ): void {
     let group = this.groups.get(mediaGroupId);
 
@@ -53,6 +56,7 @@ export class MediaGroupCollector {
       group = {
         userId,
         chatId,
+        threadId: threadId ?? 0,
         items: [],
         caption: caption ?? '',
         api,
@@ -122,7 +126,7 @@ export class MediaGroupCollector {
     }
 
     const text = buildMediaText(successItems, group.caption);
-    this.onComplete(group.userId, group.chatId, text, group.api);
+    this.onComplete(group.userId, group.chatId, text, group.api, group.threadId);
   }
 
   cleanup(): void {

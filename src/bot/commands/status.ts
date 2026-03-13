@@ -25,8 +25,11 @@ export async function statsCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const up = getUserProcess(userId);
-  const dbSession = getActiveSession(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
+  const up = getUserProcess(userId, chatId, threadId);
+  const dbSession = getActiveSession(userId, chatId, threadId);
 
   // Session section
   let sessionBlock: string;

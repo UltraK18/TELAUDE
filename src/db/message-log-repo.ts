@@ -1,19 +1,33 @@
 import { getDb } from './database.js';
 
-export function logMessage(userId: number, direction: 'user' | 'claude'): void {
+export function logMessage(userId: number, direction: 'user' | 'claude', chatId?: number, threadId?: number): void {
+  const cid = chatId ?? userId;
+  const tid = threadId ?? 0;
   getDb()
-    .prepare('INSERT INTO message_logs (user_id, direction) VALUES (?, ?)')
-    .run(userId, direction);
+    .prepare('INSERT INTO message_logs (user_id, direction, chat_id, thread_id) VALUES (?, ?, ?, ?)')
+    .run(userId, direction, cid, tid);
 }
 
-export function getLastUserMessageTime(userId: number): string | null {
+export function getLastUserMessageTime(userId: number, chatId?: number, threadId?: number): string | null {
+  if (chatId != null && threadId != null) {
+    const row = getDb()
+      .prepare("SELECT timestamp FROM message_logs WHERE user_id = ? AND chat_id = ? AND thread_id = ? AND direction = 'user' ORDER BY id DESC LIMIT 1")
+      .get(userId, chatId, threadId) as { timestamp: string } | undefined;
+    return row?.timestamp ?? null;
+  }
   const row = getDb()
     .prepare("SELECT timestamp FROM message_logs WHERE user_id = ? AND direction = 'user' ORDER BY id DESC LIMIT 1")
     .get(userId) as { timestamp: string } | undefined;
   return row?.timestamp ?? null;
 }
 
-export function getLastClaudeMessageTime(userId: number): string | null {
+export function getLastClaudeMessageTime(userId: number, chatId?: number, threadId?: number): string | null {
+  if (chatId != null && threadId != null) {
+    const row = getDb()
+      .prepare("SELECT timestamp FROM message_logs WHERE user_id = ? AND chat_id = ? AND thread_id = ? AND direction = 'claude' ORDER BY id DESC LIMIT 1")
+      .get(userId, chatId, threadId) as { timestamp: string } | undefined;
+    return row?.timestamp ?? null;
+  }
   const row = getDb()
     .prepare("SELECT timestamp FROM message_logs WHERE user_id = ? AND direction = 'claude' ORDER BY id DESC LIMIT 1")
     .get(userId) as { timestamp: string } | undefined;

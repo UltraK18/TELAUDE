@@ -10,7 +10,10 @@ export async function stopCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const up = getUserProcess(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
+  const up = getUserProcess(userId, chatId, threadId);
   if (!up?.process) {
     await ctx.reply('No active task.');
     return;
@@ -23,7 +26,7 @@ export async function stopCommand(ctx: Context): Promise<void> {
   }
 
   up.interrupted = true;
-  killProcess(userId);
+  killProcess(userId, chatId, threadId);
 }
 
 
@@ -32,12 +35,20 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   // Extract message after /reload command
   const text = ctx.message?.text ?? '';
   const userMsg = text.replace(/^\/reload\s*/, '').trim();
 
-  // Leave flag so post-restart sends stdin notification (userId\nmessage)
-  fs.writeFileSync(RELOAD_FLAG, userMsg ? `${userId}\n${userMsg}` : String(userId));
+  // Get current sessionId to persist across restart
+  const up = getUserProcess(userId, chatId, threadId);
+  const sessionId = up?.sessionId ?? '';
+
+  // Leave flag: userId\nsessionId\nmessage
+  const flagContent = [userId, sessionId, userMsg].join('\n');
+  fs.writeFileSync(RELOAD_FLAG, flagContent);
 
   await ctx.reply('Restarting bot process...');
   setTimeout(() => process.exit(0), 500);
@@ -55,15 +66,16 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   setTimeout(() => process.exit(0), 500);
 }
 
-export function consumeReloadFlag(): { userId: number; message?: string } | null {
+export function consumeReloadFlag(): { userId: number; sessionId?: string; message?: string } | null {
   try {
     const raw = fs.readFileSync(RELOAD_FLAG, 'utf-8').trim();
     fs.unlinkSync(RELOAD_FLAG);
-    const [uidStr, ...rest] = raw.split('\n');
-    const userId = Number(uidStr);
+    const lines = raw.split('\n');
+    const userId = Number(lines[0]);
     if (!userId) return null;
-    const message = rest.join('\n').trim() || undefined;
-    return { userId, message };
+    const sessionId = lines[1] || undefined;
+    const message = lines.slice(2).join('\n').trim() || undefined;
+    return { userId, sessionId, message };
   } catch {
     return null;
   }

@@ -31,7 +31,10 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
   // Check allowlist if configured
   if (config.telegram.allowedUserIds.length > 0) {
     if (!config.telegram.allowedUserIds.includes(userId)) {
-      await ctx.reply('Access denied.');
+      // Silent in groups, reply only in DM
+      if (ctx.chat?.type === 'private') {
+        await ctx.reply('Access denied.');
+      }
       return;
     }
   }
@@ -42,9 +45,12 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
     return;
   }
 
+  const isGroup = ctx.chat?.type !== 'private';
+
   // Not authorized: check if this message is the auth code
+  // In groups, only accept auth via /auth command (handled in auth command handler), not plain text
   const trimmed = text.trim();
-  if (trimmed && !trimmed.startsWith('/')) {
+  if (trimmed && !trimmed.startsWith('/') && !isGroup) {
     const success = await authorizeUser(
       userId,
       ctx.from?.username,
@@ -64,6 +70,9 @@ export async function authMiddleware(ctx: Context, next: NextFunction): Promise<
       return;
     }
   }
+
+  // In groups, silently ignore unauthorized users (they should use /auth command)
+  if (isGroup) return;
 
   await ctx.reply('Authentication required. Enter your auth code.');
 }

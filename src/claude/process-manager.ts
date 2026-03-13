@@ -12,8 +12,14 @@ import { loadSettings } from '../settings/settings-store.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+export function buildSessionKey(userId: number, chatId?: number, threadId?: number): string {
+  return `${userId}:${chatId ?? userId}:${threadId ?? 0}`;
+}
+
 export interface UserProcess {
   telegramUserId: number;
+  chatId: number;
+  threadId: number;
   process: ChildProcess | null;
   parser: StreamParser | null;
   sessionId: string | null;
@@ -45,25 +51,33 @@ export interface UserProcess {
   lastUserMessageId: number | null;
   /** Queued reactions from user on bot's last text message */
   reactionQueue: { emojis: string[]; messagePreview: string } | null;
+  /** Session mode — default uses full prompts, minimal strips CLAUDE.md */
+  mode: 'default' | 'minimal';
 }
 
-const processes = new Map<number, UserProcess>();
+const processes = new Map<string, UserProcess>();
 
-export function getUserProcess(userId: number): UserProcess | undefined {
-  return processes.get(userId);
-}
+// --- Isolated processes (for scheduled/cron jobs that run independently) ---
+const isolatedProcesses = new Map<string, UserProcess>();
+let isolatedCount = 0;
+const MAX_ISOLATED = 3;
 
-export function getAllProcesses(): Map<number, UserProcess> {
-  return processes;
-}
-
-export function createUserProcess(
+export function createIsolatedProcess(
   userId: number,
   workingDir: string,
   model: string,
-): UserProcess {
+  chatId?: number,
+  threadId?: number,
+): UserProcess | null {
+  if (isolatedCount >= MAX_ISOLATED) return null;
+
+  const id = `isolated_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const cid = chatId ?? userId;
+  const tid = threadId ?? 0;
   const up: UserProcess = {
     telegramUserId: userId,
+    chatId: cid,
+    threadId: tid,
     process: null,
     parser: null,
     sessionId: null,
@@ -83,8 +97,72 @@ export function createUserProcess(
     stopMessage: null,
     lastUserMessageId: null,
     reactionQueue: null,
+    mode: 'default',
   };
-  processes.set(userId, up);
+  isolatedProcesses.set(id, up);
+  isolatedCount++;
+  return up;
+}
+
+export function removeIsolatedProcess(id: string): void {
+  if (isolatedProcesses.delete(id)) {
+    isolatedCount = Math.max(0, isolatedCount - 1);
+  }
+}
+
+export function getIsolatedCount(): number {
+  return isolatedCount;
+}
+
+export function getIsolatedProcess(id: string): UserProcess | undefined {
+  return isolatedProcesses.get(id);
+}
+
+export function getUserProcess(userId: number, chatId?: number, threadId?: number): UserProcess | undefined {
+  const key = buildSessionKey(userId, chatId, threadId);
+  return processes.get(key);
+}
+
+export function getAllProcesses(): Map<string, UserProcess> {
+  return processes;
+}
+
+export function createUserProcess(
+  userId: number,
+  workingDir: string,
+  model: string,
+  chatId?: number,
+  threadId?: number,
+): UserProcess {
+  const cid = chatId ?? userId;
+  const tid = threadId ?? 0;
+  const key = buildSessionKey(userId, cid, tid);
+  const up: UserProcess = {
+    telegramUserId: userId,
+    chatId: cid,
+    threadId: tid,
+    process: null,
+    parser: null,
+    sessionId: null,
+    workingDir,
+    model,
+    isProcessing: false,
+    lastActivity: Date.now(),
+    reloadPending: false,
+    reloadMessage: null,
+    nothingToReport: false,
+    lastResponseText: null,
+    lastReportText: null,
+    pendingTurnDelete: null,
+    interrupted: false,
+    currentMode: 'user',
+    lastBotMessageId: null,
+    stopMessage: null,
+    lastUserMessageId: null,
+    reactionQueue: null,
+    mode: 'default',
+  };
+  processes.set(key, up);
   return up;
 }
 
@@ -132,6 +210,8 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     TELAUDE_API_URL: `http://127.0.0.1:${getApiPort()}`,
     TELAUDE_API_TOKEN: getApiToken(),
     TELAUDE_USER_ID: String(up.telegramUserId),
+    TELAUDE_CHAT_ID: String(up.chatId),
+    TELAUDE_THREAD_ID: String(up.threadId),
   };
 
   // Build MCP config: telaude (inline) + global servers from ~/.claude.json & ~/.claude/settings.json
@@ -277,8 +357,9 @@ export function sendMessage(up: UserProcess, text: string): boolean {
   }
 }
 
-export function killProcess(userId: number): boolean {
-  const up = processes.get(userId);
+export function killProcess(userId: number, chatId?: number, threadId?: number): boolean {
+  const key = buildSessionKey(userId, chatId, threadId);
+  const up = processes.get(key);
   if (!up?.process) return false;
 
   try {
@@ -299,8 +380,9 @@ export function killProcess(userId: number): boolean {
   }
 }
 
-export function killForReload(userId: number, message?: string): boolean {
-  const up = processes.get(userId);
+export function killForReload(userId: number, chatId?: number, threadId?: number, message?: string): boolean {
+  const key = buildSessionKey(userId, chatId, threadId);
+  const up = processes.get(key);
   if (!up?.process) return false;
 
   up.reloadPending = true;
@@ -323,17 +405,36 @@ export function killForReload(userId: number, message?: string): boolean {
   }
 }
 
-export function removeUserProcess(userId: number): void {
-  killProcess(userId);
-  processes.delete(userId);
+export function removeUserProcess(userId: number, chatId?: number, threadId?: number): void {
+  killProcess(userId, chatId, threadId);
+  const key = buildSessionKey(userId, chatId, threadId);
+  processes.delete(key);
 }
 
 export function cleanupIdleProcesses(): void {
   const now = Date.now();
-  for (const [userId, up] of processes) {
+  for (const [key, up] of processes) {
     if (up.process && !up.isProcessing && now - up.lastActivity > config.session.idleTimeoutMs) {
-      logger.info({ userId, idle: now - up.lastActivity }, 'Cleaning up idle process');
-      killProcess(userId);
+      logger.info({ key, idle: now - up.lastActivity }, 'Cleaning up idle process');
+      killProcess(up.telegramUserId, up.chatId, up.threadId);
     }
   }
+}
+
+export function getProcessesByUserId(userId: number): UserProcess[] {
+  const result: UserProcess[] = [];
+  for (const up of processes.values()) {
+    if (up.telegramUserId === userId) result.push(up);
+  }
+  return result;
+}
+
+export function getActiveProcessForUser(userId: number): UserProcess | undefined {
+  let best: UserProcess | undefined;
+  for (const up of processes.values()) {
+    if (up.telegramUserId !== userId) continue;
+    if (up.isProcessing) return up;
+    if (!best || up.lastActivity > best.lastActivity) best = up;
+  }
+  return best;
 }

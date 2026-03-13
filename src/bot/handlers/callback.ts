@@ -8,6 +8,8 @@ import { upsertUserConfig, getUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { scanCliSessions } from '../../utils/cli-sessions.js';
+import { updateJob } from '../../scheduler/cron-store.js';
+import { scheduleJob, unscheduleJob } from '../../scheduler/scheduler.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
@@ -16,6 +18,9 @@ export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
   const userId = ctx.from?.id;
   if (!data || !userId) return;
+
+  const chatId = ctx.callbackQuery?.message?.chat?.id;
+  const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id ?? 0;
 
   // cd:page:path — browse into folder with pagination
   if (data.startsWith('cd:') && !data.startsWith('cd_select:')) {
@@ -66,15 +71,15 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       if (typeof edited !== 'boolean') statusMsgId = edited.message_id;
     } catch { /* ignore */ }
 
-    killProcess(userId);
+    killProcess(userId, chatId, threadId);
     upsertUserConfig(userId, { default_working_dir: result.resolved });
 
-    const up = getUserProcess(userId);
+    const up = getUserProcess(userId, chatId, threadId);
     if (up) {
       up.workingDir = result.resolved;
       up.sessionId = null;
     }
-    deactivateAllUserSessions(userId);
+    deactivateAllUserSessions(userId, chatId, threadId);
 
     logger.info({ userId, newDir: result.resolved, sessionCleared: up?.sessionId === null }, 'cd_select: directory changed');
 
@@ -102,6 +107,26 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       await ctx.editMessageReplyMarkup({ reply_markup: undefined });
     } catch { /* ignore */ }
     await ctx.answerCallbackQuery({ text: `✅ ${chosen}` });
+    return;
+  }
+
+  // sched:pause:<id> / sched:resume:<id> — toggle scheduled job pause state
+  if (data.startsWith('sched:')) {
+    const parts = data.split(':');
+    const action = parts[1]; // 'pause' or 'resume'
+    const jobId = parts.slice(2).join(':'); // rejoin in case id contains ':'
+
+    if (action === 'pause') {
+      updateJob(jobId, { isPaused: true });
+      unscheduleJob(jobId);
+      await ctx.answerCallbackQuery({ text: 'Job paused' });
+    } else if (action === 'resume') {
+      updateJob(jobId, { isPaused: false });
+      scheduleJob(jobId);
+      await ctx.answerCallbackQuery({ text: 'Job resumed' });
+    } else {
+      await ctx.answerCallbackQuery({ text: 'Unknown action' });
+    }
     return;
   }
 
@@ -151,28 +176,28 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       deleteSession(sessionId);
 
       // If this was the active session, clear it
-      const up = getUserProcess(userId);
+      const up = getUserProcess(userId, chatId, threadId);
       if (up?.sessionId === sessionId) {
-        killProcess(userId);
+        killProcess(userId, chatId, threadId);
         up.sessionId = null;
       }
 
       await ctx.answerCallbackQuery({ text: 'Session deleted' });
-      await refreshBotSessions(ctx, userId);
+      await refreshBotSessions(ctx, userId, chatId, threadId);
       return;
     }
 
     // Browse CLI sessions from filesystem
     if (rest === 'sess:cli') {
       await ctx.answerCallbackQuery();
-      await showCliSessions(ctx, userId);
+      await showCliSessions(ctx, userId, chatId, threadId);
       return;
     }
 
     // Back to bot sessions
     if (rest === 'sess:bot') {
       await ctx.answerCallbackQuery();
-      await refreshBotSessions(ctx, userId);
+      await refreshBotSessions(ctx, userId, chatId, threadId);
       return;
     }
   }
@@ -180,15 +205,15 @@ export async function callbackHandler(ctx: Context): Promise<void> {
   await ctx.answerCallbackQuery();
 }
 
-function getCurrentDir(userId: number): string {
-  const up = getUserProcess(userId);
+function getCurrentDir(userId: number, chatId?: number, threadId?: number): string {
+  const up = getUserProcess(userId, chatId, threadId);
   const cfg = getUserConfig(userId);
   const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
   return candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 }
 
-async function refreshBotSessions(ctx: Context, userId: number): Promise<void> {
-  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId));
+async function refreshBotSessions(ctx: Context, userId: number, chatId?: number, threadId?: number): Promise<void> {
+  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId, chatId, threadId), chatId, threadId);
   const list = buildSessionList(sessions);
 
   try {
@@ -196,12 +221,12 @@ async function refreshBotSessions(ctx: Context, userId: number): Promise<void> {
   } catch { /* message not modified — ignore */ }
 }
 
-async function showCliSessions(ctx: Context, userId: number): Promise<void> {
-  const currentDir = getCurrentDir(userId);
+async function showCliSessions(ctx: Context, userId: number, chatId?: number, threadId?: number): Promise<void> {
+  const currentDir = getCurrentDir(userId, chatId, threadId);
   const cliSessions = scanCliSessions(currentDir);
 
   // Exclude sessions already in bot DB
-  const dbSessions = getRecentSessions(userId, 100, currentDir);
+  const dbSessions = getRecentSessions(userId, 100, currentDir, chatId, threadId);
   const dbIds = new Set(dbSessions.map(s => s.session_id));
   const filtered = cliSessions.filter(s => !dbIds.has(s.sessionId));
 

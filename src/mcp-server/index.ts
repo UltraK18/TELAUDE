@@ -4,6 +4,7 @@ import { registerCommunicationTools } from './tools/communication.js';
 import { registerSchedulingTools } from './tools/scheduling.js';
 import { registerSystemTools } from './tools/system.js';
 import { registerPokeTools } from './tools/poke.js';
+import { registerIsolatedTools } from './tools/isolated.js';
 
 const server = new McpServer({
   name: 'telaude',
@@ -15,6 +16,7 @@ registerCommunicationTools(server);
 registerSchedulingTools(server);
 registerSystemTools(server);
 registerPokeTools(server);
+registerIsolatedTools(server);
 
 // Start with stdio transport
 const transport = new StdioServerTransport();

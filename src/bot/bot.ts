@@ -11,6 +11,7 @@ import { callbackHandler } from './handlers/callback.js';
 import { reactionHandler } from './handlers/reaction.js';
 import { askInterceptor } from './middleware/ask-interceptor.js';
 import { staleUpdateFilter } from './middleware/stale-update-filter.js';
+import { generalTopicFilter } from './middleware/general-topic-filter.js';
 import { logger } from '../utils/logger.js';
 
 export function createBot(): Bot {
@@ -24,6 +25,7 @@ export function createBot(): Bot {
 
   // Middleware chain
   bot.use(staleUpdateFilter);
+  bot.use(generalTopicFilter);
   bot.use(loggingMiddleware);
   bot.use(rateLimitMiddleware);
   bot.use(authMiddleware);
@@ -77,6 +79,10 @@ export function createBot(): Bot {
     { command: 'compact', description: 'Compress context' },
     { command: 'history', description: 'Last 5 conversation turns' },
     { command: 'help', description: 'Command list' },
+    { command: 'mode', description: 'Session mode (default/minimal)' },
+    { command: 'newtopic', description: 'Create DM topic (independent session)' },
+    { command: 'schedule', description: 'View scheduled jobs' },
+    { command: 'usage', description: 'Token usage stats' },
   ];
   if (process.env['NODE_ENV'] === 'development') {
     commands.push(

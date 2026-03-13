@@ -6,6 +6,8 @@ import {
   createUserProcess,
   spawnClaudeProcess,
   sendMessage,
+  buildSessionKey,
+  getProcessesByUserId,
   type UserProcess,
 } from '../../claude/process-manager.js';
 import { StreamHandler } from '../../claude/stream-handler.js';
@@ -24,21 +26,22 @@ import { startPokeTimer, resetPokeTimer } from '../../scheduler/poke.js';
 import { fetchLinkPreviews } from '../../utils/link-preview.js';
 
 // Per-user message queue: messages sent while processing are queued
-const messageQueues = new Map<number, { chatId: number; texts: string[] }>();
+const messageQueues = new Map<string, { texts: string[] }>();
 
 /**
  * Check if a user has an active Claude process running.
  * Used by scheduler to defer cron/heartbeat jobs.
  */
 export function isUserActive(userId: number): boolean {
-  const up = getUserProcess(userId);
-  return up?.isProcessing ?? false;
+  const ups = getProcessesByUserId(userId);
+  return ups.some(up => up.isProcessing);
 }
 
 // Scheduled task queue: cron/heartbeat jobs deferred while user is active
 interface ScheduledTask {
   userId: number;
   chatId: number;
+  threadId: number;
   text: string;
   api: Api;
   mode: 'heartbeat' | 'cron' | 'poke';
@@ -53,11 +56,11 @@ export function enqueueScheduledTask(task: ScheduledTask): void {
   logger.info({ userId: task.userId, mode: task.mode, queueSize: scheduledQueue.length }, 'Scheduled task queued');
 }
 
-function getOrCreateUp(userId: number): UserProcess {
-  let up = getUserProcess(userId);
+function getOrCreateUp(userId: number, chatId?: number, threadId?: number): UserProcess {
+  let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
     const cfg = getUserConfig(userId);
-    const lastSession = getActiveSession(userId);
+    const lastSession = getActiveSession(userId, chatId ?? userId, threadId ?? 0);
     const candidates = [
       lastSession?.working_dir,
       cfg.default_working_dir,
@@ -69,6 +72,8 @@ function getOrCreateUp(userId: number): UserProcess {
       userId,
       workingDir,
       lastSession?.model ?? cfg.default_model,
+      chatId,
+      threadId,
     );
     if (lastSession) {
       up.sessionId = lastSession.session_id;
@@ -102,7 +107,7 @@ function launchAndSend(
         resumeSessionId: res,
       });
 
-      const handler = new StreamHandler(api, chatId, userId, up);
+      const handler = new StreamHandler(api, chatId, up.threadId, userId, up);
       handler.attachToParser(parser).catch(err => {
         logger.error({ err, userId }, 'Stream handler error');
       });
@@ -161,14 +166,15 @@ function launchAndSend(
         }
 
         // Success (code === 0) — drain queue
-        const queue = messageQueues.get(userId);
+        const sessionKey = buildSessionKey(userId, up.chatId, up.threadId);
+        const queue = messageQueues.get(sessionKey);
 
         // If interrupted, clear queue and handle stop message
         if (up.interrupted) {
           // Clear any pending queue
           if (queue) {
             queue.texts = [];
-            messageQueues.delete(userId);
+            messageQueues.delete(sessionKey);
           }
           up.interrupted = false;
 
@@ -187,7 +193,7 @@ function launchAndSend(
           // Queued user messages — launch new process with context marker
           const queued = queue.texts.join('\n\n');
           queue.texts = [];
-          messageQueues.delete(userId);
+          messageQueues.delete(sessionKey);
           const combined = `The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n---\n${queued}\n---`;
           logger.info({ userId, queueSize: queued.length }, 'Draining queued messages after exit');
           const nextResume = up.sessionId ?? undefined;
@@ -196,11 +202,11 @@ function launchAndSend(
           }
         } else {
           up.isProcessing = false;
-          messageQueues.delete(userId);
+          messageQueues.delete(sessionKey);
           // Log Claude response and start poke timer (only for user conversations)
           if (up.currentMode === 'user') {
-            logMessage(userId, 'claude');
-            startPokeTimer(userId, up.workingDir, up.sessionId, up.lastResponseText);
+            logMessage(userId, 'claude', up.chatId, up.threadId);
+            startPokeTimer(userId, up.workingDir, up.sessionId, up.lastResponseText, up.chatId, up.threadId);
           }
           drainScheduledQueue(userId, api);
         }
@@ -239,7 +245,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
   const task = scheduledQueue.splice(idx, 1)[0];
   logger.info({ userId, mode: task.mode }, 'Draining scheduled task');
 
-  const up = getOrCreateUp(userId);
+  const up = getOrCreateUp(userId, task.chatId, task.threadId);
   if (task.workingDir) up.workingDir = task.workingDir;
 
   up.isProcessing = true;
@@ -251,7 +257,7 @@ function drainScheduledQueue(userId: number, api: Api): void {
     model: task.model,
   });
 
-  const handler = new StreamHandler(api, task.chatId, userId, up, { silent: true });
+  const handler = new StreamHandler(api, task.chatId, task.threadId, userId, up, { silent: true });
   handler.attachToParser(parser).catch(err => {
     logger.error({ err, userId }, 'Silent stream handler error');
   });
@@ -297,11 +303,12 @@ function drainScheduledQueue(userId: number, api: Api): void {
     up.lastReportText = null;
 
     // After scheduled task completes, check for more
-    const queue = messageQueues.get(userId);
+    const sessionKey = buildSessionKey(userId, up.chatId, up.threadId);
+    const queue = messageQueues.get(sessionKey);
     if (queue && queue.texts.length > 0) {
       const combined = queue.texts.join('\n\n');
       queue.texts = [];
-      messageQueues.delete(userId);
+      messageQueues.delete(sessionKey);
       const nextResume = up.sessionId ?? undefined;
       launchAndSend(up, combined, task.chatId, userId, api, nextResume);
     } else {
@@ -330,22 +337,25 @@ export function queueOrLaunch(
   chatId: number,
   text: string,
   api: Api,
+  threadId?: number,
 ): void {
-  resetPokeTimer(userId);
-  const currentUp = getUserProcess(userId);
+  const tid = threadId ?? 0;
+  resetPokeTimer(userId, chatId, tid);
+  const currentUp = getUserProcess(userId, chatId, tid);
 
   if (currentUp?.isProcessing) {
-    let queue = messageQueues.get(userId);
+    const sessionKey = buildSessionKey(userId, chatId, tid);
+    let queue = messageQueues.get(sessionKey);
     if (!queue) {
-      queue = { chatId, texts: [] };
-      messageQueues.set(userId, queue);
+      queue = { texts: [] };
+      messageQueues.set(sessionKey, queue);
     }
     queue.texts.push(text);
     logger.info({ userId, queueSize: queue.texts.length }, 'Message queued');
     return;
   }
 
-  const ready = getOrCreateUp(userId);
+  const ready = getOrCreateUp(userId, chatId, tid);
 
   // Prepend interrupt context if previous task was stopped by user
   if (ready.interrupted) {
@@ -395,7 +405,7 @@ function getForwardSource(ctx: Context): string | null {
 
 // Forward collector — batches forwarded messages from same user
 const forwardCollector = new ForwardCollector(
-  (userId, chatId, text, api) => queueOrLaunch(userId, chatId, text, api),
+  (userId, chatId, text, api, threadId) => queueOrLaunch(userId, chatId, text, api, threadId),
 );
 
 /**
@@ -439,13 +449,14 @@ function getReplyContext(ctx: Context): string | null {
 
 // Media group collector — batches files with same media_group_id
 const mediaGroupCollector = new MediaGroupCollector(
-  (userId, chatId, text, api) => queueOrLaunch(userId, chatId, text, api),
+  (userId, chatId, text, api, threadId) => queueOrLaunch(userId, chatId, text, api, threadId),
 );
 
 export async function messageHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
   const text = ctx.message?.text;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
   if (!userId || !chatId || !text) return;
 
@@ -462,17 +473,17 @@ export async function messageHandler(ctx: Context): Promise<void> {
   // Ignore commands (handled by command handlers)
   if (text.startsWith('/')) return;
 
-  logMessage(userId, 'user');
-  setUserChat(userId, chatId);
+  logMessage(userId, 'user', chatId, threadId);
+  setUserChat(userId, chatId, threadId);
 
   // Track last user message ID for set_reaction
-  const up = getOrCreateUp(userId);
+  const up = getOrCreateUp(userId, chatId, threadId);
   up.lastUserMessageId = ctx.message!.message_id;
 
   // Forwarded message → batch with ForwardCollector
   const fwdSource = getForwardSource(ctx);
   if (fwdSource) {
-    forwardCollector.add(userId, chatId, fwdSource, text, ctx.api);
+    forwardCollector.add(userId, chatId, fwdSource, text, ctx.api, threadId);
     return;
   }
 
@@ -500,19 +511,20 @@ export async function messageHandler(ctx: Context): Promise<void> {
     fullText = `${preview}\n\n${fullText}`;
   }
 
-  queueOrLaunch(userId, chatId, fullText, ctx.api);
+  queueOrLaunch(userId, chatId, fullText, ctx.api, threadId);
 }
 
 export async function mediaHandler(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const chatId = ctx.chat?.id;
   if (!userId || !chatId) return;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
-  logMessage(userId, 'user');
-  setUserChat(userId, chatId);
+  logMessage(userId, 'user', chatId, threadId);
+  setUserChat(userId, chatId, threadId);
 
   // Track last user message ID for set_reaction
-  const upMedia = getOrCreateUp(userId);
+  const upMedia = getOrCreateUp(userId, chatId, threadId);
   upMedia.lastUserMessageId = ctx.message!.message_id;
 
   const media = extractMediaInfo(ctx);
@@ -522,7 +534,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
   const rawCaption = ctx.message?.caption ?? '';
   const caption = replyCtx ? `${replyCtx}\n${rawCaption}` : rawCaption;
   const mediaGroupId = ctx.message?.media_group_id;
-  const up = getOrCreateUp(userId);
+  const up = getOrCreateUp(userId, chatId, threadId);
 
   // Forwarded media → resolve to text then batch with ForwardCollector
   const fwdSource = getForwardSource(ctx);
@@ -577,7 +589,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
       }
     }
     const fullText = rawCaption ? `${mediaText}\n${rawCaption}` : mediaText;
-    forwardCollector.add(userId, chatId, fwdSource, fullText, ctx.api);
+    forwardCollector.add(userId, chatId, fwdSource, fullText, ctx.api, threadId);
     return;
   }
 
@@ -595,6 +607,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
       chatId,
       ctx.api,
       up.workingDir,
+      threadId,
     );
     return;
   }
@@ -630,7 +643,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     parts.push(`sticker_id: ${media.fileId}`);
     let text = `[스티커 수신: ${parts.join(' | ')}]`;
     if (caption) text += `\n${caption}`;
-    queueOrLaunch(userId, chatId, text, ctx.api);
+    queueOrLaunch(userId, chatId, text, ctx.api, threadId);
     return;
   }
 
@@ -650,7 +663,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     meta.push('download failed — exceeds Bot API 20MB limit');
     const fallbackText = `[${label} 수신: ${meta.join(', ')}]`;
     const text = caption ? `${fallbackText}\n${caption}` : fallbackText;
-    queueOrLaunch(userId, chatId, text, ctx.api);
+    queueOrLaunch(userId, chatId, text, ctx.api, threadId);
     return;
   }
 
@@ -659,5 +672,5 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     caption,
   );
 
-  queueOrLaunch(userId, chatId, text, ctx.api);
+  queueOrLaunch(userId, chatId, text, ctx.api, threadId);
 }

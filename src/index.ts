@@ -91,6 +91,7 @@ async function main(): Promise<void> {
       enqueueScheduledTask({
         userId: job.userId,
         chatId: getChatId(job.userId),
+        threadId: 0,
         text: job.message,
         api: bot.api,
         mode: 'cron',
@@ -116,7 +117,7 @@ async function main(): Promise<void> {
       model: job.model,
     });
 
-    const streamHandler = new StreamHandler(bot.api, getChatId(job.userId), job.userId, up, { silent: true });
+    const streamHandler = new StreamHandler(bot.api, getChatId(job.userId), up.threadId, job.userId, up, { silent: true });
     streamHandler.attachToParser(parser).catch(err => {
       logger.error({ err, jobId: job.id }, 'Cron stream handler error');
     });
@@ -143,7 +144,7 @@ async function main(): Promise<void> {
           logger.info({ userId: job.userId, sessionId: resumeId }, 'Reload (cron): re-spawning Claude CLI');
 
           const spawn2 = spawnClaudeProcess(up!, { resumeSessionId: resumeId, mode: 'cron', model: job.model });
-          const sh2 = new StreamHandler(bot.api, getChatId(job.userId), job.userId, up!, { silent: true });
+          const sh2 = new StreamHandler(bot.api, getChatId(job.userId), up!.threadId, job.userId, up!, { silent: true });
           sh2.attachToParser(spawn2.parser).catch(() => {});
 
           if (sendToProcess(up!, reloadMsg)) {
@@ -188,7 +189,7 @@ async function main(): Promise<void> {
   });
 
   // --- Poke (proactive follow-up) ---
-  setPokeCallback(async (userId, stdin, workingDir, sessionId) => {
+  setPokeCallback(async (userId, stdin, workingDir, sessionId, chatId, threadId) => {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
     const { getUserConfig } = await import('./db/config-repo.js');
@@ -196,7 +197,8 @@ async function main(): Promise<void> {
     if (isUserActive(userId)) {
       enqueueScheduledTask({
         userId,
-        chatId: getChatId(userId),
+        chatId,
+        threadId,
         text: stdin,
         api: bot.api,
         mode: 'poke',
@@ -206,9 +208,9 @@ async function main(): Promise<void> {
     }
 
     const userModel = getUserConfig(userId).default_model;
-    let up = getUserProcess(userId);
+    let up = getUserProcess(userId, chatId, threadId);
     if (!up) {
-      up = createUserProcess(userId, workingDir, userModel);
+      up = createUserProcess(userId, workingDir, userModel, chatId, threadId);
     }
     if (sessionId && !up.sessionId) up.sessionId = sessionId;
     up.workingDir = workingDir;
@@ -220,7 +222,7 @@ async function main(): Promise<void> {
       mode: 'poke',
     });
 
-    const streamHandler = new StreamHandler(bot.api, getChatId(userId), userId, up, { silent: true });
+    const streamHandler = new StreamHandler(bot.api, chatId, up.threadId, userId, up, { silent: true });
     streamHandler.attachToParser(parser).catch(err => {
       logger.error({ err, userId }, 'Poke stream handler error');
     });
@@ -243,7 +245,7 @@ async function main(): Promise<void> {
         }
 
         if (up!.lastResponseText) {
-          bot.api.sendMessage(getChatId(userId), up!.lastResponseText)
+          bot.api.sendMessage(chatId, up!.lastResponseText)
             .catch(err => logger.error({ err, userId }, 'Failed to send poke message'));
         }
         up!.nothingToReport = false;
@@ -258,6 +260,20 @@ async function main(): Promise<void> {
 
   // Start all cron jobs
   startScheduler();
+
+  // Check for missed jobs during downtime
+  import('./scheduler/missed-jobs.js').then(({ detectMissedJobs, formatMissedJobsMessage }) => {
+    const missed = detectMissedJobs();
+    const msg = formatMissedJobsMessage(missed);
+    if (msg) {
+      // Send notification to all authorized users
+      import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
+        for (const uid of getAuthorizedUserIds()) {
+          bot.api.sendMessage(getChatId(uid), msg).catch(() => {});
+        }
+      });
+    }
+  });
 
   // Prepare dashboard schedule refresh (called after initDashboard in onStart)
   const { getAllJobs: getAllCronJobs, setOnChange } = await import('./scheduler/cron-store.js');
@@ -296,8 +312,8 @@ async function main(): Promise<void> {
     stopScheduler();
     stopAllPokes();
 
-    for (const [userId] of getAllProcesses()) {
-      killProcess(userId);
+    for (const [, up] of getAllProcesses()) {
+      killProcess(up.telegramUserId, up.chatId, up.threadId);
     }
 
     await stopInternalApi();
@@ -352,10 +368,17 @@ async function main(): Promise<void> {
         refreshScheduleDashboard();
 
         // Status bar: heartbeat & poke indicators (use last session dir)
-        setStatusCheckers(() => ({
-          heartbeat: hbFileExists(lastDir),
-          poke: pokeFileExists(lastDir),
-        }));
+        setStatusCheckers(() => {
+          let sessionCount = 0;
+          try {
+            sessionCount = getAllProcesses().size;
+          } catch { /* ignore */ }
+          return {
+            sessionCount,
+            pokeActive: 0,
+            pokeTotal: 0,
+          };
+        });
       };
 
       if (isFirstRun) {

@@ -92,6 +92,48 @@ function migrate(db: Database): void {
   if (!colNames.has('session_name')) {
     db.exec("ALTER TABLE sessions ADD COLUMN session_name TEXT DEFAULT NULL");
   }
+
+  // Multi-session: add chat_id and thread_id columns
+  if (!colNames.has('chat_id')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN chat_id INTEGER NOT NULL DEFAULT 0');
+    // Backfill: existing sessions are DM, so chat_id = telegram_user_id
+    db.exec('UPDATE sessions SET chat_id = telegram_user_id WHERE chat_id = 0');
+  }
+  if (!colNames.has('thread_id')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN thread_id INTEGER NOT NULL DEFAULT 0');
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_context ON sessions(telegram_user_id, chat_id, thread_id)');
+
+  // Multi-session: add chat_id and thread_id columns to message_logs
+  const msgCols = db.query('PRAGMA table_info(message_logs)').all() as { name: string }[];
+  const msgColNames = new Set(msgCols.map(c => c.name));
+  if (!msgColNames.has('chat_id')) {
+    db.exec('ALTER TABLE message_logs ADD COLUMN chat_id INTEGER NOT NULL DEFAULT 0');
+  }
+  if (!msgColNames.has('thread_id')) {
+    db.exec('ALTER TABLE message_logs ADD COLUMN thread_id INTEGER NOT NULL DEFAULT 0');
+  }
+
+  // Received files table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS received_files (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      telegram_user_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL DEFAULT 0,
+      thread_id INTEGER NOT NULL DEFAULT 0,
+      file_unique_id TEXT,
+      file_id TEXT NOT NULL,
+      file_type TEXT NOT NULL,
+      file_name TEXT,
+      file_path TEXT NOT NULL,
+      file_size INTEGER,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      working_dir TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_received_files_user ON received_files(telegram_user_id, chat_id, thread_id);
+  `);
+  // Unique index with WHERE clause must be separate (can't be inside IF NOT EXISTS with other statements easily)
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_received_files_unique ON received_files(file_unique_id, chat_id) WHERE file_unique_id IS NOT NULL`);
 }
 
 export function closeDb(): void {

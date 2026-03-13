@@ -10,6 +10,7 @@ interface ForwardedMsg {
 interface PendingForward {
   userId: number;
   chatId: number;
+  threadId: number;
   messages: ForwardedMsg[];
   api: Api;
   debounceTimer: ReturnType<typeof setTimeout>;
@@ -21,6 +22,7 @@ type ForwardCompleteCallback = (
   chatId: number,
   text: string,
   api: Api,
+  threadId: number,
 ) => void;
 
 const DEBOUNCE_MS = 1500;
@@ -40,6 +42,7 @@ export class ForwardCollector {
     source: string,
     text: string,
     api: Api,
+    threadId?: number,
   ): void {
     let group = this.pending.get(userId);
 
@@ -47,6 +50,7 @@ export class ForwardCollector {
       group = {
         userId,
         chatId,
+        threadId: threadId ?? 0,
         messages: [],
         api,
         debounceTimer: setTimeout(() => this.flush(userId), DEBOUNCE_MS),
@@ -89,7 +93,7 @@ export class ForwardCollector {
         result = `${preview}\n\n${result}`;
       }
 
-      this.onComplete(group.userId, group.chatId, result, group.api);
+      this.onComplete(group.userId, group.chatId, result, group.api, group.threadId);
       return;
     }
 
@@ -115,7 +119,7 @@ export class ForwardCollector {
       result = `${preview}\n\n${result}`;
     }
 
-    this.onComplete(group.userId, group.chatId, result, group.api);
+    this.onComplete(group.userId, group.chatId, result, group.api, group.threadId);
   }
 
   cleanup(): void {

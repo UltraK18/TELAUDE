@@ -82,8 +82,8 @@ export function initDashboard(): void {
     top: 8,
     left: 0,
     width: '50%',
-    height: 6,
-    label: ' Session ',
+    height: '50%-4',
+    label: ' Sessions ',
     content: '{gray-fg}No active session{/gray-fg}',
     tags: true,
     border: { type: 'line' },
@@ -112,10 +112,10 @@ export function initDashboard(): void {
   // Log area (bottom-left)
   logBox = blessed.log({
     parent: screen,
-    top: 14,
+    top: '50%+4',
     left: 0,
     width: '50%',
-    height: '100%-17',
+    height: '50%-7',
     label: ' Logs ',
     tags: true,
     border: { type: 'line' },
@@ -210,23 +210,55 @@ export function dashboardError(msg: string): void {
   }
 }
 
-let sessionState: { botUsername?: string; id?: string; model?: string; dir?: string } = {};
+interface SessionInfo {
+  id?: string;
+  model?: string;
+  dir?: string;
+  isActive?: boolean;
+  label?: string;  // e.g. "DM", "Group/T:3"
+}
 
-export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string }): void {
+let botUsername: string | null = null;
+const sessionStates = new Map<string, SessionInfo>();
+
+export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string; sessionKey?: string; isActive?: boolean; label?: string }): void {
   if (!sessionBox) return;
-  // Merge with previous state
-  if (info.botUsername) sessionState.botUsername = info.botUsername;
-  if (info.id) sessionState.id = info.id;
-  if (info.model) sessionState.model = info.model;
-  if (info.dir) sessionState.dir = info.dir;
+  if (info.botUsername) botUsername = info.botUsername;
+
+  const key = info.sessionKey ?? '_default';
+  const current = sessionStates.get(key) ?? {};
+  if (info.id) current.id = info.id;
+  if (info.model) current.model = info.model;
+  if (info.dir) current.dir = info.dir;
+  if (info.isActive !== undefined) current.isActive = info.isActive;
+  if (info.label) current.label = info.label;
+  sessionStates.set(key, current);
 
   const lines: string[] = [];
-  if (sessionState.botUsername) lines.push(`Bot: {cyan-fg}@${sessionState.botUsername}{/cyan-fg}`);
-  if (sessionState.id) lines.push(`Session: {white-fg}${sessionState.id.slice(0, 8)}...{/white-fg}`);
-  if (sessionState.model) lines.push(`Model: {white-fg}${sessionState.model}{/white-fg}`);
-  if (sessionState.dir) lines.push(`Dir: {gray-fg}${sessionState.dir}{/gray-fg}`);
-  sessionBox.setContent(lines.length > 0 ? lines.join('\n') : '{gray-fg}No active session{/gray-fg}');
+  if (botUsername) lines.push(`Bot: {cyan-fg}@${botUsername}{/cyan-fg}`);
+  lines.push('');
+
+  if (sessionStates.size === 0 || (sessionStates.size === 1 && !sessionStates.get('_default')?.id)) {
+    lines.push('{gray-fg}No active session{/gray-fg}');
+  } else {
+    for (const [k, s] of sessionStates) {
+      const active = s.isActive !== false;
+      const icon = active ? '{green-fg}●{/green-fg}' : '{gray-fg}○{/gray-fg}';
+      const label = s.label ?? (k === '_default' ? 'DM' : k);
+      lines.push(`${icon} {bold}${label}{/bold}`);
+      if (s.id) lines.push(`  sess:${s.id.slice(0, 8)}.. ${s.model ?? ''}`);
+      if (s.dir) lines.push(`  {gray-fg}${s.dir}{/gray-fg}`);
+    }
+  }
+
+  sessionBox.setContent(lines.join('\n'));
   screen?.render();
+}
+
+export function removeSession(sessionKey: string): void {
+  sessionStates.delete(sessionKey);
+  // Re-render session box
+  updateSession({});
 }
 
 interface ScheduleJob {
@@ -342,7 +374,7 @@ export function isDashboardActive(): boolean {
 
 // --- Status bar ---
 
-let statusCheckers: (() => { heartbeat: boolean; poke: boolean }) | null = null;
+let statusCheckers: (() => { sessionCount: number; pokeActive: number; pokeTotal: number }) | null = null;
 
 function formatUptime(): string {
   if (!startTime) return '00:00:00';
@@ -356,20 +388,16 @@ function formatUptime(): string {
     : `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
 }
 
-function indicator(on: boolean): string {
-  return on ? '{green-fg}●{/green-fg}' : '{red-fg}●{/red-fg}';
-}
-
 function renderStatusBar(): void {
   if (!statusBar) return;
-  const state = statusCheckers ? statusCheckers() : { heartbeat: false, poke: false };
+  const state = statusCheckers ? statusCheckers() : { sessionCount: 0, pokeActive: 0, pokeTotal: 0 };
   const uptime = `{gray-fg}Uptime:{/gray-fg} {white-fg}${formatUptime()}{/white-fg}`;
-  const hb = `{gray-fg}Heartbeat:{/gray-fg} ${indicator(state.heartbeat)}`;
-  const pk = `{gray-fg}Poke:{/gray-fg} ${indicator(state.poke)}`;
-  statusBar.setContent(`${uptime}    ${hb}    ${pk}`);
+  const sessions = `{gray-fg}Sessions:{/gray-fg} {white-fg}${state.sessionCount}{/white-fg}`;
+  const poke = `{gray-fg}Poke:{/gray-fg} {white-fg}${state.pokeActive}/${state.pokeTotal}{/white-fg}`;
+  statusBar.setContent(`${uptime}    ${sessions}    ${poke}`);
   screen?.render();
 }
 
-export function setStatusCheckers(fn: () => { heartbeat: boolean; poke: boolean }): void {
+export function setStatusCheckers(fn: () => { sessionCount: number; pokeActive: number; pokeTotal: number }): void {
   statusCheckers = fn;
 }

@@ -81,6 +81,9 @@ export async function cdCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   const text = ctx.message?.text ?? '';
   const targetPath = text.replace(/^\/cd\s*/, '').trim();
 
@@ -92,15 +95,15 @@ export async function cdCommand(ctx: Context): Promise<void> {
       return;
     }
 
-    killProcess(userId);
+    killProcess(userId, chatId, threadId);
     upsertUserConfig(userId, { default_working_dir: result.resolved });
 
-    const up = getUserProcess(userId);
+    const up = getUserProcess(userId, chatId, threadId);
     if (up) {
       up.workingDir = result.resolved;
       up.sessionId = null;
     }
-    deactivateAllUserSessions(userId);
+    deactivateAllUserSessions(userId, chatId, threadId);
     cancelPokeTimer(userId);
 
     await ctx.reply(`Directory changed: <code>${result.resolved}</code>`, {
@@ -110,7 +113,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
   }
 
   // No path given: show folder browser
-  const up = getUserProcess(userId);
+  const up = getUserProcess(userId, chatId, threadId);
   const candidates = [
     up?.workingDir,
     getUserConfig(userId).default_working_dir,
@@ -123,7 +126,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
   if (up && up.workingDir !== currentDir) {
     up.workingDir = currentDir;
     up.sessionId = null;
-    deactivateAllUserSessions(userId);
+    deactivateAllUserSessions(userId, chatId, threadId);
   }
 
   const browser = buildBrowserKeyboard(currentDir, 0);
@@ -142,7 +145,9 @@ export async function pwdCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const up = getUserProcess(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+  const up = getUserProcess(userId, chatId, threadId);
   const dir = up?.workingDir ?? getUserConfig(userId).default_working_dir ?? config.paths.defaultWorkingDir;
 
   await ctx.reply(`Current directory: <code>${dir}</code>`, { parse_mode: 'HTML' });

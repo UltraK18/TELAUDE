@@ -60,12 +60,15 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const up = getUserProcess(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
+  const up = getUserProcess(userId, chatId, threadId);
   const cfg = getUserConfig(userId);
   const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
   const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 
-  const sessions = getRecentSessions(userId, 10, currentDir);
+  const sessions = getRecentSessions(userId, 10, currentDir, chatId, threadId);
   const list = buildSessionList(sessions);
 
   const msg = await ctx.reply(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
@@ -78,16 +81,21 @@ export async function resumeCommand(ctx: Context): Promise<void> {
 }
 
 export async function resumeSession(userId: number, sessionId: string, ctx: Context): Promise<void> {
-  killProcess(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id ?? (ctx.message as any)?.message_thread_id ?? 0;
+
+  killProcess(userId, chatId, threadId);
 
   const cfg = getUserConfig(userId);
   const session = getSessionById(sessionId);
-  let up = getUserProcess(userId);
+  let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
     up = createUserProcess(
       userId,
       session?.working_dir ?? cfg.default_working_dir ?? process.cwd(),
       session?.model ?? cfg.default_model,
+      chatId,
+      threadId,
     );
   }
   up.sessionId = sessionId;
@@ -116,13 +124,16 @@ export async function renameCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   const args = ctx.message?.text?.split(/\s+/).slice(1).join(' ').trim();
   if (!args) {
     await ctx.reply('Usage: /rename <name>\nRenames the current active session.\nUse /rename clear to remove the name.');
     return;
   }
 
-  const session = getActiveSession(userId);
+  const session = getActiveSession(userId, chatId, threadId);
   if (!session) {
     await ctx.reply('No active session to rename.');
     return;
@@ -147,13 +158,16 @@ export async function newCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   cancelPokeTimer(userId);
-  killProcess(userId);
-  const up = getUserProcess(userId);
+  killProcess(userId, chatId, threadId);
+  const up = getUserProcess(userId, chatId, threadId);
   if (up) {
     up.sessionId = null;
   }
-  deactivateAllUserSessions(userId);
+  deactivateAllUserSessions(userId, chatId, threadId);
 
   await ctx.reply('New session started. Send a message.');
 }

@@ -14,6 +14,8 @@ export interface SessionRecord {
   total_input_tokens: number;
   total_output_tokens: number;
   session_name: string | null;
+  chat_id: number;
+  thread_id: number;
 }
 
 export function createSession(
@@ -21,51 +23,61 @@ export function createSession(
   sessionId: string,
   workingDir: string,
   model: string,
+  chatId?: number,
+  threadId?: number,
 ): void {
-  // Deactivate all other sessions first — only one active at a time
-  deactivateAllUserSessions(userId);
+  const cid = chatId ?? userId;
+  const tid = threadId ?? 0;
+
+  // Deactivate sessions within same chat/thread context only
+  deactivateAllUserSessions(userId, cid, tid);
 
   const existing = getDb()
     .prepare('SELECT id FROM sessions WHERE session_id = ?')
     .get(sessionId);
   if (existing) {
     getDb()
-      .prepare("UPDATE sessions SET last_active_at = datetime('now'), is_active = 1 WHERE session_id = ?")
-      .run(sessionId);
+      .prepare("UPDATE sessions SET last_active_at = datetime('now'), is_active = 1, chat_id = ?, thread_id = ? WHERE session_id = ?")
+      .run(cid, tid, sessionId);
     return;
   }
   getDb()
-    .prepare('INSERT INTO sessions (telegram_user_id, session_id, working_dir, model) VALUES (?, ?, ?, ?)')
-    .run(userId, sessionId, workingDir, model);
+    .prepare('INSERT INTO sessions (telegram_user_id, session_id, working_dir, model, chat_id, thread_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, sessionId, workingDir, model, cid, tid);
 }
 
-export function getActiveSession(userId: number): SessionRecord | undefined {
+export function getActiveSession(userId: number, chatId?: number, threadId?: number): SessionRecord | undefined {
+  if (chatId != null && threadId != null) {
+    return getDb()
+      .prepare('SELECT * FROM sessions WHERE telegram_user_id = ? AND chat_id = ? AND thread_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1')
+      .get(userId, chatId, threadId) as SessionRecord | undefined;
+  }
   return getDb()
     .prepare('SELECT * FROM sessions WHERE telegram_user_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1')
     .get(userId) as SessionRecord | undefined;
 }
 
-export function getRecentSessions(userId: number, limit = 10, workingDir?: string): SessionRecord[] {
+export function getRecentSessions(userId: number, limit = 10, workingDir?: string, chatId?: number, threadId?: number): SessionRecord[] {
+  let sql = 'SELECT * FROM sessions WHERE telegram_user_id = ?';
+  const params: (string | number)[] = [userId];
+
   if (workingDir) {
-    return getDb()
-      .prepare(`
-        SELECT * FROM sessions
-        WHERE telegram_user_id = ? AND working_dir = ?
-        GROUP BY session_id
-        ORDER BY MAX(id) DESC
-        LIMIT ?
-      `)
-      .all(userId, workingDir, limit) as SessionRecord[];
+    sql += ' AND working_dir = ?';
+    params.push(workingDir);
   }
-  return getDb()
-    .prepare(`
-      SELECT * FROM sessions
-      WHERE telegram_user_id = ?
-      GROUP BY session_id
-      ORDER BY MAX(id) DESC
-      LIMIT ?
-    `)
-    .all(userId, limit) as SessionRecord[];
+  if (chatId != null) {
+    sql += ' AND chat_id = ?';
+    params.push(chatId);
+  }
+  if (threadId != null) {
+    sql += ' AND thread_id = ?';
+    params.push(threadId);
+  }
+
+  sql += ' GROUP BY session_id ORDER BY MAX(id) DESC LIMIT ?';
+  params.push(limit);
+
+  return getDb().prepare(sql).all(...params) as SessionRecord[];
 }
 
 export function getSessionById(sessionId: string): SessionRecord | undefined {
@@ -92,6 +104,12 @@ export function updateSessionCost(sessionId: string, costUsd: number, turns: num
     .run(costUsd, turns, inputTokens ?? 0, outputTokens ?? 0, sessionId);
 }
 
+export function updateSessionWorkingDir(sessionId: string, workingDir: string): void {
+  getDb()
+    .prepare('UPDATE sessions SET working_dir = ? WHERE session_id = ?')
+    .run(workingDir, sessionId);
+}
+
 export function deactivateSession(sessionId: string): void {
   getDb()
     .prepare('UPDATE sessions SET is_active = 0 WHERE session_id = ?')
@@ -110,8 +128,14 @@ export function renameSession(sessionId: string, name: string | null): void {
     .run(name, sessionId);
 }
 
-export function deactivateAllUserSessions(userId: number): void {
-  getDb()
-    .prepare('UPDATE sessions SET is_active = 0 WHERE telegram_user_id = ?')
-    .run(userId);
+export function deactivateAllUserSessions(userId: number, chatId?: number, threadId?: number): void {
+  if (chatId != null && threadId != null) {
+    getDb()
+      .prepare('UPDATE sessions SET is_active = 0 WHERE telegram_user_id = ? AND chat_id = ? AND thread_id = ?')
+      .run(userId, chatId, threadId);
+  } else {
+    getDb()
+      .prepare('UPDATE sessions SET is_active = 0 WHERE telegram_user_id = ?')
+      .run(userId);
+  }
 }

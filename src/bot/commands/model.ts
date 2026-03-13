@@ -9,11 +9,14 @@ export async function modelCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   const text = ctx.message?.text ?? '';
   const modelName = text.replace(/^\/model\s*/, '').trim().toLowerCase();
 
   if (!modelName) {
-    const current = getUserProcess(userId)?.model ?? getUserConfig(userId).default_model;
+    const current = getUserProcess(userId, chatId, threadId)?.model ?? getUserConfig(userId).default_model;
     await ctx.reply(
       `Current model: <b>${current}</b>\nAvailable: ${VALID_MODELS.join(', ')}\nChange: <code>/model name</code>`,
       { parse_mode: 'HTML' },
@@ -28,7 +31,7 @@ export async function modelCommand(ctx: Context): Promise<void> {
 
   upsertUserConfig(userId, { default_model: modelName });
 
-  const up = getUserProcess(userId);
+  const up = getUserProcess(userId, chatId, threadId);
   if (up?.isProcessing) {
     // Don't kill — just update model for next spawn
     up.model = modelName;
@@ -37,11 +40,11 @@ export async function modelCommand(ctx: Context): Promise<void> {
   }
 
   // Not processing — kill and apply immediately
-  killProcess(userId);
+  killProcess(userId, chatId, threadId);
   if (up) up.model = modelName;
 
   // Update active session so model persists across bot restarts
-  const activeSession = getActiveSession(userId);
+  const activeSession = getActiveSession(userId, chatId, threadId);
   if (activeSession) {
     updateSessionModel(activeSession.session_id, modelName);
   }

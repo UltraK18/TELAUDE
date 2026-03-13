@@ -11,12 +11,15 @@ import {
 import {
   reloadAll, getNextRun, scheduleJob, unscheduleJob,
 } from '../scheduler/scheduler.js';
-import { getUserProcess } from '../claude/process-manager.js';
+import { getUserProcess, getActiveProcessForUser, buildSessionKey } from '../claude/process-manager.js';
+import type { UserProcess } from '../claude/process-manager.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { getReceivedFiles, getReceivedFileById } from '../db/file-repo.js';
 
 // In-memory userId → chatId mapping (updated on every message)
 const userChatMap = new Map<number, number>();
+const userThreadMap = new Map<number, number>();
 
 /** Update in-memory mapping + persist to .env if needed (call on auth) */
 export function updateUserChatMapping(userId: number, chatId: number): void {
@@ -29,8 +32,9 @@ export function updateUserChatMapping(userId: number, chatId: number): void {
 }
 
 /** Lightweight in-memory only update (call on every message) */
-export function setUserChat(userId: number, chatId: number): void {
+export function setUserChat(userId: number, chatId: number, threadId?: number): void {
   userChatMap.set(userId, chatId);
+  if (threadId != null) userThreadMap.set(userId, threadId);
 }
 
 export function getChatId(userId: number): number {
@@ -68,10 +72,25 @@ function persistChatId(chatId: number): void {
   }
 }
 
+function getSessionTarget(userId: number, body: Record<string, unknown>): { chatId: number; threadId: number; up: UserProcess | undefined } {
+  const chatId = (body._chatId as number) ?? getChatId(userId);
+  const threadId = (body._threadId as number) ?? userThreadMap.get(userId) ?? 0;
+  let up = getUserProcess(userId, chatId, threadId);
+  if (!up) up = getActiveProcessForUser(userId);
+  return { chatId, threadId, up };
+}
+
+function threadOpts(threadId: number, extra?: Record<string, unknown>): Record<string, unknown> {
+  const opts: Record<string, unknown> = {};
+  if (threadId > 0) opts.message_thread_id = threadId;
+  if (extra) Object.assign(opts, extra);
+  return opts;
+}
+
 /** Validate that a file path is within allowed boundaries (workingDir, homedir, tmpdir) */
-function validateFilePath(filePath: string, userId: number): string {
+function validateFilePath(filePath: string, userId: number, chatId?: number, threadId?: number): string {
   const resolved = path.resolve(filePath);
-  const up = getUserProcess(userId);
+  const up = getUserProcess(userId, chatId, threadId) ?? getActiveProcessForUser(userId);
   const allowed = [
     up?.workingDir,
     os.homedir(),
@@ -104,7 +123,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/ask', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
+    const { chatId, threadId } = getSessionTarget(userId, body);
     const choices: string[] | undefined = body.choices;
 
     // Build keyboard if choices provided
@@ -117,9 +136,9 @@ export function registerAllRoutes(api: Api): void {
       : undefined;
 
     // Send question (with or without buttons)
-    const msg = await api.sendMessage(chatId, body.question, {
+    const msg = await api.sendMessage(chatId, body.question, threadOpts(threadId, {
       reply_markup: keyboard,
-    });
+    }));
 
     // Start waiting for answer (text or button click)
     const answerPromise = createAsk(userId, body.question, choices);
@@ -131,8 +150,8 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/send-file', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
-    const filePath = validateFilePath(body.path as string, userId);
+    const { chatId, threadId } = getSessionTarget(userId, body);
+    const filePath = validateFilePath(body.path as string, userId, chatId, threadId);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -141,14 +160,14 @@ export function registerAllRoutes(api: Api): void {
     const fileBuffer = fs.readFileSync(filePath);
     const fileName = path.basename(filePath);
 
-    await api.sendDocument(chatId, new InputFile(fileBuffer, fileName));
+    await api.sendDocument(chatId, new InputFile(fileBuffer, fileName), threadOpts(threadId));
     return { ok: true, fileName };
   });
 
   registerRoute('/mcp/send-photo', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
-    const filePath = validateFilePath(body.path as string, userId);
+    const { chatId, threadId } = getSessionTarget(userId, body);
+    const filePath = validateFilePath(body.path as string, userId, chatId, threadId);
 
     if (!fs.existsSync(filePath)) {
       throw new Error(`File not found: ${filePath}`);
@@ -157,23 +176,22 @@ export function registerAllRoutes(api: Api): void {
     const fileBuffer = fs.readFileSync(filePath);
     const fileName = path.basename(filePath);
 
-    await api.sendPhoto(chatId, new InputFile(fileBuffer, fileName));
+    await api.sendPhoto(chatId, new InputFile(fileBuffer, fileName), threadOpts(threadId));
     return { ok: true, fileName };
   });
 
   registerRoute('/mcp/send-sticker', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
+    const { chatId, threadId } = getSessionTarget(userId, body);
     const stickerId = body.sticker_id as string;
 
-    await api.sendSticker(chatId, stickerId);
+    await api.sendSticker(chatId, stickerId, threadOpts(threadId));
     return { ok: true };
   });
 
   registerRoute('/mcp/set-reaction', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
-    const up = getUserProcess(userId);
+    const { chatId, up } = getSessionTarget(userId, body);
     const messageId = up?.lastUserMessageId;
     if (!messageId) throw new Error('No recent user message to react to');
 
@@ -189,7 +207,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/zip-and-send', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
+    const { chatId, threadId } = getSessionTarget(userId, body);
     const dirPath = validateDirPath(body.dir as string, userId);
 
     if (!fs.existsSync(dirPath) || !fs.statSync(dirPath).isDirectory()) {
@@ -239,8 +257,32 @@ export function registerAllRoutes(api: Api): void {
     const dirName = path.basename(dirPath);
     const fileName = `${dirName}.zip`;
 
-    await api.sendDocument(chatId, new InputFile(zipBuffer, fileName));
+    await api.sendDocument(chatId, new InputFile(zipBuffer, fileName), threadOpts(threadId));
     return { ok: true, fileName };
+  });
+
+  // --- Received files ---
+
+  registerRoute('/mcp/files/list', async (body) => {
+    const userId = body._userId as number;
+    const { chatId, threadId } = getSessionTarget(userId, body);
+    const fileType = body.type as string | undefined;
+    const limit = (body.limit as number) ?? 50;
+    const files = getReceivedFiles(userId, chatId, threadId, fileType, limit);
+    return { files: files.map(f => ({ id: f.id, type: f.file_type, name: f.file_name, path: f.file_path, size: f.file_size, createdAt: f.created_at })) };
+  });
+
+  registerRoute('/mcp/files/download', async (body) => {
+    const userId = body._userId as number;
+    const { chatId } = getSessionTarget(userId, body);
+    const fileId = body.fileId as number;
+    const file = getReceivedFileById(fileId);
+    if (!file) throw new Error(`File not found: ${fileId}`);
+    // Verify ownership
+    if (file.telegram_user_id !== userId || file.chat_id !== chatId) {
+      throw new Error('Access denied: file belongs to another chat');
+    }
+    return { file: { id: file.id, type: file.file_type, name: file.file_name, path: file.file_path, size: file.file_size, workingDir: file.working_dir } };
   });
 
   // --- System info ---
@@ -259,7 +301,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/cron/add', async (body) => {
     const userId = body._userId as number;
-    const up = getUserProcess(userId);
+    const { up } = getSessionTarget(userId, body);
     const job = addJob({
       name: body.name,
       schedule: body.schedule,
@@ -338,7 +380,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/turn-delete', async (body) => {
     const userId = body._userId as number;
-    const up = getUserProcess(userId);
+    const { up } = getSessionTarget(userId, body);
     if (up) {
       up.nothingToReport = true;
       // Preserve response for history, but prevent auto-report to Telegram
@@ -350,12 +392,44 @@ export function registerAllRoutes(api: Api): void {
     return { ok: true };
   });
 
+  // --- Inject stdin ---
+
+  registerRoute('/mcp/inject-stdin', async (body) => {
+    const userId = body._userId as number;
+    const { up } = getSessionTarget(userId, body);
+    if (!up) throw new Error('No active session for this user');
+
+    const text = body.text as string;
+    if (!text) throw new Error('Missing "text" field');
+    if (text.length > 100_000) throw new Error('Text too long (max 100,000 characters)');
+
+    if (!up.process || !up.process.stdin || up.process.stdin.destroyed) {
+      throw new Error('No active Claude process to inject into');
+    }
+
+    // Write directly to stdin without ending it (unlike sendMessage which calls .end())
+    up.process.stdin.write(text);
+    return { ok: true, length: text.length };
+  });
+
+  // --- Isolated job ---
+
+  registerRoute('/mcp/isolated-escalate', async (body) => {
+    const userId = body._userId as number;
+    const { chatId, threadId } = getSessionTarget(userId, body);
+    const message = body.message as string;
+    if (!message) throw new Error('Missing "message" field');
+
+    // Send escalation message to the user's chat
+    await api.sendMessage(chatId, `🚨 ${message}`, threadOpts(threadId));
+    return { ok: true };
+  });
+
   // --- Pin/Unpin ---
 
   registerRoute('/mcp/pin-message', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
-    const up = getUserProcess(userId);
+    const { chatId, up } = getSessionTarget(userId, body);
     const messageId = up?.lastBotMessageId;
     if (!messageId) throw new Error('No recent bot message to pin');
     await api.pinChatMessage(chatId, messageId, { disable_notification: true });
@@ -364,7 +438,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/unpin-message', async (body) => {
     const userId = body._userId as number;
-    const chatId = getChatId(userId);
+    const { chatId } = getSessionTarget(userId, body);
     await api.unpinAllChatMessages(chatId);
     return { ok: true };
   });

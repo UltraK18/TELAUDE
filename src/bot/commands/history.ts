@@ -21,7 +21,9 @@ export async function historyCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
-  const up = getUserProcess(userId);
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+  const up = getUserProcess(userId, chatId, threadId);
   if (!up?.sessionId) {
     await ctx.reply('No active session.', { parse_mode: 'HTML' });
     return;

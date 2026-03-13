@@ -80,7 +80,6 @@ export function createBot(): Bot {
     { command: 'history', description: 'Last 5 conversation turns' },
     { command: 'help', description: 'Command list' },
     { command: 'mode', description: 'Session mode (default/minimal)' },
-    { command: 'newtopic', description: 'Create DM topic (independent session)' },
     { command: 'schedule', description: 'View scheduled jobs' },
     { command: 'usage', description: 'Token usage stats' },
   ];

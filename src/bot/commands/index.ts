@@ -11,7 +11,6 @@ import { statsCommand } from './status.js';
 import { compactCommand } from './compact.js';
 import { historyCommand } from './history.js';
 import { modeCommand } from './mode.js';
-import { newtopicCommand } from './topic.js';
 import { scheduleCommand } from './schedule.js';
 import { usageCommand } from './usage.js';
 
@@ -39,7 +38,6 @@ export function registerCommands(bot: Bot): void {
   bot.command('compact', compactCommand);
   bot.command('history', historyCommand);
   bot.command('mode', modeCommand);
-  bot.command('newtopic', newtopicCommand);
   bot.command('schedule', scheduleCommand);
   bot.command('usage', usageCommand);
 }

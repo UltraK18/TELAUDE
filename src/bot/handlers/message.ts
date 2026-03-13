@@ -367,10 +367,11 @@ export function queueOrLaunch(
   const resumeId = ready.sessionId ?? undefined;
 
   // Show "typing..." indicator while processing
-  api.sendChatAction(chatId, 'typing').catch(() => {});
+  const typingOpts = tid > 0 ? { message_thread_id: tid } : {};
+  api.sendChatAction(chatId, 'typing', typingOpts).catch(() => {});
   const typingInterval = setInterval(() => {
     if (!ready.isProcessing) { clearInterval(typingInterval); return; }
-    api.sendChatAction(chatId, 'typing').catch(() => {});
+    api.sendChatAction(chatId, 'typing', typingOpts).catch(() => {});
   }, 4500);
 
   if (!launchAndSend(ready, text, chatId, userId, api, resumeId)) {

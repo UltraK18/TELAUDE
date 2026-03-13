@@ -411,17 +411,31 @@ async function main(): Promise<void> {
 
       // Send reload notification to Claude session if /reload was used (dev only)
       if (process.env['NODE_ENV'] === 'development') {
-        import('./bot/commands/stop.js').then(({ consumeReloadFlag }) => {
+        (async () => {
+          const { consumeReloadFlag } = await import('./bot/commands/stop.js');
           const flag = consumeReloadFlag();
-          if (flag && flag.message !== '__silent__') {
-            const stdin = flag.message
-              ? `[The user has restarted the application]\nUser said: ${flag.message}`
-              : '[The user has restarted the application]';
-            import('./bot/handlers/message.js').then(({ queueOrLaunch }) => {
-              queueOrLaunch(flag.userId, getChatId(flag.userId), stdin, bot.api);
-            });
+          if (!flag || flag.sessionId === '__silent__') return;
+
+          const stdin = flag.message
+            ? `[The user has restarted the application]\nUser said: ${flag.message}`
+            : '[The user has restarted the application]';
+          const chatId = getChatId(flag.userId);
+
+          // Restore sessionId so reload resumes previous conversation
+          if (flag.sessionId) {
+            const { getUserProcess, createUserProcess: cup } = await import('./claude/process-manager.js');
+            const { getUserConfig } = await import('./db/config-repo.js');
+            const cfg = getUserConfig(flag.userId);
+            let up = getUserProcess(flag.userId, chatId);
+            if (!up) {
+              up = cup(flag.userId, cfg.default_working_dir ?? process.cwd(), cfg.default_model, chatId);
+            }
+            up.sessionId = flag.sessionId;
           }
-        });
+
+          const { queueOrLaunch } = await import('./bot/handlers/message.js');
+          queueOrLaunch(flag.userId, chatId, stdin, bot.api);
+        })();
       }
     },
   });

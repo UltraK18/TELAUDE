@@ -114,7 +114,13 @@ function migrate(db: Database): void {
     db.exec('ALTER TABLE message_logs ADD COLUMN thread_id INTEGER NOT NULL DEFAULT 0');
   }
 
-  // Received files table
+  // Received files table — recreate if schema is from corrupted v006 (missing telegram_user_id)
+  const rfCols = db.query('PRAGMA table_info(received_files)').all() as { name: string }[];
+  const rfColNames = new Set(rfCols.map(c => c.name));
+  if (rfColNames.size > 0 && !rfColNames.has('telegram_user_id')) {
+    // Old corrupted schema — drop and recreate
+    db.exec('DROP TABLE IF EXISTS received_files');
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS received_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -129,10 +135,9 @@ function migrate(db: Database): void {
       file_size INTEGER,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       working_dir TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_received_files_user ON received_files(telegram_user_id, chat_id, thread_id);
+    )
   `);
-  // Unique index with WHERE clause must be separate (can't be inside IF NOT EXISTS with other statements easily)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_received_files_user ON received_files(telegram_user_id, chat_id, thread_id)`);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_received_files_unique ON received_files(file_unique_id, chat_id) WHERE file_unique_id IS NOT NULL`);
 }
 

@@ -292,9 +292,11 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
   }
 
   let active = true;
+  let ignoreFirst = true; // Skip the enter keypress that opened this overlay
 
   function onKey(_ch: string, key: blessed.Widgets.Events.IKeyEventArg): void {
     if (!active) return;
+    if (ignoreFirst) { ignoreFirst = false; return; }
     if (key.name === 'escape' || key.name === 'q') {
       active = false;
       screen.removeListener('keypress', onKey);

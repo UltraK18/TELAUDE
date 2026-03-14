@@ -146,6 +146,14 @@ export function getUserProcessBySessionKey(sessionKey: string): UserProcess | un
   return processes.get(sessionKey);
 }
 
+/** Check if a session_id is already in use by another UP (different sessionKey) */
+export function isSessionInUse(sessionId: string, excludeSessionKey?: string): boolean {
+  for (const [key, up] of processes) {
+    if (up.sessionId === sessionId && key !== excludeSessionKey) return true;
+  }
+  return false;
+}
+
 export function getAllProcesses(): Map<string, UserProcess> {
   return processes;
 }

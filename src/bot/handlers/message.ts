@@ -8,6 +8,7 @@ import {
   sendMessage,
   buildSessionKey,
   getProcessesByUserId,
+  isSessionInUse,
   type UserProcess,
 } from '../../claude/process-manager.js';
 import { StreamHandler } from '../../claude/stream-handler.js';
@@ -73,7 +74,11 @@ function getOrCreateUp(userId: number, chatId?: number, threadId?: number): User
       threadId,
     );
     if (lastSession) {
-      up.sessionId = lastSession.session_id;
+      // Don't reuse a session that's already active in another thread
+      const sk = buildSessionKey(userId, chatId, threadId);
+      if (!isSessionInUse(lastSession.session_id, sk)) {
+        up.sessionId = lastSession.session_id;
+      }
     }
   } else if (!fs.existsSync(up.workingDir)) {
     const fallback = [config.paths.defaultWorkingDir, process.cwd()]

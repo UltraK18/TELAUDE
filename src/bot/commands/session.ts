@@ -1,12 +1,11 @@
 import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import fs from 'fs';
-import { getUserProcess, killProcess, removeUserProcess, createUserProcess } from '../../claude/process-manager.js';
+import { getUserProcess, killProcess, removeUserProcess, createUserProcess, buildSessionKey, isSessionInUse } from '../../claude/process-manager.js';
 import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession, renameSession } from '../../db/session-repo.js';
 import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
 import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
-import { buildSessionKey } from '../../claude/process-manager.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 
 function escapeHtml(s: string): string {
@@ -82,6 +81,13 @@ export async function resumeCommand(ctx: Context): Promise<void> {
 export async function resumeSession(userId: number, sessionId: string, ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id ?? (ctx.message as any)?.message_thread_id ?? 0;
+
+  // Prevent resuming a session that's already active in another thread
+  const currentKey = buildSessionKey(userId, chatId, threadId);
+  if (isSessionInUse(sessionId, currentKey)) {
+    await ctx.reply('⚠️ This session is already active in another thread.');
+    return;
+  }
 
   killProcess(userId, chatId, threadId);
 

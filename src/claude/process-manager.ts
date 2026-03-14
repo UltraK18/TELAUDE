@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { logger, notify } from '../utils/logger.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { getApiToken, getApiPort } from '../api/internal-server.js';
-import { loadSettings } from '../settings/settings-store.js';
+import { resolveSettings } from '../settings/settings-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -192,7 +192,8 @@ export interface SpawnOptions {
 }
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
-  const settings = loadSettings();
+  const sessionKey = buildSessionKey(up.telegramUserId, up.chatId, up.threadId);
+  const settings = resolveSettings(up.workingDir, sessionKey);
   // Priority: opts.model (scheduled tasks) > up.model (/model command) > settings.model (TUI) > fallback
   const model = opts?.model ?? up.model ?? settings.model ?? 'default';
 

@@ -105,7 +105,6 @@ export function initDashboard(): void {
     style: { border: { fg: 208 }, label: { fg: 208 } },
     scrollable: true,
     alwaysScroll: true,
-    mouse: true,
     padding: { left: 1 },
   });
 
@@ -125,7 +124,6 @@ export function initDashboard(): void {
     scrollbar: {
       style: { bg: 'gray' },
     },
-    mouse: true,
     padding: { left: 1, right: 1 },
   });
 
@@ -141,32 +139,6 @@ export function initDashboard(): void {
     border: { type: 'line' },
     style: { border: { fg: 208 } },
     padding: { left: 1 },
-    mouse: true,
-  });
-
-  // Settings hint + button (right-aligned inside status bar)
-  blessed.box({
-    parent: statusBar,
-    top: 0,
-    right: 13,
-    width: 16,
-    height: 1,
-    tags: true,
-    content: '{gray-fg}press s to open{/gray-fg}',
-  });
-  const settingsBtn = blessed.box({
-    parent: statusBar,
-    top: 0,
-    right: 1,
-    width: 12,
-    height: 1,
-    tags: true,
-    content: '{208-fg}[Settings]{/208-fg}',
-    style: { hover: { fg: 'white' } },
-    mouse: true,
-  });
-  settingsBtn.on('click', () => {
-    if (screen) openSettingsScreen(screen);
   });
 
   renderStatusBar();
@@ -179,12 +151,38 @@ export function initDashboard(): void {
     screen!.render();
   });
 
-  // Open settings on 's'
-  screen.key(['s'], () => {
-    if (screen) openSettingsScreen(screen);
+  // Session selection with arrow keys
+  screen.key(['up'], () => {
+    const keys = getSessionKeys();
+    if (keys.length === 0) return;
+    selectedSessionIdx = (selectedSessionIdx - 1 + keys.length) % keys.length;
+    renderSessionBox();
+  });
+  screen.key(['down'], () => {
+    const keys = getSessionKeys();
+    if (keys.length === 0) return;
+    selectedSessionIdx = (selectedSessionIdx + 1) % keys.length;
+    renderSessionBox();
   });
 
-  // Quit on q or Ctrl-C
+  // Open settings for selected session on Enter
+  screen.key(['return'], () => {
+    if (screen) {
+      const keys = getSessionKeys();
+      const selectedKey = keys[selectedSessionIdx] ?? undefined;
+      openSettingsScreen(screen, selectedKey);
+    }
+  });
+
+  // Log scrolling with PgUp/PgDown
+  screen.key(['pageup'], () => {
+    if (logBox) { logBox.scroll(-((logBox.height as number) - 2)); screen!.render(); }
+  });
+  screen.key(['pagedown'], () => {
+    if (logBox) { logBox.scroll((logBox.height as number) - 2); screen!.render(); }
+  });
+
+  // Quit on Ctrl-C
   screen.key(['C-c'], () => {
     process.exit(0);
   });
@@ -220,6 +218,13 @@ interface SessionInfo {
 
 let botUsername: string | null = null;
 const sessionStates = new Map<string, SessionInfo>();
+let selectedSessionIdx = 0;
+
+function getSessionKeys(): string[] {
+  return [...sessionStates.entries()]
+    .filter(([k, s]) => k !== '_default' || s.id)
+    .map(([k]) => k);
+}
 
 export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string; sessionKey?: string; isActive?: boolean; label?: string }): void {
   if (!sessionBox) return;
@@ -252,15 +257,23 @@ function renderSessionBox(): void {
   if (realSessions.length === 0) {
     lines.push('{gray-fg}No active session{/gray-fg}');
   } else {
-    for (const [k, s] of realSessions) {
+    // Clamp selected index
+    if (selectedSessionIdx >= realSessions.length) selectedSessionIdx = realSessions.length - 1;
+    if (selectedSessionIdx < 0) selectedSessionIdx = 0;
+
+    realSessions.forEach(([k, s], idx) => {
       const active = s.isActive !== false;
       const icon = active ? '{green-fg}●{/green-fg}' : '{gray-fg}○{/gray-fg}';
       const label = s.label ?? k;
-      lines.push(`${icon} {bold}${label}{/bold}`);
-      if (s.id) lines.push(`  sess:${s.id.slice(0, 8)}.. ${s.model ?? ''}`);
-      if (s.dir) lines.push(`  {gray-fg}${s.dir}{/gray-fg}`);
-    }
+      const cursor = idx === selectedSessionIdx ? '{bold}{white-fg}▸{/white-fg}{/bold} ' : '  ';
+      lines.push(`${cursor}${icon} {bold}${label}{/bold}`);
+      if (s.id) lines.push(`    sess:${s.id.slice(0, 8)}.. ${s.model ?? ''}`);
+      if (s.dir) lines.push(`    {gray-fg}${s.dir}{/gray-fg}`);
+    });
   }
+
+  lines.push('');
+  lines.push('{gray-fg}↑↓ select  Enter settings  PgUp/PgDn logs{/gray-fg}');
 
   sessionBox.setContent(lines.join('\n'));
   screen?.render();

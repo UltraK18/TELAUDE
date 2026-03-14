@@ -2,7 +2,7 @@ import blessed from 'blessed';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { loadSettings, saveSettings, type TelaudeSettings } from './settings-store.js';
+import { loadSettings, saveSettings, type TelaudeSettings, resolveSettings, loadSettingsV2, saveSettingsV2, type TelaudeSettingsV2 } from './settings-store.js';
 import { config } from '../config.js';
 
 /** Known built-in tools that can be toggled */
@@ -177,16 +177,13 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
   return lines;
 }
 
-export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
+export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: string): void {
+  const editKey = sessionKey ?? '_default';
   let settings = loadSettings();
   const mcpServers = getMcpServers();
   const items = buildMenuItems(settings, mcpServers);
   let selectedIdx = 0;
   let scrollTop = 0; // top line index in the viewport
-
-  // Disable mouse while settings overlay is open (prevents SSH coordinate issues
-  // and click-through from dashboard widgets)
-  (screen as any).program?.disableMouse();
 
   const overlay = blessed.box({
     parent: screen,
@@ -194,7 +191,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
     left: 'center',
     width: '60%',
     height: '80%',
-    label: ' Settings (↑↓ Navigate, Space/Enter Toggle, Esc Close) ',
+    label: ` Settings [${editKey === '_default' ? 'Global' : editKey}] (↑↓ Navigate, Space/Enter Toggle, Esc Close) `,
     tags: true,
     border: { type: 'line' },
     style: {
@@ -270,7 +267,6 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen): void {
     if (key.name === 'escape' || key.name === 'q') {
       active = false;
       overlay.detach();
-      (screen as any).program?.enableMouse();
       screen.render();
       return;
     }

@@ -2,8 +2,9 @@ import blessed from 'blessed';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { loadSettings, saveSettings, type TelaudeSettings, resolveSettings, loadSettingsV2, saveSettingsV2, type TelaudeSettingsV2 } from './settings-store.js';
+import { type TelaudeSettings, loadSettingsV2, saveSettingsV2 } from './settings-store.js';
 import { config } from '../config.js';
+import { setSettingsOpen, getSessionDir } from '../utils/dashboard.js';
 
 /** Known built-in tools that can be toggled */
 const BUILTIN_TOOLS = [
@@ -48,9 +49,9 @@ const BUILTIN_MCPS = [
   'plugin:figma:figma',
 ];
 
-/** Read MCP servers dynamically: telaude + config files + built-in */
+/** Read MCP servers dynamically: config files + built-in (telaude excluded — managed via Telaude Tools section) */
 function getMcpServers(): string[] {
-  const servers = ['telaude'];
+  const servers: string[] = [];
   const sources = [
     path.join(os.homedir(), '.claude.json'),
     path.join(os.homedir(), '.claude', 'settings.json'),
@@ -76,6 +77,10 @@ function getMcpServers(): string[] {
 }
 
 import { MODEL_OPTIONS } from '../bot/commands/model.js';
+
+function getWorkingDirForSession(sessionKey: string): string {
+  return getSessionDir(sessionKey) ?? sessionKey;
+}
 
 interface MenuItem {
   label: string;
@@ -179,7 +184,19 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
 
 export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: string): void {
   const editKey = sessionKey ?? '_default';
-  let settings = loadSettings();
+  setSettingsOpen(true);
+
+  // Load session-specific settings from V2 store
+  const v2 = loadSettingsV2();
+  const projKey = getWorkingDirForSession(editKey);
+  const proj = v2.projects[projKey] ?? { disabledTools: [], disabledMcpServers: [] };
+  const sess = v2.sessions[editKey];
+  let settings: TelaudeSettings = {
+    disabledTools: [...proj.disabledTools],
+    disabledMcpServers: [...proj.disabledMcpServers],
+    model: sess?.model ?? null,
+  };
+
   const mcpServers = getMcpServers();
   const items = buildMenuItems(settings, mcpServers);
   let selectedIdx = 0;
@@ -256,7 +273,18 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
     } else if (item.type === 'select') {
       settings.model = item.key;
     }
-    saveSettings(settings);
+    // Save to session-specific project/session in V2 store
+    const sv2 = loadSettingsV2();
+    sv2.projects[projKey] = {
+      disabledTools: [...settings.disabledTools],
+      disabledMcpServers: [...settings.disabledMcpServers],
+    };
+    if (settings.model) {
+      const current = sv2.sessions[editKey] ?? { model: null, mode: 'default' };
+      current.model = settings.model;
+      sv2.sessions[editKey] = current;
+    }
+    saveSettingsV2(sv2);
     render();
   }
 
@@ -268,6 +296,8 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
       active = false;
       overlay.detach();
       screen.render();
+      // Delay flag reset so the same keypress event doesn't trigger dashboard enter
+      setTimeout(() => setSettingsOpen(false), 50);
       return;
     }
     if (key.name === 'up' || key.name === 'k') {

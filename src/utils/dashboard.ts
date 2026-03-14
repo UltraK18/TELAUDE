@@ -61,6 +61,8 @@ export function initDashboard(): void {
     fullUnicode: true,
   });
 
+
+
   // Top banner box
   const bannerContent = BANNER_LINES.map(l => colorizeBanner(l, TEL_SPLIT)).join('\n');
   blessed.box({
@@ -103,8 +105,6 @@ export function initDashboard(): void {
     tags: true,
     border: { type: 'line' },
     style: { border: { fg: 208 }, label: { fg: 208 } },
-    scrollable: true,
-    alwaysScroll: true,
     padding: { left: 1 },
   });
 
@@ -119,11 +119,6 @@ export function initDashboard(): void {
     tags: true,
     border: { type: 'line' },
     style: { border: { fg: 208 }, label: { fg: 'green' } },
-    scrollable: true,
-    alwaysScroll: true,
-    scrollbar: {
-      style: { bg: 'gray' },
-    },
     padding: { left: 1, right: 1 },
   });
 
@@ -151,40 +146,41 @@ export function initDashboard(): void {
     screen!.render();
   });
 
-  // Session selection with arrow keys
-  screen.key(['up'], () => {
+  // All keyboard handling in a single keypress listener to avoid duplicate events
+  screen.on('keypress', (_ch: string, key: blessed.Widgets.Events.IKeyEventArg) => {
+    if (!key || settingsOpen) return;
     const keys = getSessionKeys();
-    if (keys.length === 0) return;
-    selectedSessionIdx = (selectedSessionIdx - 1 + keys.length) % keys.length;
-    renderSessionBox();
-  });
-  screen.key(['down'], () => {
-    const keys = getSessionKeys();
-    if (keys.length === 0) return;
-    selectedSessionIdx = (selectedSessionIdx + 1) % keys.length;
-    renderSessionBox();
-  });
 
-  // Open settings for selected session on Enter
-  screen.key(['return'], () => {
-    if (screen) {
-      const keys = getSessionKeys();
-      const selectedKey = keys[selectedSessionIdx] ?? undefined;
-      openSettingsScreen(screen, selectedKey);
+    switch (key.name) {
+      case 'up':
+        if (keys.length > 0) {
+          selectedSessionIdx = (selectedSessionIdx - 1 + keys.length) % keys.length;
+          renderSessionBox();
+        }
+        break;
+      case 'down':
+        if (keys.length > 0) {
+          selectedSessionIdx = (selectedSessionIdx + 1) % keys.length;
+          renderSessionBox();
+        }
+        break;
+      case 'return':
+        if (screen) {
+          const selectedKey = keys[selectedSessionIdx] ?? undefined;
+          openSettingsScreen(screen, selectedKey);
+        }
+        break;
+      case 'pageup':
+        if (logBox) { logBox.scroll(-((logBox.height as number) - 2)); screen!.render(); }
+        break;
+      case 'pagedown':
+        if (logBox) { logBox.scroll((logBox.height as number) - 2); screen!.render(); }
+        break;
     }
-  });
 
-  // Log scrolling with PgUp/PgDown
-  screen.key(['pageup'], () => {
-    if (logBox) { logBox.scroll(-((logBox.height as number) - 2)); screen!.render(); }
-  });
-  screen.key(['pagedown'], () => {
-    if (logBox) { logBox.scroll((logBox.height as number) - 2); screen!.render(); }
-  });
-
-  // Quit on Ctrl-C
-  screen.key(['C-c'], () => {
-    process.exit(0);
+    if (key.ctrl && key.name === 'c') {
+      process.exit(0);
+    }
   });
 
   screen.render();
@@ -219,11 +215,20 @@ interface SessionInfo {
 let botUsername: string | null = null;
 const sessionStates = new Map<string, SessionInfo>();
 let selectedSessionIdx = 0;
+let settingsOpen = false;
+
+export function setSettingsOpen(open: boolean): void {
+  settingsOpen = open;
+}
 
 function getSessionKeys(): string[] {
   return [...sessionStates.entries()]
     .filter(([k, s]) => k !== '_default' || s.id)
     .map(([k]) => k);
+}
+
+export function getSessionDir(sessionKey: string): string | undefined {
+  return sessionStates.get(sessionKey)?.dir;
 }
 
 export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string; sessionKey?: string; isActive?: boolean; label?: string }): void {

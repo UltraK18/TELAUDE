@@ -113,7 +113,7 @@ async function main(): Promise<void> {
     // Spawn in silent mode
     let up = getUserProcess(job.userId, job.chatId, job.threadId);
     if (!up) {
-      up = createUserProcess(job.userId, job.workingDir, job.model ?? 'sonnet', job.chatId, job.threadId);
+      up = createUserProcess(job.userId, job.workingDir, job.model ?? 'default', job.chatId, job.threadId);
     }
     if (job.sessionId) up.sessionId = job.sessionId;
     up.workingDir = job.workingDir;

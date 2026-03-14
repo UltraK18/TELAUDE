@@ -47,7 +47,7 @@ function migrate(db: Database): void {
       telegram_user_id INTEGER NOT NULL,
       session_id TEXT NOT NULL,
       working_dir TEXT NOT NULL,
-      model TEXT DEFAULT 'sonnet',
+      model TEXT DEFAULT 'default',
       created_at TEXT DEFAULT (datetime('now')),
       last_active_at TEXT DEFAULT (datetime('now')),
       is_active INTEGER DEFAULT 1,

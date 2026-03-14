@@ -4,6 +4,8 @@ import fs from 'fs';
 import { validatePath, loadAllowedRoots } from '../../utils/path-validator.js';
 import { getUserProcess, killProcess, createUserProcess } from '../../claude/process-manager.js';
 import { deactivateAllUserSessions } from '../../db/session-repo.js';
+import { updateSession } from '../../utils/dashboard.js';
+import { buildSessionKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 
@@ -96,8 +98,10 @@ export async function cdCommand(ctx: Context): Promise<void> {
 
     killProcess(userId, chatId, threadId);
 
-    const up = getUserProcess(userId, chatId, threadId);
-    if (up) {
+    let up = getUserProcess(userId, chatId, threadId);
+    if (!up) {
+      up = createUserProcess(userId, result.resolved, config.claude.defaultModel, chatId, threadId);
+    } else {
       up.workingDir = result.resolved;
       up.sessionId = null;
     }

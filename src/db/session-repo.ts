@@ -57,13 +57,18 @@ export function getActiveSession(userId: number, chatId?: number, threadId?: num
     .get(userId) as SessionRecord | undefined;
 }
 
-export function getRecentSessions(userId: number, limit = 10, workingDir?: string): SessionRecord[] {
+export function getRecentSessions(userId: number, limit = 10, workingDir?: string, chatId?: number, threadId?: number): SessionRecord[] {
   let sql = 'SELECT * FROM sessions WHERE telegram_user_id = ?';
   const params: (string | number)[] = [userId];
 
   if (workingDir) {
     sql += ' AND working_dir = ?';
     params.push(workingDir);
+  }
+
+  if (chatId != null && threadId != null) {
+    sql += ' AND chat_id = ? AND thread_id = ?';
+    params.push(chatId, threadId);
   }
 
   sql += ' GROUP BY session_id ORDER BY MAX(id) DESC LIMIT ?';

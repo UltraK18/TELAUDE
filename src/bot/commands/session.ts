@@ -67,7 +67,7 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   const candidates = [up?.workingDir, config.paths.defaultWorkingDir, process.cwd()];
   const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 
-  const sessions = getRecentSessions(userId, 10, currentDir);
+  const sessions = getRecentSessions(userId, 10, currentDir, chatId, threadId);
   const list = buildSessionList(sessions);
 
   const msg = await ctx.reply(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });

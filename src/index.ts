@@ -356,35 +356,24 @@ async function main(): Promise<void> {
         initDashboard();
         setDashboardOutput(dashboardLog, dashboardError);
 
-        // Load last session from DB for initial dashboard display
-        const authIds = getAuthIds();
-        let lastDir = cfg.paths.defaultWorkingDir;
-        let lastModel = loadSets().model ?? cfg.claude.defaultModel;
-        let lastSessionId: string | null = null;
-
-        for (const uid of authIds) {
-          const active = getActive(uid);
-          if (active) {
-            lastDir = active.working_dir;
-            lastModel = active.model;
-            lastSessionId = active.session_id;
-            break;
+        // Load active sessions from DB for initial dashboard display
+        updateSession({ botUsername: botInfo.username });
+        for (const uid of getAuthIds()) {
+          const sessions = getRecent(uid, 20);
+          const activeSessions = sessions.filter(s => s.is_active);
+          for (const s of activeSessions) {
+            const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
+            const label = s.thread_id > 0 ? `T:${s.thread_id}` : 'DM';
+            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label });
           }
-          const recent = getRecent(uid, 1);
-          if (recent.length > 0) {
-            lastDir = recent[0].working_dir;
-            lastModel = recent[0].model;
-            lastSessionId = recent[0].session_id;
-            break;
+          // If no active sessions, show most recent one
+          if (activeSessions.length === 0 && sessions.length > 0) {
+            const s = sessions[0];
+            const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
+            const label = s.thread_id > 0 ? `T:${s.thread_id}` : 'DM';
+            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label, isActive: false });
           }
         }
-
-        updateSession({
-          botUsername: botInfo.username,
-          model: lastModel,
-          dir: lastDir,
-          ...(lastSessionId ? { id: lastSessionId } : {}),
-        });
         refreshScheduleDashboard();
 
         // Status bar: heartbeat & poke indicators (use last session dir)

@@ -8,7 +8,7 @@ import { createSession } from '../db/session-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { logger, notify, notifyError } from '../utils/logger.js';
 import { updateSession } from '../utils/dashboard.js';
-import type { UserProcess } from './process-manager.js';
+import { buildSessionKey, type UserProcess } from './process-manager.js';
 
 const TELEGRAM_MAX_LEN = 4000;
 const TOOL_UPDATE_INTERVAL = 1000; // 1 second between tool edits
@@ -92,7 +92,9 @@ export class StreamHandler {
           this.up.sessionId = sessionId;
           createSession(this.userId, sessionId, this.up.workingDir, this.up.model, this.up.chatId, this.up.threadId);
           logger.info({ userId: this.userId, sessionId }, 'Session captured');
-          updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir });
+          const sessionKey = buildSessionKey(this.userId, this.up.chatId, this.up.threadId);
+          const label = this.up.threadId > 0 ? `T:${this.up.threadId}` : 'DM';
+          updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir, sessionKey, label });
         }
       });
 

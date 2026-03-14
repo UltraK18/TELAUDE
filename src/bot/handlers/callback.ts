@@ -3,7 +3,7 @@ import { type Context, InlineKeyboard } from 'grammy';
 import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
-import { getUserProcess, killProcess } from '../../claude/process-manager.js';
+import { getUserProcess, killProcess, createUserProcess } from '../../claude/process-manager.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { scanCliSessions } from '../../utils/cli-sessions.js';
@@ -73,8 +73,10 @@ export async function callbackHandler(ctx: Context): Promise<void> {
 
     killProcess(userId, chatId, threadId);
 
-    const up = getUserProcess(userId, chatId, threadId);
-    if (up) {
+    let up = getUserProcess(userId, chatId, threadId);
+    if (!up) {
+      up = createUserProcess(userId, result.resolved, config.claude.defaultModel, chatId, threadId);
+    } else {
       up.workingDir = result.resolved;
       up.sessionId = null;
     }
@@ -223,7 +225,7 @@ function getCurrentDir(userId: number, chatId?: number, threadId?: number): stri
 }
 
 async function refreshBotSessions(ctx: Context, userId: number, chatId?: number, threadId?: number): Promise<void> {
-  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId, chatId, threadId));
+  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId, chatId, threadId), chatId, threadId);
   const list = buildSessionList(sessions);
 
   try {

@@ -150,7 +150,7 @@ export async function runSetup(): Promise<void> {
       '',
       '# Claude CLI',
       'CLAUDE_CLI_PATH=claude',
-      'DEFAULT_MODEL=sonnet',
+      'DEFAULT_MODEL=default',
       'DEFAULT_MAX_BUDGET_USD=5.0',
       'DEFAULT_MAX_TURNS=50',
       '',

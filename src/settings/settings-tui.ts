@@ -75,12 +75,7 @@ function getMcpServers(): string[] {
   return servers;
 }
 
-/** Available models */
-const MODELS = [
-  'claude-sonnet-4-6',
-  'claude-opus-4-6',
-  'claude-haiku-4-5-20251001',
-];
+import { MODEL_OPTIONS } from '../bot/commands/model.js';
 
 interface MenuItem {
   label: string;
@@ -108,8 +103,8 @@ function buildMenuItems(settings: TelaudeSettings, mcpServers: string[]): MenuIt
   }
 
   // Model section
-  for (const m of MODELS) {
-    items.push({ label: m, type: 'select', category: 'model', key: m });
+  for (const m of MODEL_OPTIONS) {
+    items.push({ label: m.label, type: 'select', category: 'model', key: m.value });
   }
 
   return items;
@@ -128,9 +123,9 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
     return `${cursor}${icon} ${item.label}`;
   }
 
-  // model select — match full name or alias (e.g. "sonnet" matches "claude-sonnet-4-6")
+  // model select
   const current = settings.model ?? config.claude.defaultModel;
-  const isActive = item.key === current || item.key.includes(current);
+  const isActive = item.key === current;
   const icon = isActive
     ? '{green-fg}◉{/green-fg}'
     : '{gray-fg}○{/gray-fg}';

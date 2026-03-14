@@ -196,8 +196,6 @@ async function main(): Promise<void> {
   setPokeCallback(async (userId, stdin, workingDir, sessionId, chatId, threadId) => {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
-    const { getUserConfig } = await import('./db/config-repo.js');
-
     if (isUserActive(userId)) {
       enqueueScheduledTask({
         userId,
@@ -211,7 +209,7 @@ async function main(): Promise<void> {
       return;
     }
 
-    const userModel = getUserConfig(userId).default_model;
+    const userModel = cfg.claude.defaultModel;
     let up = getUserProcess(userId, chatId, threadId);
     if (!up) {
       up = createUserProcess(userId, workingDir, userModel, chatId, threadId);
@@ -427,7 +425,9 @@ async function main(): Promise<void> {
           const onlineThreadId = reloadFlag?.threadId ?? 0;
           const onlineOpts: Record<string, unknown> = { parse_mode: 'HTML' };
           if (onlineThreadId > 0) onlineOpts.message_thread_id = onlineThreadId;
-          bot.api.sendMessage(onlineChatId, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', onlineOpts).catch(() => {});
+          bot.api.sendMessage(onlineChatId, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', onlineOpts).catch((err) => {
+            logger.warn({ err: err?.message, chatId: onlineChatId, userId: uid }, 'Failed to send Online notification');
+          });
         }
       });
 
@@ -444,11 +444,10 @@ async function main(): Promise<void> {
           // Restore sessionId so reload resumes previous conversation
           if (flag.sessionId) {
             const { getUserProcess, createUserProcess: cup } = await import('./claude/process-manager.js');
-            const { getUserConfig } = await import('./db/config-repo.js');
-            const cfg = getUserConfig(flag.userId);
+            const { config: appConfig } = await import('./config.js');
             let up = getUserProcess(flag.userId, chatId, threadId);
             if (!up) {
-              up = cup(flag.userId, cfg.default_working_dir ?? process.cwd(), cfg.default_model, chatId, threadId);
+              up = cup(flag.userId, appConfig.paths.defaultWorkingDir ?? process.cwd(), appConfig.claude.defaultModel, chatId, threadId);
             }
             up.sessionId = flag.sessionId;
           }

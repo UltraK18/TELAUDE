@@ -4,7 +4,6 @@ import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionLi
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
-import { upsertUserConfig, getUserConfig } from '../../db/config-repo.js';
 import { validatePath } from '../../utils/path-validator.js';
 import { resolveAsk, getAskChoices } from '../../api/ask-queue.js';
 import { scanCliSessions } from '../../utils/cli-sessions.js';
@@ -13,6 +12,7 @@ import { scheduleJob, unscheduleJob } from '../../scheduler/scheduler.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
+import { applyModel, buildModelKeyboard } from '../commands/model.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
@@ -72,7 +72,6 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     } catch { /* ignore */ }
 
     killProcess(userId, chatId, threadId);
-    upsertUserConfig(userId, { default_working_dir: result.resolved });
 
     const up = getUserProcess(userId, chatId, threadId);
     if (up) {
@@ -107,6 +106,22 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       await ctx.editMessageReplyMarkup({ reply_markup: undefined });
     } catch { /* ignore */ }
     await ctx.answerCallbackQuery({ text: `✅ ${chosen}` });
+    return;
+  }
+
+  // model:<value> — inline model selection
+  if (data.startsWith('model:')) {
+    const modelName = data.slice(6);
+    const result = applyModel(userId, chatId, threadId, modelName);
+    const keyboard = buildModelKeyboard(modelName);
+
+    await ctx.answerCallbackQuery({ text: `Model: ${modelName}` });
+    try {
+      await ctx.editMessageText(
+        `${result}\nOr type: <code>/model model-name</code>`,
+        { parse_mode: 'HTML', reply_markup: keyboard },
+      );
+    } catch { /* message not modified — ignore */ }
     return;
   }
 
@@ -207,8 +222,7 @@ export async function callbackHandler(ctx: Context): Promise<void> {
 
 function getCurrentDir(userId: number, chatId?: number, threadId?: number): string {
   const up = getUserProcess(userId, chatId, threadId);
-  const cfg = getUserConfig(userId);
-  const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
+  const candidates = [up?.workingDir, config.paths.defaultWorkingDir, process.cwd()];
   return candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 }
 

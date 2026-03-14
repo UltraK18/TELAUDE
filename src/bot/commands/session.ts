@@ -4,7 +4,6 @@ import fs from 'fs';
 import { getUserProcess, killProcess, removeUserProcess, createUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession, renameSession } from '../../db/session-repo.js';
 import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
-import { getUserConfig } from '../../db/config-repo.js';
 import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { buildSessionKey } from '../../claude/process-manager.js';
@@ -65,8 +64,7 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
   const up = getUserProcess(userId, chatId, threadId);
-  const cfg = getUserConfig(userId);
-  const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
+  const candidates = [up?.workingDir, config.paths.defaultWorkingDir, process.cwd()];
   const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 
   const sessions = getRecentSessions(userId, 10, currentDir);
@@ -87,14 +85,13 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
 
   killProcess(userId, chatId, threadId);
 
-  const cfg = getUserConfig(userId);
   const session = getSessionById(sessionId);
   let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
     up = createUserProcess(
       userId,
-      session?.working_dir ?? cfg.default_working_dir ?? process.cwd(),
-      session?.model ?? cfg.default_model,
+      session?.working_dir ?? config.paths.defaultWorkingDir ?? process.cwd(),
+      session?.model ?? config.claude.defaultModel,
       chatId,
       threadId,
     );
@@ -105,9 +102,9 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
   if (dbDir && fs.existsSync(dbDir)) {
     up.workingDir = dbDir;
   } else if (dbDir) {
-    const fallback = cfg.default_working_dir && fs.existsSync(cfg.default_working_dir)
-      ? cfg.default_working_dir
-      : config.paths.defaultWorkingDir ?? process.cwd();
+    const fallback = config.paths.defaultWorkingDir && fs.existsSync(config.paths.defaultWorkingDir)
+      ? config.paths.defaultWorkingDir
+      : process.cwd();
     up.workingDir = fallback;
   }
   up.model = session?.model ?? up.model;

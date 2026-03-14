@@ -11,7 +11,6 @@ import {
   type UserProcess,
 } from '../../claude/process-manager.js';
 import { StreamHandler } from '../../claude/stream-handler.js';
-import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession, deactivateSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText, MEDIA_LABELS } from './media-types.js';
@@ -59,11 +58,9 @@ export function enqueueScheduledTask(task: ScheduledTask): void {
 function getOrCreateUp(userId: number, chatId?: number, threadId?: number): UserProcess {
   let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
-    const cfg = getUserConfig(userId);
     const lastSession = getActiveSession(userId, chatId ?? userId, threadId ?? 0);
     const candidates = [
       lastSession?.working_dir,
-      cfg.default_working_dir,
       config.paths.defaultWorkingDir,
       process.cwd(),
     ];
@@ -71,7 +68,7 @@ function getOrCreateUp(userId: number, chatId?: number, threadId?: number): User
     up = createUserProcess(
       userId,
       workingDir,
-      lastSession?.model ?? cfg.default_model,
+      lastSession?.model ?? config.claude.defaultModel,
       chatId,
       threadId,
     );
@@ -79,9 +76,7 @@ function getOrCreateUp(userId: number, chatId?: number, threadId?: number): User
       up.sessionId = lastSession.session_id;
     }
   } else if (!fs.existsSync(up.workingDir)) {
-    // Existing UP has invalid path (e.g. folder renamed) — fix it
-    const cfg = getUserConfig(userId);
-    const fallback = [cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()]
+    const fallback = [config.paths.defaultWorkingDir, process.cwd()]
       .find(d => d && fs.existsSync(d)) ?? process.cwd();
     logger.warn({ userId, oldDir: up.workingDir, fallback }, 'UP workingDir does not exist, falling back');
     up.workingDir = fallback;

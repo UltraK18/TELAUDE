@@ -1,9 +1,46 @@
-import { type Context } from 'grammy';
+import { type Context, InlineKeyboard } from 'grammy';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
-import { getUserConfig, upsertUserConfig } from '../../db/config-repo.js';
+import { config } from '../../config.js';
 import { getActiveSession, updateSessionModel } from '../../db/session-repo.js';
 
-const VALID_MODELS = ['sonnet', 'opus', 'haiku'];
+export const MODEL_OPTIONS = [
+  { label: 'Default', value: 'default', row: 0 },
+  { label: 'Sonnet', value: 'sonnet', row: 1 },
+  { label: 'Sonnet 1M', value: 'sonnet[1m]', row: 1 },
+  { label: 'Opus', value: 'opus', row: 2 },
+  { label: 'Opus 1M', value: 'opus[1m]', row: 2 },
+  { label: 'Haiku', value: 'haiku', row: 3 },
+];
+
+export function applyModel(userId: number, chatId: number | undefined, threadId: number | undefined, modelName: string): string {
+  const up = getUserProcess(userId, chatId, threadId);
+  if (up?.isProcessing) {
+    up.model = modelName;
+    return `Model will change to <b>${modelName}</b> after current task finishes.`;
+  }
+
+  killProcess(userId, chatId, threadId);
+  if (up) up.model = modelName;
+
+  const activeSession = getActiveSession(userId, chatId, threadId);
+  if (activeSession) {
+    updateSessionModel(activeSession.session_id, modelName);
+  }
+
+  return `Model changed: <b>${modelName}</b>\nApplied from next message.`;
+}
+
+export function buildModelKeyboard(currentModel: string): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  let lastRow = -1;
+  for (const opt of MODEL_OPTIONS) {
+    if (opt.row !== lastRow && lastRow !== -1) keyboard.row();
+    lastRow = opt.row;
+    const label = opt.value === currentModel ? `✓ ${opt.label}` : opt.label;
+    keyboard.text(label, `model:${opt.value}`);
+  }
+  return keyboard;
+}
 
 export async function modelCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -16,38 +53,15 @@ export async function modelCommand(ctx: Context): Promise<void> {
   const modelName = text.replace(/^\/model\s*/, '').trim().toLowerCase();
 
   if (!modelName) {
-    const current = getUserProcess(userId, chatId, threadId)?.model ?? getUserConfig(userId).default_model;
+    const current = getUserProcess(userId, chatId, threadId)?.model ?? config.claude.defaultModel;
+    const keyboard = buildModelKeyboard(current);
     await ctx.reply(
-      `Current model: <b>${current}</b>\nAvailable: ${VALID_MODELS.join(', ')}\nChange: <code>/model name</code>`,
-      { parse_mode: 'HTML' },
+      `Current model: <b>${current}</b>\nOr type: <code>/model model-name</code>`,
+      { parse_mode: 'HTML', reply_markup: keyboard },
     );
     return;
   }
 
-  if (!VALID_MODELS.includes(modelName)) {
-    await ctx.reply(`Invalid model. Available: ${VALID_MODELS.join(', ')}`);
-    return;
-  }
-
-  upsertUserConfig(userId, { default_model: modelName });
-
-  const up = getUserProcess(userId, chatId, threadId);
-  if (up?.isProcessing) {
-    // Don't kill — just update model for next spawn
-    up.model = modelName;
-    await ctx.reply(`Model will change to <b>${modelName}</b> after current task finishes.`, { parse_mode: 'HTML' });
-    return;
-  }
-
-  // Not processing — kill and apply immediately
-  killProcess(userId, chatId, threadId);
-  if (up) up.model = modelName;
-
-  // Update active session so model persists across bot restarts
-  const activeSession = getActiveSession(userId, chatId, threadId);
-  if (activeSession) {
-    updateSessionModel(activeSession.session_id, modelName);
-  }
-
-  await ctx.reply(`Model changed: <b>${modelName}</b>\nApplied from next message.`, { parse_mode: 'HTML' });
+  const result = applyModel(userId, chatId, threadId, modelName);
+  await ctx.reply(result, { parse_mode: 'HTML' });
 }

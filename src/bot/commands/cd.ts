@@ -3,7 +3,6 @@ import path from 'path';
 import fs from 'fs';
 import { validatePath, loadAllowedRoots } from '../../utils/path-validator.js';
 import { getUserProcess, killProcess, createUserProcess } from '../../claude/process-manager.js';
-import { getUserConfig, upsertUserConfig } from '../../db/config-repo.js';
 import { deactivateAllUserSessions } from '../../db/session-repo.js';
 import { config } from '../../config.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
@@ -96,7 +95,6 @@ export async function cdCommand(ctx: Context): Promise<void> {
     }
 
     killProcess(userId, chatId, threadId);
-    upsertUserConfig(userId, { default_working_dir: result.resolved });
 
     const up = getUserProcess(userId, chatId, threadId);
     if (up) {
@@ -116,7 +114,6 @@ export async function cdCommand(ctx: Context): Promise<void> {
   const up = getUserProcess(userId, chatId, threadId);
   const candidates = [
     up?.workingDir,
-    getUserConfig(userId).default_working_dir,
     config.paths.defaultWorkingDir,
     process.cwd(),
   ];
@@ -148,7 +145,7 @@ export async function pwdCommand(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
   const up = getUserProcess(userId, chatId, threadId);
-  const dir = up?.workingDir ?? getUserConfig(userId).default_working_dir ?? config.paths.defaultWorkingDir;
+  const dir = up?.workingDir ?? config.paths.defaultWorkingDir;
 
   await ctx.reply(`Current directory: <code>${dir}</code>`, { parse_mode: 'HTML' });
 }

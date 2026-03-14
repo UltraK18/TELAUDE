@@ -55,14 +55,6 @@ function migrate(db: Database): void {
       total_turns INTEGER DEFAULT 0
     );
 
-    CREATE TABLE IF NOT EXISTS user_configs (
-      telegram_user_id INTEGER PRIMARY KEY,
-      default_working_dir TEXT,
-      default_model TEXT DEFAULT 'sonnet',
-      max_budget_usd REAL DEFAULT 5.0,
-      max_turns INTEGER DEFAULT 50
-    );
-
     CREATE TABLE IF NOT EXISTS message_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,

@@ -1,7 +1,6 @@
 import fs from 'fs';
 import { type Context } from 'grammy';
 import { getUserProcess, createUserProcess } from '../../claude/process-manager.js';
-import { getUserConfig } from '../../db/config-repo.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { config } from '../../config.js';
 
@@ -16,7 +15,6 @@ export async function modeCommand(ctx: Context): Promise<void> {
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
   let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
-    const cfg = getUserConfig(userId);
     const lastSession = getActiveSession(userId, chatId, threadId);
     if (!lastSession) {
       await ctx.reply('No active session. Send a message first.');
@@ -24,12 +22,11 @@ export async function modeCommand(ctx: Context): Promise<void> {
     }
     const candidates = [
       lastSession.working_dir,
-      cfg.default_working_dir,
       config.paths.defaultWorkingDir,
       process.cwd(),
     ];
     const workingDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
-    up = createUserProcess(userId, workingDir, lastSession.model ?? cfg.default_model, chatId, threadId);
+    up = createUserProcess(userId, workingDir, lastSession.model ?? config.claude.defaultModel, chatId, threadId);
     if (lastSession.session_id) {
       up.sessionId = lastSession.session_id;
     }

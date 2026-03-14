@@ -85,7 +85,7 @@ export function initDashboard(): void {
     left: 0,
     width: '33%',
     height: '100%-11',
-    label: ' Logs ',
+    label: ' Logs · PgUp/PgDn ',
     tags: true,
     border: { type: 'line' },
     style: { border: { fg: 208 }, label: { fg: 'green' } },
@@ -275,7 +275,7 @@ function renderSessionBox(): void {
   }
 
   lines.push('');
-  lines.push('{gray-fg}↑↓ select  Enter settings  PgUp/PgDn logs{/gray-fg}');
+  lines.push('{gray-fg}↑↓ select  Enter settings{/gray-fg}');
 
   sessionBox.setContent(lines.join('\n'));
   screen?.render();

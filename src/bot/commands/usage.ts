@@ -9,7 +9,7 @@ export async function usageCommand(ctx: Context): Promise<void> {
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
   // Get sessions for this context
-  const sessions = getRecentSessions(userId, 20, undefined, chatId, threadId);
+  const sessions = getRecentSessions(userId, 20);
 
   if (sessions.length === 0) {
     await ctx.reply('No session history found.');

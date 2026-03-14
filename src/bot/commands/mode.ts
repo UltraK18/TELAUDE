@@ -1,5 +1,9 @@
+import fs from 'fs';
 import { type Context } from 'grammy';
-import { getUserProcess } from '../../claude/process-manager.js';
+import { getUserProcess, createUserProcess } from '../../claude/process-manager.js';
+import { getUserConfig } from '../../db/config-repo.js';
+import { getActiveSession } from '../../db/session-repo.js';
+import { config } from '../../config.js';
 
 const MODES = ['default', 'minimal'] as const;
 type SessionMode = typeof MODES[number];
@@ -10,10 +14,25 @@ export async function modeCommand(ctx: Context): Promise<void> {
 
   const chatId = ctx.chat!.id;
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
-  const up = getUserProcess(userId, chatId, threadId);
+  let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
-    await ctx.reply('No active session. Send a message first.');
-    return;
+    const cfg = getUserConfig(userId);
+    const lastSession = getActiveSession(userId, chatId, threadId);
+    if (!lastSession) {
+      await ctx.reply('No active session. Send a message first.');
+      return;
+    }
+    const candidates = [
+      lastSession.working_dir,
+      cfg.default_working_dir,
+      config.paths.defaultWorkingDir,
+      process.cwd(),
+    ];
+    const workingDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
+    up = createUserProcess(userId, workingDir, lastSession.model ?? cfg.default_model, chatId, threadId);
+    if (lastSession.session_id) {
+      up.sessionId = lastSession.session_id;
+    }
   }
 
   const text = ctx.message?.text ?? '';

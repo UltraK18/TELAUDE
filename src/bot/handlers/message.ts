@@ -12,7 +12,7 @@ import {
 } from '../../claude/process-manager.js';
 import { StreamHandler } from '../../claude/stream-handler.js';
 import { getUserConfig } from '../../db/config-repo.js';
-import { getActiveSession } from '../../db/session-repo.js';
+import { getActiveSession, deactivateSession } from '../../db/session-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText, MEDIA_LABELS } from './media-types.js';
 import { config } from '../../config.js';
@@ -138,7 +138,11 @@ function launchAndSend(
           // Resume failed → retry without resume (new session)
           if (res) {
             logger.info({ userId, oldSession: res }, 'Resume failed, retrying as new session');
+            deactivateSession(res);
             up.sessionId = null;
+            api.sendMessage(chatId, '⚠️ Previous session could not be resumed. Starting a new session.',
+              up.threadId > 0 ? { message_thread_id: up.threadId } : undefined
+            ).catch(() => {});
             if (doLaunch(undefined)) {
               if (!sendMessage(up, text)) {
                 if (up.process) {
@@ -488,11 +492,17 @@ export async function messageHandler(ctx: Context): Promise<void> {
     return;
   }
 
+  // If a forward batch is collecting for this session, merge user message into it
+  if (forwardCollector.hasPending(userId, chatId, threadId)) {
+    forwardCollector.addUserMessage(userId, chatId, text, ctx.api, threadId);
+    return;
+  }
+
   // Delete /resume list message if present
-  const smsg = getSessionsMessage(userId);
+  const smsg = getSessionsMessage(userId, chatId, threadId);
   if (smsg) {
     ctx.api.deleteMessage(smsg.chatId, smsg.messageId).catch(() => {});
-    clearSessionsMessage(userId);
+    clearSessionsMessage(userId, chatId, threadId);
   }
 
   const replyCtx = getReplyContext(ctx);

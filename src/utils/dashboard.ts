@@ -401,3 +401,10 @@ function renderStatusBar(): void {
 export function setStatusCheckers(fn: () => { sessionCount: number; pokeActive: number; pokeTotal: number }): void {
   statusCheckers = fn;
 }
+
+export function stopDashboard(): void {
+  if (screen) {
+    screen.destroy();
+    screen = null;
+  }
+}

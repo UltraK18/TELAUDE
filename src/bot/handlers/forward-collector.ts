@@ -1,6 +1,7 @@
 import { type Api } from 'grammy';
 import { logger } from '../../utils/logger.js';
 import { fetchLinkPreviews } from '../../utils/link-preview.js';
+import { buildSessionKey } from '../../claude/process-manager.js';
 
 interface ForwardedMsg {
   text: string;
@@ -29,7 +30,7 @@ const DEBOUNCE_MS = 1500;
 const MAX_COLLECT_MS = 5000;
 
 export class ForwardCollector {
-  private pending = new Map<number, PendingForward>(); // keyed by userId
+  private pending = new Map<string, PendingForward>(); // keyed by sessionKey
   private onComplete: ForwardCompleteCallback;
 
   constructor(onComplete: ForwardCompleteCallback) {
@@ -44,7 +45,8 @@ export class ForwardCollector {
     api: Api,
     threadId?: number,
   ): void {
-    let group = this.pending.get(userId);
+    const key = buildSessionKey(userId, chatId, threadId);
+    let group = this.pending.get(key);
 
     if (!group) {
       group = {
@@ -53,13 +55,13 @@ export class ForwardCollector {
         threadId: threadId ?? 0,
         messages: [],
         api,
-        debounceTimer: setTimeout(() => this.flush(userId), DEBOUNCE_MS),
-        maxTimer: setTimeout(() => this.flush(userId), MAX_COLLECT_MS),
+        debounceTimer: setTimeout(() => this.flush(key), DEBOUNCE_MS),
+        maxTimer: setTimeout(() => this.flush(key), MAX_COLLECT_MS),
       };
-      this.pending.set(userId, group);
+      this.pending.set(key, group);
     } else {
       clearTimeout(group.debounceTimer);
-      group.debounceTimer = setTimeout(() => this.flush(userId), DEBOUNCE_MS);
+      group.debounceTimer = setTimeout(() => this.flush(key), DEBOUNCE_MS);
     }
 
     group.messages.push({ text, source });
@@ -69,16 +71,43 @@ export class ForwardCollector {
     );
   }
 
-  private async flush(userId: number): Promise<void> {
-    const group = this.pending.get(userId);
+  hasPending(userId: number, chatId?: number, threadId?: number): boolean {
+    const key = buildSessionKey(userId, chatId, threadId);
+    return this.pending.has(key);
+  }
+
+  addUserMessage(
+    userId: number,
+    chatId: number,
+    text: string,
+    api: Api,
+    threadId?: number,
+  ): void {
+    const key = buildSessionKey(userId, chatId, threadId);
+    const group = this.pending.get(key);
+    if (!group) return; // no pending forward → should not be called
+
+    // Reset debounce
+    clearTimeout(group.debounceTimer);
+    group.debounceTimer = setTimeout(() => this.flush(key), DEBOUNCE_MS);
+
+    group.messages.push({ text, source: 'User' });
+    logger.info(
+      { userId, msgCount: group.messages.length },
+      'Added user message to forward batch',
+    );
+  }
+
+  private async flush(key: string): Promise<void> {
+    const group = this.pending.get(key);
     if (!group) return;
 
     clearTimeout(group.debounceTimer);
     clearTimeout(group.maxTimer);
-    this.pending.delete(userId);
+    this.pending.delete(key);
 
     logger.info(
-      { userId, msgCount: group.messages.length },
+      { userId: group.userId, msgCount: group.messages.length },
       'Flushing forwarded messages',
     );
 
@@ -97,17 +126,27 @@ export class ForwardCollector {
       return;
     }
 
+    // Separate forwarded and user messages
+    const forwarded = group.messages.filter(m => m.source !== 'User');
+    const userMsgs = group.messages.filter(m => m.source === 'User');
+
     // Multiple messages → grouped format
     const lines: string[] = ['[Forwarded messages]'];
     let currentSource = '';
 
-    for (const msg of group.messages) {
+    for (const msg of forwarded) {
       if (msg.source !== currentSource) {
         currentSource = msg.source;
         lines.push(`${currentSource}: ${msg.text}`);
       } else {
         lines.push(msg.text);
       }
+    }
+
+    // Append user's own messages at the end
+    if (userMsgs.length > 0) {
+      lines.push('');
+      lines.push(userMsgs.map(m => m.text).join('\n'));
     }
 
     let result = lines.join('\n');

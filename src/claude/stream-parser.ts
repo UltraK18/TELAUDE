@@ -47,6 +47,7 @@ export interface ResultEvent {
   is_error?: boolean;
   num_turns?: number;
   result?: string;
+  errors?: string[];
   usage?: {
     input_tokens: number;
     output_tokens: number;

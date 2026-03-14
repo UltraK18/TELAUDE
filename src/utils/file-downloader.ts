@@ -8,7 +8,7 @@ import { type MediaType } from '../bot/handlers/media-types.js';
 const DEFAULT_EXTENSIONS: Partial<Record<MediaType, string>> = {
   photo: '.jpg',
   voice: '.ogg',
-  audio: '.ogg',
+  audio: '.mp3',
   video: '.mp4',
   video_note: '.mp4',
   sticker: '.webp',
@@ -41,7 +41,8 @@ export async function downloadTelegramFile(
   const timestamp = Date.now();
   let fileName: string;
   if (originalFileName) {
-    fileName = `tg_${timestamp}_${originalFileName}`;
+    const safeName = path.basename(originalFileName).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    fileName = `tg_${timestamp}_${safeName}`;
   } else if (mediaType) {
     const ext = DEFAULT_EXTENSIONS[mediaType] ?? (path.extname(file.file_path) || '');
     fileName = `tg_${timestamp}_${mediaType}${ext}`;

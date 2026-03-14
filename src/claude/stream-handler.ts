@@ -257,10 +257,11 @@ export class StreamHandler {
           await this.deleteToolMessage();
           await this.flushText();
 
-          if (event.is_error && event.result && !this.silent) {
-            notifyError(`CLI error: ${event.result.slice(0, 100)}`);
+          if (event.is_error && !this.silent) {
+            const errMsg = event.result || event.errors?.join('; ') || 'Unknown CLI error';
+            notifyError(`CLI error: ${errMsg.slice(0, 100)}`);
             try {
-              await this.api.sendMessage(this.chatId, `\u274C ${event.result}`, this.threadOpts());
+              await this.api.sendMessage(this.chatId, `\u274C ${errMsg}`, this.threadOpts());
             } catch (err) {
               logger.error({ err }, 'Failed to send error result');
             }

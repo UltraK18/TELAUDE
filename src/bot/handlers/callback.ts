@@ -95,13 +95,13 @@ export async function callbackHandler(ctx: Context): Promise<void> {
   // ask:<choiceIndex> — inline button answer to ask()
   if (data.startsWith('ask:')) {
     const idx = parseInt(data.slice(4), 10);
-    const choices = getAskChoices(userId);
+    const choices = getAskChoices(userId, chatId, threadId);
     if (!choices || idx < 0 || idx >= choices.length) {
       await ctx.answerCallbackQuery({ text: 'Expired' });
       return;
     }
     const chosen = choices[idx];
-    resolveAsk(userId, chosen);
+    resolveAsk(userId, chosen, chatId, threadId);
     // Remove keyboard, keep question text
     try {
       await ctx.editMessageReplyMarkup({ reply_markup: undefined });
@@ -161,10 +161,10 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       await ctx.answerCallbackQuery({ text: 'Resuming session...' });
 
       // Delete /resume list message
-      const smsg = getSessionsMessage(userId);
+      const smsg = getSessionsMessage(userId, chatId, threadId);
       if (smsg) {
         ctx.api.deleteMessage(smsg.chatId, smsg.messageId).catch(() => {});
-        clearSessionsMessage(userId);
+        clearSessionsMessage(userId, chatId, threadId);
       }
 
       await resumeSession(userId, sessionId, ctx);
@@ -213,7 +213,7 @@ function getCurrentDir(userId: number, chatId?: number, threadId?: number): stri
 }
 
 async function refreshBotSessions(ctx: Context, userId: number, chatId?: number, threadId?: number): Promise<void> {
-  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId, chatId, threadId), chatId, threadId);
+  const sessions = getRecentSessions(userId, 10, getCurrentDir(userId, chatId, threadId));
   const list = buildSessionList(sessions);
 
   try {
@@ -226,7 +226,7 @@ async function showCliSessions(ctx: Context, userId: number, chatId?: number, th
   const cliSessions = scanCliSessions(currentDir);
 
   // Exclude sessions already in bot DB
-  const dbSessions = getRecentSessions(userId, 100, currentDir, chatId, threadId);
+  const dbSessions = getRecentSessions(userId, 100, currentDir);
   const dbIds = new Set(dbSessions.map(s => s.session_id));
   const filtered = cliSessions.filter(s => !dbIds.has(s.sessionId));
 

@@ -104,7 +104,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
       up.sessionId = null;
     }
     deactivateAllUserSessions(userId, chatId, threadId);
-    cancelPokeTimer(userId);
+    cancelPokeTimer(userId, chatId, threadId);
 
     await ctx.reply(`Directory changed: <code>${result.resolved}</code>`, {
       parse_mode: 'HTML',

@@ -7,21 +7,22 @@ import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
 import { getUserConfig } from '../../db/config-repo.js';
 import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
+import { buildSessionKey } from '../../claude/process-manager.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-/** Track /resume list message per user (independent of UserProcess) */
-const sessionsMessages = new Map<number, { messageId: number; chatId: number }>();
+/** Track /resume list message per session context (independent of UserProcess) */
+const sessionsMessages = new Map<string, { messageId: number; chatId: number }>();
 
-export function getSessionsMessage(userId: number) {
-  return sessionsMessages.get(userId);
+export function getSessionsMessage(userId: number, chatId?: number, threadId?: number) {
+  return sessionsMessages.get(buildSessionKey(userId, chatId, threadId));
 }
 
-export function clearSessionsMessage(userId: number) {
-  sessionsMessages.delete(userId);
+export function clearSessionsMessage(userId: number, chatId?: number, threadId?: number) {
+  sessionsMessages.delete(buildSessionKey(userId, chatId, threadId));
 }
 
 /** Build bot DB session list text + keyboard. */
@@ -68,11 +69,11 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   const candidates = [up?.workingDir, cfg.default_working_dir, config.paths.defaultWorkingDir, process.cwd()];
   const currentDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
 
-  const sessions = getRecentSessions(userId, 10, currentDir, chatId, threadId);
+  const sessions = getRecentSessions(userId, 10, currentDir);
   const list = buildSessionList(sessions);
 
   const msg = await ctx.reply(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
-  sessionsMessages.set(userId, { messageId: msg.message_id, chatId: ctx.chat!.id });
+  sessionsMessages.set(buildSessionKey(userId, chatId, threadId), { messageId: msg.message_id, chatId: ctx.chat!.id });
 }
 
 /** /resume — show session list (same as /sessions) */
@@ -161,7 +162,7 @@ export async function newCommand(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
-  cancelPokeTimer(userId);
+  cancelPokeTimer(userId, chatId, threadId);
   killProcess(userId, chatId, threadId);
   const up = getUserProcess(userId, chatId, threadId);
   if (up) {

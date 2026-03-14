@@ -1,5 +1,6 @@
 import { type Context } from 'grammy';
 import { getUserProcess } from '../../claude/process-manager.js';
+import { getActiveSession } from '../../db/session-repo.js';
 import { readConversationHistory } from '../../utils/cli-sessions.js';
 
 const MAX_USER_LEN = 150;
@@ -24,12 +25,15 @@ export async function historyCommand(ctx: Context): Promise<void> {
   const chatId = ctx.chat?.id;
   const threadId = (ctx.message as any)?.message_thread_id ?? 0;
   const up = getUserProcess(userId, chatId, threadId);
-  if (!up?.sessionId) {
+  const dbSession = up ? null : getActiveSession(userId, chatId ?? userId, threadId);
+  const sessionId = up?.sessionId ?? dbSession?.session_id;
+  if (!sessionId) {
     await ctx.reply('No active session.', { parse_mode: 'HTML' });
     return;
   }
 
-  const allTurns = readConversationHistory(up.sessionId, up.workingDir, 5);
+  const workingDir = up?.workingDir ?? dbSession?.working_dir ?? process.cwd();
+  const allTurns = readConversationHistory(sessionId, workingDir, 5);
   if (allTurns.length === 0) {
     await ctx.reply('No conversation history found.', { parse_mode: 'HTML' });
     return;

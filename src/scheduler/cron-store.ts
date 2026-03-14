@@ -22,6 +22,8 @@ export interface CompletedJob {
   workingDir: string;
   model?: string;
   userId: number;
+  chatId: number;
+  threadId: number;
   once: boolean;
   runAt?: string;
   createdAt: string;
@@ -37,6 +39,8 @@ export interface CronJob {
   workingDir: string;
   model?: string;
   userId: number;
+  chatId: number;
+  threadId: number;
   sessionId: string | null;
   isPaused: boolean;
   once: boolean;
@@ -88,6 +92,8 @@ export function addJob(params: {
   workingDir: string;
   model?: string;
   userId: number;
+  chatId: number;
+  threadId: number;
   sessionId?: string | null;
   once?: boolean;
   runAt?: string;
@@ -101,6 +107,8 @@ export function addJob(params: {
     workingDir: params.workingDir,
     model: params.model,
     userId: params.userId,
+    chatId: params.chatId,
+    threadId: params.threadId,
     sessionId: params.sessionId ?? null,
     isPaused: false,
     once: params.once ?? false,
@@ -182,6 +190,8 @@ export function archiveJob(jobId: string): void {
     workingDir: job.workingDir,
     model: job.model,
     userId: job.userId,
+    chatId: job.chatId,
+    threadId: job.threadId,
     once: job.once,
     runAt: job.runAt,
     createdAt: job.createdAt,

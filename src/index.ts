@@ -47,9 +47,9 @@ async function main(): Promise<void> {
   // Now import everything that depends on config
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
-  const { cleanupIdleProcesses, getAllProcesses, killProcess } = await import('./claude/process-manager.js');
+  const { cleanupIdleProcesses, getAllProcesses, killProcess, killAllIsolated } = await import('./claude/process-manager.js');
   const { logger, notify, setDashboardOutput } = await import('./utils/logger.js');
-  const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers } = await import('./utils/dashboard.js');
+  const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers, stopDashboard } = await import('./utils/dashboard.js');
 
   // Initialize database
   const db = initDb();
@@ -86,12 +86,16 @@ async function main(): Promise<void> {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
 
+    // Backward compat: old jobs may lack chatId/threadId
+    if (!job.chatId) job.chatId = getChatId(job.userId);
+    if (job.threadId == null) job.threadId = 0;
+
     // Check if user is active — if so, queue the task
     if (isUserActive(job.userId)) {
       enqueueScheduledTask({
         userId: job.userId,
-        chatId: getChatId(job.userId),
-        threadId: 0,
+        chatId: job.chatId,
+        threadId: job.threadId,
         text: job.message,
         api: bot.api,
         mode: 'cron',
@@ -103,9 +107,9 @@ async function main(): Promise<void> {
     }
 
     // Spawn in silent mode
-    let up = getUserProcess(job.userId);
+    let up = getUserProcess(job.userId, job.chatId, job.threadId);
     if (!up) {
-      up = createUserProcess(job.userId, job.workingDir, job.model ?? 'sonnet');
+      up = createUserProcess(job.userId, job.workingDir, job.model ?? 'sonnet', job.chatId, job.threadId);
     }
     if (job.sessionId) up.sessionId = job.sessionId;
     up.workingDir = job.workingDir;
@@ -117,7 +121,7 @@ async function main(): Promise<void> {
       model: job.model,
     });
 
-    const streamHandler = new StreamHandler(bot.api, getChatId(job.userId), up.threadId, job.userId, up, { silent: true });
+    const streamHandler = new StreamHandler(bot.api, job.chatId, job.threadId, job.userId, up, { silent: true });
     streamHandler.attachToParser(parser).catch(err => {
       logger.error({ err, jobId: job.id }, 'Cron stream handler error');
     });
@@ -144,7 +148,7 @@ async function main(): Promise<void> {
           logger.info({ userId: job.userId, sessionId: resumeId }, 'Reload (cron): re-spawning Claude CLI');
 
           const spawn2 = spawnClaudeProcess(up!, { resumeSessionId: resumeId, mode: 'cron', model: job.model });
-          const sh2 = new StreamHandler(bot.api, getChatId(job.userId), up!.threadId, job.userId, up!, { silent: true });
+          const sh2 = new StreamHandler(bot.api, job.chatId, job.threadId, job.userId, up!, { silent: true });
           sh2.attachToParser(spawn2.parser).catch(() => {});
 
           if (sendToProcess(up!, reloadMsg)) {
@@ -174,7 +178,7 @@ async function main(): Promise<void> {
 
         // Send report if Claude produced any text response (and nothing_to_report wasn't called)
         if (up!.lastResponseText) {
-          bot.api.sendMessage(getChatId(job.userId), `🔔 ${up!.lastResponseText}`)
+          bot.api.sendMessage(job.chatId, `🔔 ${up!.lastResponseText}`, job.threadId > 0 ? { message_thread_id: job.threadId } : undefined)
             .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
         }
         up!.nothingToReport = false;
@@ -315,17 +319,31 @@ async function main(): Promise<void> {
     for (const [, up] of getAllProcesses()) {
       killProcess(up.telegramUserId, up.chatId, up.threadId);
     }
+    killAllIsolated();
 
     await stopInternalApi();
     await bot.stop();
     closeDb();
 
+    stopDashboard();
     logger.info('Shutdown complete');
     process.exit(0);
   };
 
   process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+  // Consume reload flag before bot.start (dev only) — needed for Online notification routing
+  type ReloadFlag = { userId: number; sessionId?: string; chatId?: number; threadId?: number; message?: string };
+  let reloadFlag: ReloadFlag | null = null;
+  if (process.env['NODE_ENV'] === 'development') {
+    const { consumeReloadFlag } = await import('./bot/commands/stop.js');
+    reloadFlag = consumeReloadFlag();
+    if (reloadFlag?.sessionId === '__silent__') {
+      // Keep chatId/threadId for Online notification routing, but clear sessionId to prevent stdin injection
+      reloadFlag = { userId: reloadFlag.userId, chatId: reloadFlag.chatId, threadId: reloadFlag.threadId };
+    }
+  }
 
   // Start polling
   await bot.start({
@@ -405,36 +423,38 @@ async function main(): Promise<void> {
       // Notify authorized users that bot is online
       import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
         for (const uid of getAuthorizedUserIds()) {
-          bot.api.sendMessage(getChatId(uid), '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', { parse_mode: 'HTML' }).catch(() => {});
+          const onlineChatId = reloadFlag?.chatId ?? getChatId(uid);
+          const onlineThreadId = reloadFlag?.threadId ?? 0;
+          const onlineOpts: Record<string, unknown> = { parse_mode: 'HTML' };
+          if (onlineThreadId > 0) onlineOpts.message_thread_id = onlineThreadId;
+          bot.api.sendMessage(onlineChatId, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', onlineOpts).catch(() => {});
         }
       });
 
       // Send reload notification to Claude session if /reload was used (dev only)
-      if (process.env['NODE_ENV'] === 'development') {
+      if (reloadFlag?.sessionId) {
         (async () => {
-          const { consumeReloadFlag } = await import('./bot/commands/stop.js');
-          const flag = consumeReloadFlag();
-          if (!flag || flag.sessionId === '__silent__') return;
-
+          const flag = reloadFlag!;
           const stdin = flag.message
             ? `[The user has restarted the application]\nUser said: ${flag.message}`
             : '[The user has restarted the application]';
-          const chatId = getChatId(flag.userId);
+          const chatId = flag.chatId ?? getChatId(flag.userId);
+          const threadId = flag.threadId ?? 0;
 
           // Restore sessionId so reload resumes previous conversation
           if (flag.sessionId) {
             const { getUserProcess, createUserProcess: cup } = await import('./claude/process-manager.js');
             const { getUserConfig } = await import('./db/config-repo.js');
             const cfg = getUserConfig(flag.userId);
-            let up = getUserProcess(flag.userId, chatId);
+            let up = getUserProcess(flag.userId, chatId, threadId);
             if (!up) {
-              up = cup(flag.userId, cfg.default_working_dir ?? process.cwd(), cfg.default_model, chatId);
+              up = cup(flag.userId, cfg.default_working_dir ?? process.cwd(), cfg.default_model, chatId, threadId);
             }
             up.sessionId = flag.sessionId;
           }
 
           const { queueOrLaunch } = await import('./bot/handlers/message.js');
-          queueOrLaunch(flag.userId, chatId, stdin, bot.api);
+          queueOrLaunch(flag.userId, chatId, stdin, bot.api, threadId);
         })();
       }
     },

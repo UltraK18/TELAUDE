@@ -4,12 +4,14 @@ import { hasPendingAsk, resolveAsk, getAskMessageInfo } from '../../api/ask-queu
 export async function askInterceptor(ctx: Context, next: NextFunction): Promise<void> {
   const userId = ctx.from?.id;
   const text = ctx.message?.text;
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
 
   // Only intercept plain text messages (not commands) when there's a pending ask
-  if (userId && text && !text.startsWith('/') && hasPendingAsk(userId)) {
+  if (userId && text && !text.startsWith('/') && hasPendingAsk(userId, chatId, threadId)) {
     // Get message info before resolving (resolve deletes the pending ask)
-    const msgInfo = getAskMessageInfo(userId);
-    resolveAsk(userId, text);
+    const msgInfo = getAskMessageInfo(userId, chatId, threadId);
+    resolveAsk(userId, text, chatId, threadId);
 
     // Remove inline keyboard if the ask had buttons
     if (msgInfo) {

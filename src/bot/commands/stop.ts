@@ -46,8 +46,8 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   const up = getUserProcess(userId, chatId, threadId);
   const sessionId = up?.sessionId ?? '';
 
-  // Leave flag: userId\nsessionId\nmessage
-  const flagContent = [userId, sessionId, userMsg].join('\n');
+  // Leave flag: userId\nsessionId\nchatId\nthreadId\nmessage
+  const flagContent = [userId, sessionId, chatId ?? userId, threadId, userMsg].join('\n');
   fs.writeFileSync(RELOAD_FLAG, flagContent);
 
   await ctx.reply('Restarting bot process...');
@@ -59,14 +59,18 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   if (!userId) return;
 
+  const chatId = ctx.chat?.id;
+  const threadId = (ctx.message as any)?.message_thread_id ?? 0;
+
   // Write reload flag with silent marker — dev-loop restarts but no stdin injection
-  fs.writeFileSync(RELOAD_FLAG, `${userId}\n__silent__`);
+  // Still include chatId/threadId so Online notification routes correctly
+  fs.writeFileSync(RELOAD_FLAG, [userId, '__silent__', chatId ?? userId, threadId, ''].join('\n'));
 
   await ctx.reply('Restarting bot process...');
   setTimeout(() => process.exit(0), 500);
 }
 
-export function consumeReloadFlag(): { userId: number; sessionId?: string; message?: string } | null {
+export function consumeReloadFlag(): { userId: number; sessionId?: string; chatId?: number; threadId?: number; message?: string } | null {
   try {
     const raw = fs.readFileSync(RELOAD_FLAG, 'utf-8').trim();
     fs.unlinkSync(RELOAD_FLAG);
@@ -74,8 +78,10 @@ export function consumeReloadFlag(): { userId: number; sessionId?: string; messa
     const userId = Number(lines[0]);
     if (!userId) return null;
     const sessionId = lines[1] || undefined;
-    const message = lines.slice(2).join('\n').trim() || undefined;
-    return { userId, sessionId, message };
+    const chatId = Number(lines[2]) || undefined;
+    const threadId = Number(lines[3]) || undefined;
+    const message = lines.slice(4).join('\n').trim() || undefined;
+    return { userId, sessionId, chatId, threadId, message };
   } catch {
     return null;
   }

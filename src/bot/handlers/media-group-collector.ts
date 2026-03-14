@@ -95,12 +95,18 @@ export class MediaGroupCollector {
       'Flushing media group',
     );
 
-    // Download all files in parallel
-    const results = await Promise.allSettled(
-      group.items.map(item =>
-        downloadTelegramFile(group.api, item.fileId, group.workingDir, item.originalFileName, item.mediaType)
-      ),
-    );
+    // Download in batches of 3 to limit concurrency
+    const BATCH_SIZE = 3;
+    const results: PromiseSettledResult<string>[] = [];
+    for (let i = 0; i < group.items.length; i += BATCH_SIZE) {
+      const batch = group.items.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map(item =>
+          downloadTelegramFile(group.api, item.fileId, group.workingDir, item.originalFileName, item.mediaType)
+        ),
+      );
+      results.push(...batchResults);
+    }
 
     const successItems: Array<{ mediaType: MediaType; savedPath: string }> = [];
     for (let i = 0; i < results.length; i++) {
@@ -118,6 +124,8 @@ export class MediaGroupCollector {
       }
     }
 
+    const failCount = results.length - successItems.length;
+
     if (successItems.length === 0) {
       try {
         await group.api.sendMessage(group.chatId, '\u274C 미디어 그룹 다운로드에 실패했습니다.');
@@ -125,7 +133,10 @@ export class MediaGroupCollector {
       return;
     }
 
-    const text = buildMediaText(successItems, group.caption);
+    let text = buildMediaText(successItems, group.caption);
+    if (failCount > 0) {
+      text += `\n(${failCount} of ${results.length} files failed to download)`;
+    }
     this.onComplete(group.userId, group.chatId, text, group.api, group.threadId);
   }
 

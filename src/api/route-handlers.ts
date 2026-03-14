@@ -141,8 +141,8 @@ export function registerAllRoutes(api: Api): void {
     }));
 
     // Start waiting for answer (text or button click)
-    const answerPromise = createAsk(userId, body.question, choices);
-    setAskMessageId(userId, msg.message_id, chatId);
+    const answerPromise = createAsk(userId, body.question, choices, chatId, threadId);
+    setAskMessageId(userId, msg.message_id, chatId, threadId);
 
     const answer = await answerPromise;
     return { answer };
@@ -301,7 +301,7 @@ export function registerAllRoutes(api: Api): void {
 
   registerRoute('/mcp/cron/add', async (body) => {
     const userId = body._userId as number;
-    const { up } = getSessionTarget(userId, body);
+    const { chatId, threadId, up } = getSessionTarget(userId, body);
     const job = addJob({
       name: body.name,
       schedule: body.schedule,
@@ -309,6 +309,8 @@ export function registerAllRoutes(api: Api): void {
       workingDir: body.workingDir ?? up?.workingDir ?? process.cwd(),
       model: body.model ?? up?.model,
       userId,
+      chatId,
+      threadId,
       sessionId: up?.sessionId,
       once: body.once ?? false,
       runAt: body.runAt,
@@ -318,7 +320,8 @@ export function registerAllRoutes(api: Api): void {
   });
 
   registerRoute('/mcp/cron/list', async (body) => {
-    let jobs = getAllJobs();
+    const userId = body._userId as number;
+    let jobs = getAllJobs().filter(j => j.userId === userId);
     if (body.currentWorkingDir) {
       jobs = jobs.filter(j => j.workingDir === body.currentWorkingDir);
     }
@@ -326,14 +329,30 @@ export function registerAllRoutes(api: Api): void {
   });
 
   registerRoute('/mcp/cron/update', async (body) => {
-    const { jobId, ...updates } = body;
-    const job = updateJob(jobId, updates);
+    const userId = body._userId as number;
+    const jobId = body.jobId as string;
+    const job = getJob(jobId);
     if (!job) throw new Error(`Job not found: ${jobId}`);
-    scheduleJob(jobId); // Re-schedule with new settings
-    return { ok: true, job: { schedule: job.schedule, runAt: job.runAt } };
+    if (job.userId !== userId) throw new Error('Access denied: job belongs to another user');
+    // Allowlist: only safe fields can be updated
+    const updates: Record<string, unknown> = {};
+    if (body.name !== undefined) updates.name = body.name;
+    if (body.schedule !== undefined) updates.schedule = body.schedule;
+    if (body.message !== undefined) updates.message = body.message;
+    if (body.workingDir !== undefined) updates.workingDir = body.workingDir;
+    if (body.model !== undefined) updates.model = body.model;
+    if (body.isPaused !== undefined) updates.isPaused = body.isPaused;
+    const updated = updateJob(jobId, updates);
+    if (!updated) throw new Error(`Failed to update job: ${jobId}`);
+    scheduleJob(jobId);
+    return { ok: true, job: { schedule: updated.schedule, runAt: updated.runAt } };
   });
 
   registerRoute('/mcp/cron/remove', async (body) => {
+    const userId = body._userId as number;
+    const job = getJob(body.jobId);
+    if (!job) throw new Error(`Job not found: ${body.jobId}`);
+    if (job.userId !== userId) throw new Error('Access denied: job belongs to another user');
     unscheduleJob(body.jobId);
     const removed = removeJob(body.jobId);
     if (!removed) throw new Error(`Job not found: ${body.jobId}`);
@@ -341,31 +360,47 @@ export function registerAllRoutes(api: Api): void {
   });
 
   registerRoute('/mcp/cron/pause', async (body) => {
-    const job = updateJob(body.jobId, { isPaused: true });
+    const userId = body._userId as number;
+    const job = getJob(body.jobId);
     if (!job) throw new Error(`Job not found: ${body.jobId}`);
+    if (job.userId !== userId) throw new Error('Access denied: job belongs to another user');
+    const paused = updateJob(body.jobId, { isPaused: true });
+    if (!paused) throw new Error(`Failed to pause job: ${body.jobId}`);
     unscheduleJob(body.jobId);
     return { ok: true };
   });
 
   registerRoute('/mcp/cron/resume', async (body) => {
-    const job = updateJob(body.jobId, { isPaused: false });
+    const userId = body._userId as number;
+    const job = getJob(body.jobId);
     if (!job) throw new Error(`Job not found: ${body.jobId}`);
+    if (job.userId !== userId) throw new Error('Access denied: job belongs to another user');
+    const resumed = updateJob(body.jobId, { isPaused: false });
+    if (!resumed) throw new Error(`Failed to resume job: ${body.jobId}`);
     scheduleJob(body.jobId);
     return { ok: true };
   });
 
   registerRoute('/mcp/cron/history', async (body) => {
+    const userId = body._userId as number;
     const job = getJob(body.jobId);
-    if (job) return { history: job.history };
+    if (job) {
+      if (job.userId !== userId) throw new Error('Access denied');
+      return { history: job.history };
+    }
 
     // Check completed jobs archive
-    const completed = getCompletedJobs().find(j => j.id === body.jobId);
+    const completed = getCompletedJobs(userId).find(j => j.id === body.jobId);
     if (completed) return { history: completed.history };
 
     throw new Error(`Job not found: ${body.jobId}`);
   });
 
   registerRoute('/mcp/cron/next', async (body) => {
+    const userId = body._userId as number;
+    const job = getJob(body.jobId);
+    if (!job) throw new Error(`Job not found: ${body.jobId}`);
+    if (job.userId !== userId) throw new Error('Access denied');
     const next = getNextRun(body.jobId);
     return { next: next?.toISOString() ?? null };
   });

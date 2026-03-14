@@ -118,6 +118,25 @@ export function getIsolatedProcess(id: string): UserProcess | undefined {
   return isolatedProcesses.get(id);
 }
 
+export function killAllIsolated(): void {
+  for (const [id, up] of isolatedProcesses) {
+    if (up.process) {
+      try {
+        const pid = up.process.pid;
+        if (pid && process.platform === 'win32') {
+          spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { stdio: 'ignore' });
+        } else {
+          up.process.kill('SIGTERM');
+        }
+      } catch { /* ignore */ }
+      up.process = null;
+      up.parser = null;
+    }
+  }
+  isolatedProcesses.clear();
+  isolatedCount = 0;
+}
+
 export function getUserProcess(userId: number, chatId?: number, threadId?: number): UserProcess | undefined {
   const key = buildSessionKey(userId, chatId, threadId);
   return processes.get(key);
@@ -239,7 +258,17 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
               // Inject TELAUDE_* env vars so external MCP servers can use the internal API
               const serverCfg = cfg as Record<string, unknown>;
               const existingEnv = (serverCfg.env as Record<string, string>) ?? {};
-              mcpServers[name] = { ...serverCfg, env: { ...telaudeEnv, ...existingEnv } };
+              const merged: Record<string, unknown> = { ...serverCfg, env: { ...telaudeEnv, ...existingEnv } };
+              // Override Serena's --project to match current working directory
+              if (name === 'serena' && Array.isArray(merged.args)) {
+                const args = [...(merged.args as string[])];
+                const projIdx = args.indexOf('--project');
+                if (projIdx !== -1 && projIdx + 1 < args.length) {
+                  args[projIdx + 1] = up.workingDir;
+                  merged.args = args;
+                }
+              }
+              mcpServers[name] = merged;
             }
           }
         }

@@ -452,9 +452,17 @@ async function main(): Promise<void> {
           if (flag.sessionId) {
             const { getUserProcess, createUserProcess: cup } = await import('./claude/process-manager.js');
             const { config: appConfig } = await import('./config.js');
+            const { getSessionById: getById } = await import('./db/session-repo.js');
+            const dbSession = getById(flag.sessionId);
             let up = getUserProcess(flag.userId, chatId, threadId);
             if (!up) {
-              up = cup(flag.userId, appConfig.paths.defaultWorkingDir ?? process.cwd(), appConfig.claude.defaultModel, chatId, threadId);
+              up = cup(
+                flag.userId,
+                dbSession?.working_dir ?? appConfig.paths.defaultWorkingDir ?? process.cwd(),
+                dbSession?.model ?? appConfig.claude.defaultModel,
+                chatId,
+                threadId,
+              );
             }
             up.sessionId = flag.sessionId;
           }

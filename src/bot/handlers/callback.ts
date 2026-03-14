@@ -12,7 +12,7 @@ import { scheduleJob, unscheduleJob } from '../../scheduler/scheduler.js';
 import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
-import { applyModel, buildModelKeyboard } from '../commands/model.js';
+import { applyModel } from '../commands/model.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
@@ -113,14 +113,10 @@ export async function callbackHandler(ctx: Context): Promise<void> {
   if (data.startsWith('model:')) {
     const modelName = data.slice(6);
     const result = applyModel(userId, chatId, threadId, modelName);
-    const keyboard = buildModelKeyboard(modelName);
 
     await ctx.answerCallbackQuery({ text: `Model: ${modelName}` });
     try {
-      await ctx.editMessageText(
-        `${result}\nOr type: <code>/model model-name</code>`,
-        { parse_mode: 'HTML', reply_markup: keyboard },
-      );
+      await ctx.editMessageText(result, { parse_mode: 'HTML' });
     } catch { /* message not modified — ignore */ }
     return;
   }

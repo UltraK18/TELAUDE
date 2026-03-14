@@ -84,7 +84,7 @@ function getToolSummary(toolName: string, params: Record<string, unknown>): stri
     case 'Bash':
       return `<b>Bash</b>: <code>${truncateText(params.command as string, 60)}</code>`;
     case 'Glob':
-      return `<b>Glob</b>: <code>${params.pattern}</code>`;
+      return `<b>Glob</b>: <code>${escHtml(String(params.pattern ?? ''))}</code>`;
     case 'Grep':
       return `<b>Grep</b>: <code>${truncateText(params.pattern as string, 40)}</code>`;
     case 'WebSearch':
@@ -94,15 +94,19 @@ function getToolSummary(toolName: string, params: Record<string, unknown>): stri
   }
 }
 
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function truncatePath(filePath: string | undefined): string {
   if (!filePath) return '(unknown)';
   const parts = filePath.replace(/\\/g, '/').split('/');
-  if (parts.length <= 3) return filePath;
-  return '.../' + parts.slice(-2).join('/');
+  const display = parts.length <= 3 ? filePath : '.../' + parts.slice(-2).join('/');
+  return escHtml(display);
 }
 
 function truncateText(text: string | undefined, maxLen: number): string {
   if (!text) return '';
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + '...';
+  const display = text.length <= maxLen ? text : text.slice(0, maxLen) + '...';
+  return escHtml(display);
 }

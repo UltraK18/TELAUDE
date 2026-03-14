@@ -38,7 +38,7 @@ export interface TelaudeSettings {
 }
 
 const DEFAULT_ROOT: RootSettings = {
-  defaultModel: 'sonnet',
+  defaultModel: 'default',
   defaultMode: 'default',
 };
 

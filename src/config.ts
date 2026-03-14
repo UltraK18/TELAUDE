@@ -34,7 +34,7 @@ function buildConfig() {
 
     claude: {
       cliPath: optional('CLAUDE_CLI_PATH', 'claude'),
-      defaultModel: optional('DEFAULT_MODEL', 'sonnet'),
+      defaultModel: optional('DEFAULT_MODEL', 'default'),
       defaultMaxBudgetUsd: optionalNumber('DEFAULT_MAX_BUDGET_USD', 5.0),
       defaultMaxTurns: optionalNumber('DEFAULT_MAX_TURNS', 50),
     },

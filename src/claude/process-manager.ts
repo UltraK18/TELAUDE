@@ -193,15 +193,20 @@ export interface SpawnOptions {
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
   const settings = loadSettings();
-  const model = opts?.model ?? settings.model ?? up.model;
+  // Priority: opts.model (scheduled tasks) > up.model (/model command) > settings.model (TUI) > fallback
+  const model = opts?.model ?? up.model ?? settings.model ?? 'default';
 
   const args = [
     '--verbose',
     '--output-format', 'stream-json',
     '--include-partial-messages',
     '--dangerously-skip-permissions',
-    '--model', model,
   ];
+
+  // 'default' = let CLI use its native default model (currently Opus 4.6 1M)
+  if (model !== 'default') {
+    args.push('--model', model);
+  }
 
   if (opts?.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);
@@ -313,7 +318,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   }
 
   logger.debug({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
-  logger.info({ userId: up.telegramUserId, cwd: up.workingDir }, 'Spawning Claude CLI');
+  logger.info({ userId: up.telegramUserId, cwd: up.workingDir, model, upModel: up.model, settingsModel: settings.model }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination
   const env = { ...process.env };

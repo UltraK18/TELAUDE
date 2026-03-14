@@ -143,3 +143,11 @@ export function getThreadSessions(): { chat_id: number; thread_id: number; teleg
     .prepare('SELECT DISTINCT chat_id, thread_id, telegram_user_id FROM sessions WHERE thread_id > 0')
     .all() as { chat_id: number; thread_id: number; telegram_user_id: number }[];
 }
+
+/** Get the most recent active session's chatId and threadId for a user */
+export function getLastActiveTarget(userId: number): { chatId: number; threadId: number } | null {
+  const row = getDb()
+    .prepare('SELECT chat_id, thread_id FROM sessions WHERE telegram_user_id = ? AND is_active = 1 ORDER BY last_active_at DESC LIMIT 1')
+    .get(userId) as { chat_id: number; thread_id: number } | undefined;
+  return row ? { chatId: row.chat_id, threadId: row.thread_id } : null;
+}

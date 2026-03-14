@@ -86,9 +86,13 @@ async function main(): Promise<void> {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
 
-    // Backward compat: old jobs may lack chatId/threadId
-    if (!job.chatId) job.chatId = getChatId(job.userId);
-    if (job.threadId == null) job.threadId = 0;
+    // Backward compat: old jobs may lack chatId/threadId — use last active session
+    if (!job.chatId || job.threadId == null) {
+      const { getLastActiveTarget } = await import('./db/session-repo.js');
+      const target = getLastActiveTarget(job.userId);
+      if (!job.chatId) job.chatId = target?.chatId ?? getChatId(job.userId);
+      if (job.threadId == null) job.threadId = target?.threadId ?? 0;
+    }
 
     // Check if user is active — if so, queue the task
     if (isUserActive(job.userId)) {
@@ -415,10 +419,13 @@ async function main(): Promise<void> {
       startTopicHealthChecker(bot.api);
 
       // Notify authorized users that bot is online
-      import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {
+      import('./db/auth-repo.js').then(async ({ getAuthorizedUserIds }) => {
+        const { getLastActiveTarget } = await import('./db/session-repo.js');
         for (const uid of getAuthorizedUserIds()) {
-          const onlineChatId = reloadFlag?.chatId ?? getChatId(uid);
-          const onlineThreadId = reloadFlag?.threadId ?? 0;
+          const target = reloadFlag ? { chatId: reloadFlag.chatId, threadId: reloadFlag.threadId } : getLastActiveTarget(uid);
+          const onlineChatId = target?.chatId ?? getChatId(uid);
+          const onlineThreadId = target?.threadId ?? 0;
+          // Skip if threadId is 0 in a topic group — don't send to General
           const onlineOpts: Record<string, unknown> = { parse_mode: 'HTML' };
           if (onlineThreadId > 0) onlineOpts.message_thread_id = onlineThreadId;
           bot.api.sendMessage(onlineChatId, '<tg-emoji emoji-id="5336985409220001678">✅</tg-emoji> Telaude Online', onlineOpts).catch((err) => {
@@ -434,8 +441,10 @@ async function main(): Promise<void> {
           const stdin = flag.message
             ? `[The user has restarted the application]\nUser said: ${flag.message}`
             : '[The user has restarted the application]';
-          const chatId = flag.chatId ?? getChatId(flag.userId);
-          const threadId = flag.threadId ?? 0;
+          const { getLastActiveTarget: getTarget } = await import('./db/session-repo.js');
+          const reloadTarget = getTarget(flag.userId);
+          const chatId = flag.chatId ?? reloadTarget?.chatId ?? getChatId(flag.userId);
+          const threadId = flag.threadId ?? reloadTarget?.threadId ?? 0;
 
           // Restore sessionId so reload resumes previous conversation
           if (flag.sessionId) {

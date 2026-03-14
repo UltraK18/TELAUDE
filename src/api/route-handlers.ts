@@ -16,6 +16,7 @@ import type { UserProcess } from '../claude/process-manager.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
 import { getReceivedFiles, getReceivedFileById } from '../db/file-repo.js';
+import { getLastActiveTarget } from '../db/session-repo.js';
 
 // In-memory userId → chatId mapping (updated on every message)
 const userChatMap = new Map<number, number>();
@@ -74,7 +75,12 @@ function persistChatId(chatId: number): void {
 
 function getSessionTarget(userId: number, body: Record<string, unknown>): { chatId: number; threadId: number; up: UserProcess | undefined } {
   const chatId = (body._chatId as number) ?? getChatId(userId);
-  const threadId = (body._threadId as number) ?? userThreadMap.get(userId) ?? 0;
+  let threadId = (body._threadId as number) ?? userThreadMap.get(userId);
+  if (threadId == null) {
+    // Fallback: use last active session's threadId from DB instead of defaulting to 0 (General)
+    const target = getLastActiveTarget(userId);
+    threadId = target?.threadId ?? 0;
+  }
   let up = getUserProcess(userId, chatId, threadId);
   if (!up) up = getActiveProcessForUser(userId);
   return { chatId, threadId, up };

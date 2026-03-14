@@ -263,6 +263,9 @@ async function main(): Promise<void> {
   // Start all cron jobs
   startScheduler();
 
+  // Topic health checker: verify threads still exist (5-min interval)
+  const { startTopicHealthChecker, stopTopicHealthChecker } = await import('./scheduler/topic-health-checker.js');
+
   // Check for missed jobs during downtime
   import('./scheduler/missed-jobs.js').then(({ detectMissedJobs, formatMissedJobsMessage }) => {
     const missed = detectMissedJobs();
@@ -313,6 +316,7 @@ async function main(): Promise<void> {
     clearInterval(cleanupInterval);
     stopScheduler();
     stopAllPokes();
+    stopTopicHealthChecker();
 
     for (const [, up] of getAllProcesses()) {
       killProcess(up.telegramUserId, up.chatId, up.threadId);
@@ -417,6 +421,9 @@ async function main(): Promise<void> {
       }
 
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
+
+      // Start topic health checker (verify threads still exist)
+      startTopicHealthChecker(bot.api);
 
       // Notify authorized users that bot is online
       import('./db/auth-repo.js').then(({ getAuthorizedUserIds }) => {

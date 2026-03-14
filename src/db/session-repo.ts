@@ -131,3 +131,10 @@ export function deactivateAllUserSessions(userId: number, chatId?: number, threa
       .run(userId);
   }
 }
+
+/** Get distinct chat_id + thread_id pairs for all thread-based sessions (for health checking) */
+export function getThreadSessions(): { chat_id: number; thread_id: number; telegram_user_id: number }[] {
+  return getDb()
+    .prepare('SELECT DISTINCT chat_id, thread_id, telegram_user_id FROM sessions WHERE thread_id > 0')
+    .all() as { chat_id: number; thread_id: number; telegram_user_id: number }[];
+}

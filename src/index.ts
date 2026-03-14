@@ -48,7 +48,7 @@ async function main(): Promise<void> {
   // Now import everything that depends on config
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
-  const { cleanupIdleProcesses, getAllProcesses, killProcess, killAllIsolated } = await import('./claude/process-manager.js');
+  const { cleanupIdleProcesses, getAllProcesses, killProcess, killAllIsolated, getUserProcess: getUP, createUserProcess: restoreUP } = await import('./claude/process-manager.js');
   const { logger, notify, setDashboardOutput } = await import('./utils/logger.js');
   const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers, stopDashboard } = await import('./utils/dashboard.js');
 
@@ -361,7 +361,7 @@ async function main(): Promise<void> {
         initDashboard();
         setDashboardOutput(dashboardLog, dashboardError);
 
-        // Load active sessions from DB for initial dashboard display
+        // Restore active sessions from DB — both UP (in-memory) and TUI display
         updateSession({ botUsername: botInfo.username });
         for (const uid of getAuthIds()) {
           const sessions = getRecent(uid, 20);
@@ -371,8 +371,14 @@ async function main(): Promise<void> {
             const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
             const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
             updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label });
+
+            // Restore UP from DB so commands (/pwd, /cd, /resume etc.) work immediately
+            if (!getUP(uid, s.chat_id, s.thread_id)) {
+              const up = restoreUP(uid, s.working_dir, s.model ?? 'default', s.chat_id, s.thread_id);
+              up.sessionId = s.session_id;
+            }
           }
-          // If no active sessions, show most recent one
+          // If no active sessions, show most recent one (display only, no UP)
           if (activeSessions.length === 0 && sessions.length > 0) {
             const s = sessions[0];
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;

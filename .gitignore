@@ -14,3 +14,7 @@ POKE.md.disabled
 *.txt
 CLAUDE.md
 .claude/
+.backup/
+.serena/
+*.exe
+*.zip

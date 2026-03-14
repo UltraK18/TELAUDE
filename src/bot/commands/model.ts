@@ -2,7 +2,7 @@ import { type Context, InlineKeyboard } from 'grammy';
 import { getUserProcess, killProcess, buildChapterKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { getActiveSession, updateSessionModel } from '../../db/session-repo.js';
-import { updateSessionSettings } from '../../settings/settings-store.js';
+import { updateChapterSettings } from '../../settings/settings-store.js';
 
 export const MODEL_OPTIONS = [
   { label: 'Default', value: 'default', row: 0 },
@@ -30,7 +30,7 @@ export function applyModel(userId: number, chatId: number | undefined, threadId:
 
   // Sync to settings V2 (bidirectional with TUI settings)
   const chapterKey = buildChapterKey(userId, chatId, threadId);
-  updateSessionSettings(chapterKey, { model: modelName });
+  updateChapterSettings(chapterKey, { model: modelName });
 
   return `Model changed: <b>${modelName}</b>\nApplied from next message.`;
 }

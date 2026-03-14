@@ -183,7 +183,8 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
 }
 
 export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: string): void {
-  const editKey = sessionKey ?? '_default';
+  if (!sessionKey) return; // No session selected — nothing to edit
+  const editKey = sessionKey;
   setSettingsOpen(true);
 
   // Load session-specific settings from V2 store
@@ -208,7 +209,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
     left: 'center',
     width: '60%',
     height: '80%',
-    label: ` Settings [${editKey === '_default' ? 'Global' : editKey}] (↑↓ Navigate, Space/Enter Toggle, Esc Close) `,
+    label: ` Settings [${editKey}] (↑↓ Navigate, Space/Enter Toggle, Esc Close) `,
     tags: true,
     border: { type: 'line' },
     style: {

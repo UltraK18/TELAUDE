@@ -222,9 +222,7 @@ export function setSettingsOpen(open: boolean): void {
 }
 
 function getSessionKeys(): string[] {
-  return [...sessionStates.entries()]
-    .filter(([k, s]) => k !== '_default' || s.id)
-    .map(([k]) => k);
+  return [...sessionStates.keys()];
 }
 
 export function getSessionDir(sessionKey: string): string | undefined {
@@ -235,9 +233,9 @@ export function updateSession(info: { id?: string; model?: string; dir?: string;
   if (!sessionBox) return;
   if (info.botUsername) botUsername = info.botUsername;
 
-  // Only update sessionStates if there's actual session data (not just botUsername)
-  if (info.id || info.model || info.dir || info.sessionKey || info.label || info.isActive !== undefined) {
-    const key = info.sessionKey ?? '_default';
+  // Only update sessionStates if there's actual session data with a sessionKey
+  if (info.sessionKey && (info.id || info.model || info.dir || info.label || info.isActive !== undefined)) {
+    const key = info.sessionKey;
     const current = sessionStates.get(key) ?? {};
     if (info.id) current.id = info.id;
     if (info.model) current.model = info.model;
@@ -256,8 +254,7 @@ function renderSessionBox(): void {
   if (botUsername) lines.push(`Bot: {cyan-fg}@${botUsername}{/cyan-fg}`);
   lines.push('');
 
-  // Filter out _default if it has no session id (ghost entry)
-  const realSessions = [...sessionStates.entries()].filter(([k, s]) => k !== '_default' || s.id);
+  const realSessions = [...sessionStates.entries()];
 
   if (realSessions.length === 0) {
     lines.push('{gray-fg}No active session{/gray-fg}');

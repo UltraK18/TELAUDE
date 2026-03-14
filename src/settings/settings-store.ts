@@ -16,7 +16,7 @@ export interface ProjectSettings {
   disabledMcpServers: string[];
 }
 
-/** Session-level settings (per chatId:threadId) */
+/** Session-level settings (per sessionKey = userId:chatId:threadId) */
 export interface SessionSettings {
   model: string | null;
   mode: 'default' | 'minimal';
@@ -27,10 +27,10 @@ export interface TelaudeSettingsV2 {
   version: 2;
   root: RootSettings;
   projects: Record<string, ProjectSettings>;   // key = workingDir
-  sessions: Record<string, SessionSettings>;    // key = "chatId:threadId"
+  sessions: Record<string, SessionSettings>;    // key = sessionKey
 }
 
-/** Legacy flat settings (v1) — for migration */
+/** Flat settings view (used by TUI for display) */
 export interface TelaudeSettings {
   disabledTools: string[];
   disabledMcpServers: string[];
@@ -59,21 +59,6 @@ function ensureDataDir(): void {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
 
-/** Migrate v1 flat settings to v2 hierarchical */
-function migrateV1(v1: TelaudeSettings): TelaudeSettingsV2 {
-  return {
-    version: 2,
-    root: { ...DEFAULT_ROOT },
-    projects: {
-      '_default': {
-        disabledTools: [...v1.disabledTools],
-        disabledMcpServers: [...v1.disabledMcpServers],
-      },
-    },
-    sessions: v1.model ? { '_default': { model: v1.model, mode: 'default' } } : {},
-  };
-}
-
 export function loadSettingsV2(): TelaudeSettingsV2 {
   if (cached) return cached;
   try {
@@ -88,8 +73,14 @@ export function loadSettingsV2(): TelaudeSettingsV2 {
         };
         return cached;
       }
-      // v1 migration
-      cached = migrateV1(raw as TelaudeSettings);
+      // v1 migration — old flat format, convert to v2 with empty projects/sessions
+      const v1 = raw as { disabledTools?: string[]; disabledMcpServers?: string[]; model?: string };
+      cached = {
+        version: 2,
+        root: { ...DEFAULT_ROOT },
+        projects: {},
+        sessions: {},
+      };
       saveSettingsV2(cached);
       return cached;
     }
@@ -106,7 +97,7 @@ export function saveSettingsV2(settings: TelaudeSettingsV2): void {
   cached = settings;
 }
 
-/** Get project settings (creates with defaults if missing) */
+/** Get project settings */
 export function getProjectSettings(workingDir: string): ProjectSettings {
   const s = loadSettingsV2();
   return s.projects[workingDir] ?? { ...DEFAULT_PROJECT };
@@ -118,7 +109,7 @@ export function getSessionSettings(sessionKey: string): SessionSettings {
   return s.sessions[sessionKey] ?? { ...DEFAULT_SESSION };
 }
 
-/** Resolve effective settings for a session (cascade: session → project → root) */
+/** Resolve effective settings for a session (project + session) */
 export function resolveSettings(workingDir: string, sessionKey: string): {
   disabledTools: string[];
   disabledMcpServers: string[];
@@ -152,70 +143,38 @@ export function updateSessionSettings(sessionKey: string, updates: Partial<Sessi
   saveSettingsV2(s);
 }
 
-// --- Backward-compatible API (used by process-manager.ts and settings-tui.ts) ---
-
-/** Legacy loadSettings — returns flat view for backward compatibility */
-export function loadSettings(): TelaudeSettings {
+export function toggleTool(toolName: string, workingDir: string): boolean {
   const s = loadSettingsV2();
-  const defaultProj = s.projects['_default'] ?? DEFAULT_PROJECT;
-  const defaultSess = s.sessions['_default'];
-  return {
-    disabledTools: [...defaultProj.disabledTools],
-    disabledMcpServers: [...defaultProj.disabledMcpServers],
-    model: defaultSess?.model ?? null,
-  };
-}
-
-/** Legacy saveSettings — saves to _default project/session */
-export function saveSettings(settings: TelaudeSettings): void {
-  const s = loadSettingsV2();
-  s.projects['_default'] = {
-    disabledTools: [...settings.disabledTools],
-    disabledMcpServers: [...settings.disabledMcpServers],
-  };
-  if (settings.model) {
-    const sess = s.sessions['_default'] ?? { ...DEFAULT_SESSION };
-    sess.model = settings.model;
-    s.sessions['_default'] = sess;
-  }
-  saveSettingsV2(s);
-}
-
-export function toggleTool(toolName: string, workingDir?: string): boolean {
-  const key = workingDir ?? '_default';
-  const s = loadSettingsV2();
-  const proj = s.projects[key] ?? { ...DEFAULT_PROJECT };
+  const proj = s.projects[workingDir] ?? { ...DEFAULT_PROJECT };
   const idx = proj.disabledTools.indexOf(toolName);
   if (idx >= 0) {
     proj.disabledTools.splice(idx, 1);
   } else {
     proj.disabledTools.push(toolName);
   }
-  s.projects[key] = proj;
+  s.projects[workingDir] = proj;
   saveSettingsV2(s);
   return idx < 0; // true = now disabled
 }
 
-export function toggleMcpServer(serverName: string, workingDir?: string): boolean {
-  const key = workingDir ?? '_default';
+export function toggleMcpServer(serverName: string, workingDir: string): boolean {
   const s = loadSettingsV2();
-  const proj = s.projects[key] ?? { ...DEFAULT_PROJECT };
+  const proj = s.projects[workingDir] ?? { ...DEFAULT_PROJECT };
   const idx = proj.disabledMcpServers.indexOf(serverName);
   if (idx >= 0) {
     proj.disabledMcpServers.splice(idx, 1);
   } else {
     proj.disabledMcpServers.push(serverName);
   }
-  s.projects[key] = proj;
+  s.projects[workingDir] = proj;
   saveSettingsV2(s);
   return idx < 0; // true = now disabled
 }
 
-export function setModel(model: string | null, sessionKey?: string): void {
-  const key = sessionKey ?? '_default';
+export function setModel(model: string | null, sessionKey: string): void {
   const s = loadSettingsV2();
-  const sess = s.sessions[key] ?? { ...DEFAULT_SESSION };
+  const sess = s.sessions[sessionKey] ?? { ...DEFAULT_SESSION };
   sess.model = model;
-  s.sessions[key] = sess;
+  s.sessions[sessionKey] = sess;
   saveSettingsV2(s);
 }

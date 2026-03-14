@@ -301,7 +301,6 @@ async function main(): Promise<void> {
   // Pre-load modules for initial dashboard display
   const { getAuthorizedUserIds: getAuthIds, setOnFirstAuth } = await import('./db/auth-repo.js');
   const { getActiveSession: getActive, getRecentSessions: getRecent } = await import('./db/session-repo.js');
-  const { loadSettings: loadSets } = await import('./settings/settings-store.js');
   const { config: cfg } = await import('./config.js');
   const { pokeExists: pokeFileExists } = await import('./scheduler/poke.js');
   const { heartbeatExists: hbFileExists } = await import('./scheduler/heartbeat.js');

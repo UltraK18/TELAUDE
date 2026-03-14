@@ -1,14 +1,22 @@
 import type { Context, NextFunction } from 'grammy';
-import { setTopicName } from '../../db/topic-repo.js';
+import { setTopicName, setChatName } from '../../db/topic-repo.js';
 
 /**
- * Middleware that caches topic/thread names from service messages.
- * Captures forum_topic_created and forum_topic_edited events.
+ * Middleware that caches chat/topic names.
+ * - Group/channel names from ctx.chat.title
+ * - Topic names from forum_topic_created/edited service messages
  */
 export async function topicNameCache(ctx: Context, next: NextFunction): Promise<void> {
+  const chat = ctx.chat;
   const msg = ctx.message;
+
+  // Cache group/channel name from chat title
+  if (chat?.id && (chat as any).title) {
+    setChatName(chat.id, (chat as any).title);
+  }
+
   if (msg) {
-    const chatId = ctx.chat?.id;
+    const chatId = chat?.id;
     const threadId = (msg as any).message_thread_id;
 
     if (chatId && threadId) {

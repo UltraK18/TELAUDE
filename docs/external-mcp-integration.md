@@ -11,6 +11,8 @@ When Telaude spawns the Claude CLI, it automatically injects the following varia
 | `TELAUDE_API_URL` | Internal API address (`http://127.0.0.1:19816`) |
 | `TELAUDE_API_TOKEN` | Request authentication token (generated at runtime, destroyed on process exit) |
 | `TELAUDE_USER_ID` | Telegram user ID |
+| `TELAUDE_CHAT_ID` | Current chapter's chat ID (DM = userId, group = groupId) |
+| `TELAUDE_THREAD_ID` | Current chapter's thread/topic ID (0 = no thread) |
 
 ## Available Endpoints
 

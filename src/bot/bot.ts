@@ -33,6 +33,18 @@ export function createBot(): Bot {
   bot.use(authMiddleware);
   bot.use(askInterceptor);
 
+  // Ignore commands in forwarded messages — treat as plain text
+  bot.use((ctx, next) => {
+    const msg = ctx.message;
+    if (msg?.text?.startsWith('/') && (msg as any).forward_origin) {
+      // Remove entities so grammY doesn't treat it as a command
+      (msg as any).entities = ((msg as any).entities ?? []).filter(
+        (e: any) => e.type !== 'bot_command',
+      );
+    }
+    return next();
+  });
+
   // Normalize commands to lowercase (e.g. /NEW → /new)
   bot.use((ctx, next) => {
     if (ctx.message?.text?.startsWith('/')) {

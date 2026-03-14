@@ -17,7 +17,7 @@ Located under the OS user's home directory. These settings apply to all projects
 
 | Path | Description |
 |------|-------------|
-| `~/.telaude/data/settings.json` | TUI settings (disabled tools/MCPs, model selection) |
+| `~/.telaude/data/settings.json` | V2 hierarchical settings (per working directory + per chapter) |
 | `~/.telaude/data/bot.log` | Bot log file |
 | `~/.telaude/data/sticker-cache/` | Sticker JPG thumbnail cache |
 | `~/.telaude/telaude-mcp-settings.json` | Global tool display settings (hidden/icon) |
@@ -30,6 +30,8 @@ Located under each Claude working directory (cwd). These settings apply only to 
 | Path | Description |
 |------|-------------|
 | `.telaude/telaude-mcp-settings.json` | Project-level tool display settings (overrides global) |
+| `.telaude/POKE.md` | Poke configuration (auto follow-up when Claude goes silent) |
+| `.telaude/HEARTBEAT.md` | Heartbeat status file (health check for scheduled tasks) |
 
 > The `.telaude/` directory is included in `.gitignore` and is not tracked by git. Configure it independently on each instance.
 
@@ -56,7 +58,7 @@ Windows example:
 
 | Path | Description |
 |------|-------------|
-| `.env` (project root) | Bot token, password hash, etc. — excluded from git |
+| `~/.telaude/.env` | Bot token, password hash, etc. — encrypted with OS-native encryption |
 | `~/.telaude/data/telaude.db` | SQLite database (sessions, schedules, etc.) — excluded from git |
 | `user_send/` | Temporary storage for user-uploaded files — excluded from git |
 
@@ -94,7 +96,7 @@ Optional variables:
 | `ALLOWED_TELEGRAM_IDS` | (none, anyone allowed) | Allowed Telegram User IDs (comma-separated) |
 | `CHAT_ID` | Auto-detected | Chat ID for bot notifications (auto-saved on auth) |
 | `CLAUDE_CLI_PATH` | `claude` | Path to the Claude CLI executable |
-| `DEFAULT_MODEL` | `sonnet` | Default Claude model |
+| `DEFAULT_MODEL` | `default` | Default Claude model (CLI native default) |
 | `DEFAULT_MAX_BUDGET_USD` | `5.0` | Default budget limit (USD) |
 | `DEFAULT_MAX_TURNS` | `50` | Default maximum number of turns |
 | `DEFAULT_WORKING_DIR` | Current directory | Default working directory |
@@ -130,4 +132,4 @@ X-Telaude-User-Id: <TELAUDE_USER_ID>
 | `POST /mcp/unpin-message` | `{}` | Unpin the pinned message |
 | `POST /mcp/set-reaction` | `{ emoji: string }` | Set an emoji reaction on the user's message |
 
-The environment variables `TELAUDE_API_URL`, `TELAUDE_API_TOKEN`, and `TELAUDE_USER_ID` are automatically injected by Telaude via `--mcp-config` when spawning the Claude CLI. See [External MCP Integration](./external-mcp-integration.md) for details.
+The environment variables `TELAUDE_API_URL`, `TELAUDE_API_TOKEN`, `TELAUDE_USER_ID`, `TELAUDE_CHAT_ID`, and `TELAUDE_THREAD_ID` are automatically injected by Telaude via `--mcp-config` when spawning the Claude CLI. See [External MCP Integration](./external-mcp-integration.md) for details.

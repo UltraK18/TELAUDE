@@ -148,7 +148,7 @@ export function initDashboard(): void {
 
   // All keyboard handling in a single keypress listener to avoid duplicate events
   screen.on('keypress', (_ch: string, key: blessed.Widgets.Events.IKeyEventArg) => {
-    if (!key || settingsOpen) return;
+    if (!key || settingsOpen || deleteConfirmOpen) return;
     const keys = getSessionKeys();
 
     switch (key.name) {
@@ -175,6 +175,13 @@ export function initDashboard(): void {
         break;
       case 'pagedown':
         if (logBox) { logBox.scroll((logBox.height as number) - 2); screen!.render(); }
+        break;
+      case 'delete':
+        if (keys.length > 0 && screen && !deleteConfirmOpen) {
+          const selectedKey = keys[selectedSessionIdx];
+          const session = sessionStates.get(selectedKey);
+          showDeleteConfirm(screen, selectedKey, session?.label ?? selectedKey);
+        }
         break;
     }
 
@@ -216,9 +223,74 @@ let botUsername: string | null = null;
 const sessionStates = new Map<string, SessionInfo>();
 let selectedSessionIdx = 0;
 let settingsOpen = false;
+let deleteConfirmOpen = false;
 
 export function setSettingsOpen(open: boolean): void {
   settingsOpen = open;
+}
+
+function showDeleteConfirm(scr: blessed.Widgets.Screen, chapterKey: string, label: string): void {
+  deleteConfirmOpen = true;
+
+  const dialog = blessed.box({
+    parent: scr,
+    top: 'center',
+    left: 'center',
+    width: 40,
+    height: 7,
+    label: ' Delete Chapter ',
+    tags: true,
+    border: { type: 'line' },
+    style: { border: { fg: 'red' }, bg: 'black' },
+    padding: { left: 2, right: 2, top: 1 },
+    content: `Delete {bold}${label}{/bold}?\n\n{gray-fg}Enter = confirm, Esc = cancel{/gray-fg}`,
+  });
+
+  function onKey(_ch: string, key: blessed.Widgets.Events.IKeyEventArg): void {
+    if (!key) return;
+    if (key.name === 'return') {
+      // Delete chapter
+      scr.removeListener('keypress', onKey);
+      dialog.detach();
+      deleteConfirmOpen = false;
+
+      const parts = chapterKey.split(':');
+      const userId = Number(parts[0]);
+      const chatId = Number(parts[1]);
+      const threadId = Number(parts[2]);
+
+      import('../claude/process-manager.js').then(({ killProcess }) => {
+        killProcess(userId, chatId, threadId);
+      });
+      import('../db/session-repo.js').then(({ deactivateAllUserSessions }) => {
+        deactivateAllUserSessions(userId, chatId, threadId);
+      });
+
+      // Remove scheduled jobs for this chapter
+      Promise.all([
+        import('../scheduler/cron-store.js'),
+        import('../scheduler/scheduler.js'),
+      ]).then(([{ getAllJobs, removeJob }, { unscheduleJob }]) => {
+        const jobs = getAllJobs().filter(j => j.chatId === chatId && j.threadId === threadId);
+        for (const j of jobs) {
+          unscheduleJob(j.id);
+          removeJob(j.id);
+        }
+      });
+
+      sessionStates.delete(chapterKey);
+      renderSessionBox();
+      scr.render();
+    } else if (key.name === 'escape') {
+      scr.removeListener('keypress', onKey);
+      dialog.detach();
+      deleteConfirmOpen = false;
+      scr.render();
+    }
+  }
+
+  scr.on('keypress', onKey);
+  scr.render();
 }
 
 function getSessionKeys(): string[] {
@@ -275,7 +347,7 @@ function renderSessionBox(): void {
   }
 
   lines.push('');
-  lines.push('{gray-fg}↑↓ select  Enter settings{/gray-fg}');
+  lines.push('{gray-fg}↑↓ select  Enter settings  Del remove{/gray-fg}');
 
   sessionBox.setContent(lines.join('\n'));
   screen?.render();

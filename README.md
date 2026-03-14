@@ -7,6 +7,7 @@ Send a message via Telegram, and the server spawns a `claude -p` process, stream
 ## Features
 
 - **Real-time Streaming** — Claude responses are streamed live to Telegram with incremental edits
+- **Multi-Chapter** — Independent sessions per chat/thread (DM topics, group forums). Each chapter has its own CLI process, session, working directory, and settings
 - **Session Management** — Resume conversations, list sessions, rename them, and restore previous context
 - **Tool Call Visualization** — See which tools Claude is using in real time, with counters and icons
 - **MCP Server** — Built-in MCP tools for scheduling, file sending, user prompts, and more
@@ -16,8 +17,9 @@ Send a message via Telegram, and the server spawns a `claude -p` process, stream
 - **Emoji Reactions** — Bidirectional reactions (user-to-bot and bot-to-user messages)
 - **Link Preview** — Auto-fetches context for URLs shared in messages (X/Twitter via fxtwitter, YouTube via noembed, generic sites via OG meta tags)
 - **Forward Message Support** — Forwarded messages are collected and sent as context to Claude
-- **TUI Dashboard** — Terminal dashboard displaying session info, schedule status, logs, and settings
-- **Settings TUI** — Keyboard-only settings panel with scroll support for toggling MCP servers, tools, and model selection
+- **TUI Dashboard** — Three-column terminal dashboard (Logs | Sessions | Schedule) with keyboard-only navigation
+- **Per-Chapter Settings** — Each chapter has independent MCP, tool, and model settings via TUI (↑↓ select, Enter to edit)
+- **Topic Health Checker** — Detects deleted threads and cleans up sessions automatically
 - **File Path Validation** — send-file, send-photo, and zip-and-send routes validate paths within allowed boundaries
 - **Security** — Password authentication + OS-native encryption (Windows DPAPI / macOS Keychain / Linux machine-id)
 
@@ -60,6 +62,9 @@ The setup wizard will ask for:
 | `/projects` | List allowed project paths |
 | `/model [name]` | View or change the model |
 | `/budget [amount]` | View or set token budget |
+| `/mode` | Toggle session mode (default/minimal) |
+| `/schedule` | View scheduled jobs |
+| `/usage` | Token usage stats |
 
 ## Build & Run
 
@@ -82,6 +87,8 @@ When Telaude spawns a Claude CLI process, it injects the following environment v
 | `TELAUDE_API_URL` | Internal API address (`http://127.0.0.1:19816`) |
 | `TELAUDE_API_TOKEN` | Request auth token (generated at runtime) |
 | `TELAUDE_USER_ID` | Telegram user ID |
+| `TELAUDE_CHAT_ID` | Current chapter's chat ID (DM = userId, group = groupId) |
+| `TELAUDE_THREAD_ID` | Current chapter's thread/topic ID (0 = no thread) |
 
 ### Available Endpoints
 

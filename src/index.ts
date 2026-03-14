@@ -5,7 +5,7 @@ const _env = process.env;
 if (_env['NODE_ENV'] !== 'development') _env['NODE_ENV'] = 'production';
 process.title = 'TELAUDE';
 import { needsSetup, runSetup } from './setup.js';
-import { getTopicName as getTopicLabel } from './db/topic-repo.js';
+import { buildChapterLabel } from './db/topic-repo.js';
 
 // MCP server mode: when invoked as `TELAUDE.exe --mcp`, run MCP server only
 if (process.argv.includes('--mcp')) {
@@ -49,7 +49,7 @@ async function main(): Promise<void> {
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
   const { cleanupIdleProcesses, getAllProcesses, killProcess, killAllIsolated, getUserProcess: getUP, createUserProcess: restoreUP } = await import('./claude/process-manager.js');
-  const { logger, notify, setDashboardOutput } = await import('./utils/logger.js');
+  const { logger, notify, notifyError, setDashboardOutput } = await import('./utils/logger.js');
   const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers, stopDashboard } = await import('./utils/dashboard.js');
 
   // Initialize database
@@ -116,12 +116,12 @@ async function main(): Promise<void> {
     if (!up) {
       up = createUserProcess(job.userId, job.workingDir, job.model ?? 'default', job.chatId, job.threadId);
     }
-    if (job.sessionId) up.sessionId = job.sessionId;
-    up.workingDir = job.workingDir;
+    // Use current UP's session (not job's stored sessionId) — user may have changed session/folder
+    // Don't overwrite up.workingDir — keep the user's current folder intact
     up.isProcessing = true;
 
     const { process: childProc, parser } = spawnClaudeProcess(up, {
-      resumeSessionId: job.sessionId ?? undefined,
+      resumeSessionId: up.sessionId ?? undefined,
       mode: 'cron',
       model: job.model,
     });
@@ -132,7 +132,11 @@ async function main(): Promise<void> {
     });
 
     // Send message to Claude stdin (wrapped with silent mode hint)
-    const wrappedMessage = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call schedule_nothing_to_report() if there is truly nothing to report — it suppresses the response.\n${job.message}`;
+    // If job's workingDir differs from current session, include path context
+    const dirContext = job.workingDir !== up.workingDir
+      ? `\n[Note: This task was registered in ${job.workingDir}, but your current working directory is ${up.workingDir}.]`
+      : '';
+    const wrappedMessage = `[SCHEDULED TASK] Execute the task and respond with your report. Your response will be automatically sent to the user. Only call schedule_nothing_to_report() if there is truly nothing to report — it suppresses the response.${dirContext}\n${job.message}`;
     if (!sendToProcess(up, wrappedMessage)) {
       up.isProcessing = false;
       throw new Error('Failed to send cron message to Claude');
@@ -184,7 +188,10 @@ async function main(): Promise<void> {
         // Send report if Claude produced any text response (and nothing_to_report wasn't called)
         if (up!.lastResponseText) {
           bot.api.sendMessage(job.chatId, `🔔 ${up!.lastResponseText}`, job.threadId > 0 ? { message_thread_id: job.threadId } : undefined)
-            .catch(err => logger.error({ err, userId: job.userId }, 'Failed to send cron report'));
+            .catch(err => {
+              logger.error({ err, userId: job.userId }, 'Failed to send cron report');
+              notifyError(`Cron report failed: ${err?.description ?? err?.message ?? 'unknown'}`);
+            });
         }
         up!.nothingToReport = false;
         up!.lastResponseText = null;
@@ -367,8 +374,7 @@ async function main(): Promise<void> {
           const activeSessions = sessions.filter(s => s.is_active);
           for (const s of activeSessions) {
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
-            const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
+            const label = buildChapterLabel(s.chat_id, s.thread_id, uid);
             updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label });
 
             // Restore UP from DB so commands (/pwd, /cd, /resume etc.) work immediately
@@ -381,8 +387,7 @@ async function main(): Promise<void> {
           if (activeSessions.length === 0 && sessions.length > 0) {
             const s = sessions[0];
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
-            const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
+            const label = buildChapterLabel(s.chat_id, s.thread_id, uid);
             updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label, isActive: false });
           }
         }

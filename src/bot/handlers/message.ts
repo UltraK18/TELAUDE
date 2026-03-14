@@ -19,7 +19,7 @@ import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
 import { ForwardCollector } from './forward-collector.js';
 import { setUserChat } from '../../api/route-handlers.js';
-import { logger, notify } from '../../utils/logger.js';
+import { logger, notify, notifyError } from '../../utils/logger.js';
 import { getSessionsMessage, clearSessionsMessage } from '../commands/session.js';
 import { logMessage } from '../../db/message-log-repo.js';
 import { startPokeTimer, resetPokeTimer } from '../../scheduler/poke.js';
@@ -305,7 +305,10 @@ function drainScheduledQueue(userId: number, api: Api): void {
     if (up.lastResponseText) {
       const prefix = task.mode === 'poke' ? '' : '🔔 ';
       api.sendMessage(task.chatId, `${prefix}${up.lastResponseText}`)
-        .catch(err => logger.error({ err, userId }, 'Failed to send scheduled report'));
+        .catch(err => {
+          logger.error({ err, userId }, 'Failed to send scheduled report');
+          notifyError(`Scheduled report failed: ${err?.description ?? err?.message ?? 'unknown'}`);
+        });
     }
     up.nothingToReport = false;
     up.lastResponseText = null;

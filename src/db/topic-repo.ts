@@ -12,3 +12,34 @@ export function getTopicName(chatId: number, threadId: number): string | null {
     .get(chatId, threadId) as { name: string } | undefined;
   return row?.name ?? null;
 }
+
+/** Store chat/group name (threadId=0 = group name itself) */
+export function setChatName(chatId: number, name: string): void {
+  setTopicName(chatId, 0, name);
+}
+
+export function getChatName(chatId: number): string | null {
+  return getTopicName(chatId, 0);
+}
+
+/** Build display label for TUI: DM / topic name / group/topic */
+export function buildChapterLabel(chatId: number, threadId: number, userId: number): string {
+  const isDM = chatId === userId;
+
+  if (isDM && threadId === 0) return 'DM';
+
+  const chatName = getChatName(chatId);
+  const topicName = threadId > 0 ? getTopicName(chatId, threadId) : null;
+
+  if (isDM && threadId > 0) {
+    return topicName ?? `T:${threadId}`;
+  }
+
+  // Group
+  const groupLabel = chatName ?? `G:${chatId}`;
+  if (threadId > 0) {
+    const topicLabel = topicName ?? `T:${threadId}`;
+    return `${groupLabel}/${topicLabel}`;
+  }
+  return groupLabel;
+}

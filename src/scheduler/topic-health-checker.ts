@@ -1,37 +1,58 @@
 import type { Api } from 'grammy';
-import { getThreadSessions, deactivateAllUserSessions } from '../db/session-repo.js';
+import { getNonDmSessions, deactivateAllUserSessions } from '../db/session-repo.js';
 import { logger } from '../utils/logger.js';
 import { removeSession } from '../utils/dashboard.js';
 import { killProcess, buildChapterKey } from '../claude/process-manager.js';
 
-const CHECK_INTERVAL = 300_000; // 5 minutes
+const CHECK_INTERVAL = 60_000; // 1 minute
 let intervalTimer: ReturnType<typeof setInterval> | null = null;
 
 export async function checkTopicHealth(api: Api): Promise<void> {
-  const threads = getThreadSessions();
-  for (const { chat_id, thread_id, telegram_user_id } of threads) {
+  const sessions = getNonDmSessions();
+  logger.info({ count: sessions.length }, 'Health check running');
+  for (const { chat_id, thread_id, telegram_user_id } of sessions) {
     try {
-      await api.sendChatAction(chat_id, 'typing', { message_thread_id: thread_id });
+      const opts: Record<string, unknown> = {};
+      if (thread_id > 0) opts.message_thread_id = thread_id;
+      await api.sendChatAction(chat_id, 'typing', opts);
+      logger.debug({ chat_id, thread_id }, 'Health check OK');
     } catch (err: any) {
-      if (err.error_code === 400 && err.description?.includes('thread not found')) {
+      const code = err.error_code;
+      const desc = err.description ?? '';
+
+      // Deleted topic
+      if (code === 400 && desc.includes('thread not found')) {
         logger.info({ chat_id, thread_id, telegram_user_id }, 'Topic deleted, cleaning up sessions');
-        killProcess(telegram_user_id, chat_id, thread_id);
-        deactivateAllUserSessions(telegram_user_id, chat_id, thread_id);
-        removeSession(buildChapterKey(telegram_user_id, chat_id, thread_id));
-      } else {
-        logger.warn({ err, chat_id, thread_id }, 'Topic health check failed (non-fatal)');
+        cleanup(telegram_user_id, chat_id, thread_id);
+        continue;
       }
+
+      // Bot kicked from group, group deleted, or chat not found
+      if (code === 403 || (code === 400 && (desc.includes('chat not found') || desc.includes('bot was kicked')))) {
+        logger.info({ chat_id, thread_id, telegram_user_id, desc }, 'Chat inaccessible, cleaning up sessions');
+        cleanup(telegram_user_id, chat_id, thread_id);
+        continue;
+      }
+
+      // Other errors — non-fatal
+      logger.warn({ err, chat_id, thread_id }, 'Health check failed (non-fatal)');
     }
   }
 }
 
+function cleanup(userId: number, chatId: number, threadId: number): void {
+  killProcess(userId, chatId, threadId);
+  deactivateAllUserSessions(userId, chatId, threadId);
+  removeSession(buildChapterKey(userId, chatId, threadId));
+}
+
 export function startTopicHealthChecker(api: Api): void {
   checkTopicHealth(api).catch(err => {
-    logger.warn({ err }, 'Initial topic health check failed');
+    logger.warn({ err }, 'Initial health check failed');
   });
   intervalTimer = setInterval(() => {
     checkTopicHealth(api).catch(err => {
-      logger.warn({ err }, 'Topic health check failed');
+      logger.warn({ err }, 'Health check failed');
     });
   }, CHECK_INTERVAL);
 }

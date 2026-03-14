@@ -142,6 +142,10 @@ export function getUserProcess(userId: number, chatId?: number, threadId?: numbe
   return processes.get(key);
 }
 
+export function getUserProcessBySessionKey(sessionKey: string): UserProcess | undefined {
+  return processes.get(sessionKey);
+}
+
 export function getAllProcesses(): Map<string, UserProcess> {
   return processes;
 }

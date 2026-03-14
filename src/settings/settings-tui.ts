@@ -5,6 +5,7 @@ import path from 'path';
 import { type TelaudeSettings, loadSettingsV2, saveSettingsV2 } from './settings-store.js';
 import { config } from '../config.js';
 import { setSettingsOpen, getSessionDir } from '../utils/dashboard.js';
+import { getUserProcessBySessionKey } from '../claude/process-manager.js';
 
 /** Known built-in tools that can be toggled */
 const BUILTIN_TOOLS = [
@@ -275,6 +276,9 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
       }
     } else if (item.type === 'select') {
       settings.model = item.key;
+      // Sync UP in-memory model so next spawn uses it
+      const up = getUserProcessBySessionKey(editKey);
+      if (up) up.model = item.key;
     }
     // Save to session-specific project/session in V2 store
     const sv2 = loadSettingsV2();

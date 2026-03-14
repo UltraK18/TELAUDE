@@ -107,7 +107,9 @@ function launchAndSend(
         logger.error({ err, userId }, 'Stream handler error');
       });
 
-      childProc.on('exit', (code: number | null) => {
+      childProc.on('exit', (code: number | null, signal: string | null) => {
+        const exitSessionKey = buildSessionKey(userId, up.chatId, up.threadId);
+        logger.info({ userId, sessionKey: exitSessionKey, code, signal, isProcessing: up.isProcessing, interrupted: up.interrupted, reloadPending: up.reloadPending }, 'Exit handler entered');
         // Reload: re-spawn with same session and inject reload message
         if (up.reloadPending) {
           const reloadMsg = up.reloadMessage ?? 'MCP reload complete.';
@@ -158,6 +160,7 @@ function launchAndSend(
             }
           }
           // Non-resume failure
+          logger.info({ userId, sessionKey: exitSessionKey, code }, 'Exit: non-resume failure, isProcessing → false');
           up.isProcessing = false;
           api.sendMessage(chatId, '\u26A0\uFE0F Claude process exited. Please send another message.')
             .catch(() => {});
@@ -170,6 +173,7 @@ function launchAndSend(
 
         // If interrupted, clear queue and handle stop message
         if (up.interrupted) {
+          logger.info({ userId, sessionKey, queuedCount: queue?.texts.length ?? 0, hasStopMessage: !!up.stopMessage }, 'Exit: interrupted path');
           // Clear any pending queue
           if (queue) {
             queue.texts = [];
@@ -194,12 +198,13 @@ function launchAndSend(
           queue.texts = [];
           messageQueues.delete(sessionKey);
           const combined = `The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n---\n${queued}\n---`;
-          logger.info({ userId, queueSize: queued.length }, 'Draining queued messages after exit');
+          logger.info({ userId, sessionKey, queuedCount: queued.split('\n\n').length, textPreview: queued.slice(0, 120) }, 'Exit: draining queued messages');
           const nextResume = up.sessionId ?? undefined;
           if (!launchAndSend(up, combined, chatId, userId, api, nextResume)) {
             up.isProcessing = false;
           }
         } else {
+          logger.info({ userId, sessionKey }, 'Exit: no queue, isProcessing → false');
           up.isProcessing = false;
           messageQueues.delete(sessionKey);
           // Log Claude response and start poke timer (only for user conversations)
@@ -350,7 +355,7 @@ export function queueOrLaunch(
       messageQueues.set(sessionKey, queue);
     }
     queue.texts.push(text);
-    logger.info({ userId, queueSize: queue.texts.length }, 'Message queued');
+    logger.info({ userId, sessionKey, queueSize: queue.texts.length, isProcessing: currentUp.isProcessing, textPreview: text.slice(0, 80) }, 'Message queued');
     return;
   }
 
@@ -363,6 +368,8 @@ export function queueOrLaunch(
   }
 
   ready.isProcessing = true;
+  const launchSessionKey = buildSessionKey(userId, chatId, tid);
+  logger.info({ userId, sessionKey: launchSessionKey, resumeId: ready.sessionId ?? null }, 'isProcessing → true (launching)');
   const resumeId = ready.sessionId ?? undefined;
 
   // Show "typing..." indicator while processing

@@ -399,6 +399,7 @@ export function killProcess(userId: number, chatId?: number, threadId?: number):
     } else {
       up.process.kill('SIGTERM');
     }
+    logger.info({ userId, key, pid, wasProcessing: up.isProcessing }, 'killProcess: isProcessing → false');
     up.process = null;
     up.parser = null;
     up.isProcessing = false;

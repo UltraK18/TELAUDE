@@ -1,7 +1,7 @@
 import { type Api } from 'grammy';
 import { logger } from '../../utils/logger.js';
 import { fetchLinkPreviews } from '../../utils/link-preview.js';
-import { buildSessionKey } from '../../claude/process-manager.js';
+import { buildChapterKey } from '../../claude/process-manager.js';
 
 interface ForwardedMsg {
   text: string;
@@ -30,7 +30,7 @@ const DEBOUNCE_MS = 1500;
 const MAX_COLLECT_MS = 5000;
 
 export class ForwardCollector {
-  private pending = new Map<string, PendingForward>(); // keyed by sessionKey
+  private pending = new Map<string, PendingForward>(); // keyed by chapterKey
   private onComplete: ForwardCompleteCallback;
 
   constructor(onComplete: ForwardCompleteCallback) {
@@ -45,7 +45,7 @@ export class ForwardCollector {
     api: Api,
     threadId?: number,
   ): void {
-    const key = buildSessionKey(userId, chatId, threadId);
+    const key = buildChapterKey(userId, chatId, threadId);
     let group = this.pending.get(key);
 
     if (!group) {
@@ -72,7 +72,7 @@ export class ForwardCollector {
   }
 
   hasPending(userId: number, chatId?: number, threadId?: number): boolean {
-    const key = buildSessionKey(userId, chatId, threadId);
+    const key = buildChapterKey(userId, chatId, threadId);
     return this.pending.has(key);
   }
 
@@ -83,7 +83,7 @@ export class ForwardCollector {
     api: Api,
     threadId?: number,
   ): void {
-    const key = buildSessionKey(userId, chatId, threadId);
+    const key = buildChapterKey(userId, chatId, threadId);
     const group = this.pending.get(key);
     if (!group) return; // no pending forward → should not be called
 

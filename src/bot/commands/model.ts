@@ -1,5 +1,5 @@
 import { type Context, InlineKeyboard } from 'grammy';
-import { getUserProcess, killProcess, buildSessionKey } from '../../claude/process-manager.js';
+import { getUserProcess, killProcess, buildChapterKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { getActiveSession, updateSessionModel } from '../../db/session-repo.js';
 import { updateSessionSettings } from '../../settings/settings-store.js';
@@ -29,8 +29,8 @@ export function applyModel(userId: number, chatId: number | undefined, threadId:
   }
 
   // Sync to settings V2 (bidirectional with TUI settings)
-  const sessionKey = buildSessionKey(userId, chatId, threadId);
-  updateSessionSettings(sessionKey, { model: modelName });
+  const chapterKey = buildChapterKey(userId, chatId, threadId);
+  updateSessionSettings(chapterKey, { model: modelName });
 
   return `Model changed: <b>${modelName}</b>\nApplied from next message.`;
 }

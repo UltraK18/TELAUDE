@@ -5,7 +5,7 @@ import { validatePath, loadAllowedRoots } from '../../utils/path-validator.js';
 import { getUserProcess, killProcess, createUserProcess } from '../../claude/process-manager.js';
 import { deactivateAllUserSessions } from '../../db/session-repo.js';
 import { updateSession } from '../../utils/dashboard.js';
-import { buildSessionKey } from '../../claude/process-manager.js';
+import { buildChapterKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 

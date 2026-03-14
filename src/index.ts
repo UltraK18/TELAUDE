@@ -369,7 +369,7 @@ async function main(): Promise<void> {
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
             const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
             const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
-            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label });
+            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label });
 
             // Restore UP from DB so commands (/pwd, /cd, /resume etc.) work immediately
             if (!getUP(uid, s.chat_id, s.thread_id)) {
@@ -383,7 +383,7 @@ async function main(): Promise<void> {
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
             const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
             const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
-            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label, isActive: false });
+            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label, isActive: false });
           }
         }
         refreshScheduleDashboard();

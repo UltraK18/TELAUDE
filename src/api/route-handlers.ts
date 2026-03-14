@@ -11,7 +11,7 @@ import {
 import {
   reloadAll, getNextRun, scheduleJob, unscheduleJob,
 } from '../scheduler/scheduler.js';
-import { getUserProcess, getActiveProcessForUser, buildSessionKey } from '../claude/process-manager.js';
+import { getUserProcess, getActiveProcessForUser, buildChapterKey } from '../claude/process-manager.js';
 import type { UserProcess } from '../claude/process-manager.js';
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';

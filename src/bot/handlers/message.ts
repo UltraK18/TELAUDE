@@ -6,7 +6,7 @@ import {
   createUserProcess,
   spawnClaudeProcess,
   sendMessage,
-  buildSessionKey,
+  buildChapterKey,
   getProcessesByUserId,
   isSessionInUse,
   type UserProcess,
@@ -75,7 +75,7 @@ function getOrCreateUp(userId: number, chatId?: number, threadId?: number): User
     );
     if (lastSession) {
       // Don't reuse a session that's already active in another thread
-      const sk = buildSessionKey(userId, chatId, threadId);
+      const sk = buildChapterKey(userId, chatId, threadId);
       if (!isSessionInUse(lastSession.session_id, sk)) {
         up.sessionId = lastSession.session_id;
       }
@@ -113,8 +113,8 @@ function launchAndSend(
       });
 
       childProc.on('exit', (code: number | null, signal: string | null) => {
-        const exitSessionKey = buildSessionKey(userId, up.chatId, up.threadId);
-        logger.info({ userId, sessionKey: exitSessionKey, code, signal, isProcessing: up.isProcessing, interrupted: up.interrupted, reloadPending: up.reloadPending }, 'Exit handler entered');
+        const exitChapterKey = buildChapterKey(userId, up.chatId, up.threadId);
+        logger.info({ userId, chapterKey: exitChapterKey, code, signal, isProcessing: up.isProcessing, interrupted: up.interrupted, reloadPending: up.reloadPending }, 'Exit handler entered');
         // Reload: re-spawn with same session and inject reload message
         if (up.reloadPending) {
           const reloadMsg = up.reloadMessage ?? 'MCP reload complete.';
@@ -165,7 +165,7 @@ function launchAndSend(
             }
           }
           // Non-resume failure
-          logger.info({ userId, sessionKey: exitSessionKey, code }, 'Exit: non-resume failure, isProcessing → false');
+          logger.info({ userId, chapterKey: exitChapterKey, code }, 'Exit: non-resume failure, isProcessing → false');
           up.isProcessing = false;
           api.sendMessage(chatId, '\u26A0\uFE0F Claude process exited. Please send another message.')
             .catch(() => {});
@@ -173,16 +173,16 @@ function launchAndSend(
         }
 
         // Success (code === 0) — drain queue
-        const sessionKey = buildSessionKey(userId, up.chatId, up.threadId);
-        const queue = messageQueues.get(sessionKey);
+        const chapterKey = buildChapterKey(userId, up.chatId, up.threadId);
+        const queue = messageQueues.get(chapterKey);
 
         // If interrupted, clear queue and handle stop message
         if (up.interrupted) {
-          logger.info({ userId, sessionKey, queuedCount: queue?.texts.length ?? 0, hasStopMessage: !!up.stopMessage }, 'Exit: interrupted path');
+          logger.info({ userId, chapterKey, queuedCount: queue?.texts.length ?? 0, hasStopMessage: !!up.stopMessage }, 'Exit: interrupted path');
           // Clear any pending queue
           if (queue) {
             queue.texts = [];
-            messageQueues.delete(sessionKey);
+            messageQueues.delete(chapterKey);
           }
           up.interrupted = false;
 
@@ -201,17 +201,17 @@ function launchAndSend(
           // Queued user messages — launch new process with context marker
           const queued = queue.texts.join('\n\n');
           queue.texts = [];
-          messageQueues.delete(sessionKey);
+          messageQueues.delete(chapterKey);
           const combined = `The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n---\n${queued}\n---`;
-          logger.info({ userId, sessionKey, queuedCount: queued.split('\n\n').length, textPreview: queued.slice(0, 120) }, 'Exit: draining queued messages');
+          logger.info({ userId, chapterKey, queuedCount: queued.split('\n\n').length, textPreview: queued.slice(0, 120) }, 'Exit: draining queued messages');
           const nextResume = up.sessionId ?? undefined;
           if (!launchAndSend(up, combined, chatId, userId, api, nextResume)) {
             up.isProcessing = false;
           }
         } else {
-          logger.info({ userId, sessionKey }, 'Exit: no queue, isProcessing → false');
+          logger.info({ userId, chapterKey }, 'Exit: no queue, isProcessing → false');
           up.isProcessing = false;
-          messageQueues.delete(sessionKey);
+          messageQueues.delete(chapterKey);
           // Log Claude response and start poke timer (only for user conversations)
           if (up.currentMode === 'user') {
             logMessage(userId, 'claude', up.chatId, up.threadId);
@@ -312,12 +312,12 @@ function drainScheduledQueue(userId: number, api: Api): void {
     up.lastReportText = null;
 
     // After scheduled task completes, check for more
-    const sessionKey = buildSessionKey(userId, up.chatId, up.threadId);
-    const queue = messageQueues.get(sessionKey);
+    const chapterKey = buildChapterKey(userId, up.chatId, up.threadId);
+    const queue = messageQueues.get(chapterKey);
     if (queue && queue.texts.length > 0) {
       const combined = queue.texts.join('\n\n');
       queue.texts = [];
-      messageQueues.delete(sessionKey);
+      messageQueues.delete(chapterKey);
       const nextResume = up.sessionId ?? undefined;
       launchAndSend(up, combined, task.chatId, userId, api, nextResume);
     } else {
@@ -353,14 +353,14 @@ export function queueOrLaunch(
   const currentUp = getUserProcess(userId, chatId, tid);
 
   if (currentUp?.isProcessing) {
-    const sessionKey = buildSessionKey(userId, chatId, tid);
-    let queue = messageQueues.get(sessionKey);
+    const chapterKey = buildChapterKey(userId, chatId, tid);
+    let queue = messageQueues.get(chapterKey);
     if (!queue) {
       queue = { texts: [] };
-      messageQueues.set(sessionKey, queue);
+      messageQueues.set(chapterKey, queue);
     }
     queue.texts.push(text);
-    logger.info({ userId, sessionKey, queueSize: queue.texts.length, isProcessing: currentUp.isProcessing, textPreview: text.slice(0, 80) }, 'Message queued');
+    logger.info({ userId, chapterKey, queueSize: queue.texts.length, isProcessing: currentUp.isProcessing, textPreview: text.slice(0, 80) }, 'Message queued');
     return;
   }
 
@@ -373,8 +373,8 @@ export function queueOrLaunch(
   }
 
   ready.isProcessing = true;
-  const launchSessionKey = buildSessionKey(userId, chatId, tid);
-  logger.info({ userId, sessionKey: launchSessionKey, resumeId: ready.sessionId ?? null }, 'isProcessing → true (launching)');
+  const launchChapterKey = buildChapterKey(userId, chatId, tid);
+  logger.info({ userId, chapterKey: launchChapterKey, resumeId: ready.sessionId ?? null }, 'isProcessing → true (launching)');
   const resumeId = ready.sessionId ?? undefined;
 
   // Show "typing..." indicator while processing

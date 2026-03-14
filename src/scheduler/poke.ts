@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { logger } from '../utils/logger.js';
 import { getLastUserMessageTime, getLastClaudeMessageTime, getHourlyDistribution } from '../db/message-log-repo.js';
-import { buildSessionKey } from '../claude/process-manager.js';
+import { buildChapterKey } from '../claude/process-manager.js';
 
 // --- Types ---
 
@@ -85,7 +85,7 @@ export function setPokeCallback(cb: PokeCallback): void {
 export function startPokeTimer(userId: number, workingDir: string, sessionId: string | null, lastResponse?: string | null, chatId?: number, threadId?: number): void {
   const cid = chatId ?? userId;
   const tid = threadId ?? 0;
-  const key = buildSessionKey(userId, cid, tid);
+  const key = buildChapterKey(userId, cid, tid);
   const config = readPokeConfig(workingDir);
   if (!config) {
     // No POKE.md or invalid — clean up any existing state
@@ -127,7 +127,7 @@ export function startPokeTimer(userId: number, workingDir: string, sessionId: st
 }
 
 export function resetPokeTimer(userId: number, chatId?: number, threadId?: number): void {
-  const key = buildSessionKey(userId, chatId ?? userId, threadId ?? 0);
+  const key = buildChapterKey(userId, chatId ?? userId, threadId ?? 0);
   const state = pokeStates.get(key);
   if (!state) return;
 
@@ -140,7 +140,7 @@ export function resetPokeTimer(userId: number, chatId?: number, threadId?: numbe
 }
 
 export function cancelPokeTimer(userId: number, chatId?: number, threadId?: number): void {
-  const key = buildSessionKey(userId, chatId ?? userId, threadId ?? 0);
+  const key = buildChapterKey(userId, chatId ?? userId, threadId ?? 0);
   const state = pokeStates.get(key);
   if (!state) return;
 

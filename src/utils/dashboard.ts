@@ -225,17 +225,17 @@ function getSessionKeys(): string[] {
   return [...sessionStates.keys()];
 }
 
-export function getSessionDir(sessionKey: string): string | undefined {
-  return sessionStates.get(sessionKey)?.dir;
+export function getSessionDir(chapterKey: string): string | undefined {
+  return sessionStates.get(chapterKey)?.dir;
 }
 
-export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string; sessionKey?: string; isActive?: boolean; label?: string }): void {
+export function updateSession(info: { id?: string; model?: string; dir?: string; botUsername?: string; chapterKey?: string; isActive?: boolean; label?: string }): void {
   if (!sessionBox) return;
   if (info.botUsername) botUsername = info.botUsername;
 
-  // Only update sessionStates if there's actual session data with a sessionKey
-  if (info.sessionKey && (info.id || info.model || info.dir || info.label || info.isActive !== undefined)) {
-    const key = info.sessionKey;
+  // Only update sessionStates if there's actual session data with a chapterKey
+  if (info.chapterKey && (info.id || info.model || info.dir || info.label || info.isActive !== undefined)) {
+    const key = info.chapterKey;
     const current = sessionStates.get(key) ?? {};
     if (info.id) current.id = info.id;
     if (info.model) current.model = info.model;
@@ -281,8 +281,8 @@ function renderSessionBox(): void {
   screen?.render();
 }
 
-export function removeSession(sessionKey: string): void {
-  sessionStates.delete(sessionKey);
+export function removeSession(chapterKey: string): void {
+  sessionStates.delete(chapterKey);
   renderSessionBox();
 }
 

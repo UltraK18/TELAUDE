@@ -1,5 +1,5 @@
 import { type Context, type NextFunction } from 'grammy';
-import { buildSessionKey } from '../../claude/process-manager.js';
+import { buildChapterKey } from '../../claude/process-manager.js';
 
 const sessionTimestamps = new Map<string, number[]>();
 const MAX_REQUESTS = 30;
@@ -11,7 +11,7 @@ export async function rateLimitMiddleware(ctx: Context, next: NextFunction): Pro
 
   const chatId = ctx.chat?.id ?? userId;
   const threadId = (ctx.message ?? ctx.callbackQuery?.message as any)?.message_thread_id ?? 0;
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
 
   const now = Date.now();
   const timestamps = sessionTimestamps.get(key) ?? [];

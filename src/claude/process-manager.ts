@@ -12,7 +12,7 @@ import { resolveSettings } from '../settings/settings-store.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function buildSessionKey(userId: number, chatId?: number, threadId?: number): string {
+export function buildChapterKey(userId: number, chatId?: number, threadId?: number): string {
   return `${userId}:${chatId ?? userId}:${threadId ?? 0}`;
 }
 
@@ -138,15 +138,15 @@ export function killAllIsolated(): void {
 }
 
 export function getUserProcess(userId: number, chatId?: number, threadId?: number): UserProcess | undefined {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   return processes.get(key);
 }
 
-export function getUserProcessBySessionKey(sessionKey: string): UserProcess | undefined {
-  return processes.get(sessionKey);
+export function getUserProcessBySessionKey(chapterKey: string): UserProcess | undefined {
+  return processes.get(chapterKey);
 }
 
-/** Check if a session_id is already in use by another UP (different sessionKey) */
+/** Check if a session_id is already in use by another UP (different chapterKey) */
 export function isSessionInUse(sessionId: string, excludeSessionKey?: string): boolean {
   for (const [key, up] of processes) {
     if (up.sessionId === sessionId && key !== excludeSessionKey) return true;
@@ -167,7 +167,7 @@ export function createUserProcess(
 ): UserProcess {
   const cid = chatId ?? userId;
   const tid = threadId ?? 0;
-  const key = buildSessionKey(userId, cid, tid);
+  const key = buildChapterKey(userId, cid, tid);
   const up: UserProcess = {
     telegramUserId: userId,
     chatId: cid,
@@ -204,8 +204,8 @@ export interface SpawnOptions {
 }
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
-  const sessionKey = buildSessionKey(up.telegramUserId, up.chatId, up.threadId);
-  const settings = resolveSettings(up.workingDir, sessionKey);
+  const chapterKey = buildChapterKey(up.telegramUserId, up.chatId, up.threadId);
+  const settings = resolveSettings(up.workingDir, chapterKey);
   // Priority: opts.model (scheduled tasks) > up.model (/model command) > settings.model (TUI) > fallback
   const model = opts?.model ?? up.model ?? settings.model ?? 'default';
 
@@ -405,7 +405,7 @@ export function sendMessage(up: UserProcess, text: string): boolean {
 }
 
 export function killProcess(userId: number, chatId?: number, threadId?: number): boolean {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   const up = processes.get(key);
   if (!up?.process) return false;
 
@@ -429,7 +429,7 @@ export function killProcess(userId: number, chatId?: number, threadId?: number):
 }
 
 export function killForReload(userId: number, chatId?: number, threadId?: number, message?: string): boolean {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   const up = processes.get(key);
   if (!up?.process) return false;
 
@@ -455,7 +455,7 @@ export function killForReload(userId: number, chatId?: number, threadId?: number
 
 export function removeUserProcess(userId: number, chatId?: number, threadId?: number): void {
   killProcess(userId, chatId, threadId);
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   processes.delete(key);
 }
 

@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger.js';
-import { buildSessionKey } from '../claude/process-manager.js';
+import { buildChapterKey } from '../claude/process-manager.js';
 
 interface PendingAsk {
   question: string;
@@ -11,7 +11,7 @@ interface PendingAsk {
   timer: ReturnType<typeof setTimeout>;
 }
 
-const pendingAsks = new Map<string, PendingAsk>(); // keyed by sessionKey
+const pendingAsks = new Map<string, PendingAsk>(); // keyed by chapterKey
 
 const ASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -20,7 +20,7 @@ const ASK_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * Only one pending ask per session context at a time.
  */
 export function createAsk(userId: number, question: string, choices?: string[], chatId?: number, threadId?: number): Promise<string> {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   // Cancel existing ask if any
   cancelAsk(userId, chatId, threadId);
 
@@ -39,7 +39,7 @@ export function createAsk(userId: number, question: string, choices?: string[], 
  * Store the message ID of the ask message (for removing keyboard later).
  */
 export function setAskMessageId(userId: number, messageId: number, chatId: number, threadId?: number): void {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   const pending = pendingAsks.get(key);
   if (pending) {
     pending.messageId = messageId;
@@ -51,21 +51,21 @@ export function setAskMessageId(userId: number, messageId: number, chatId: numbe
  * Check if a user has a pending ask in this session context.
  */
 export function hasPendingAsk(userId: number, chatId?: number, threadId?: number): boolean {
-  return pendingAsks.has(buildSessionKey(userId, chatId, threadId));
+  return pendingAsks.has(buildChapterKey(userId, chatId, threadId));
 }
 
 /**
  * Get choices for a pending ask (for callback resolution).
  */
 export function getAskChoices(userId: number, chatId?: number, threadId?: number): string[] | undefined {
-  return pendingAsks.get(buildSessionKey(userId, chatId, threadId))?.choices;
+  return pendingAsks.get(buildChapterKey(userId, chatId, threadId))?.choices;
 }
 
 /**
  * Get messageId and chatId for keyboard removal.
  */
 export function getAskMessageInfo(userId: number, chatId?: number, threadId?: number): { messageId: number; chatId: number } | null {
-  const pending = pendingAsks.get(buildSessionKey(userId, chatId, threadId));
+  const pending = pendingAsks.get(buildChapterKey(userId, chatId, threadId));
   if (!pending?.messageId || !pending?.chatId) return null;
   return { messageId: pending.messageId, chatId: pending.chatId };
 }
@@ -75,7 +75,7 @@ export function getAskMessageInfo(userId: number, chatId?: number, threadId?: nu
  * Returns true if there was a pending ask.
  */
 export function resolveAsk(userId: number, answer: string, chatId?: number, threadId?: number): boolean {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   const pending = pendingAsks.get(key);
   if (!pending) return false;
 
@@ -90,7 +90,7 @@ export function resolveAsk(userId: number, answer: string, chatId?: number, thre
  * Cancel a pending ask (e.g., on process exit).
  */
 export function cancelAsk(userId: number, chatId?: number, threadId?: number): void {
-  const key = buildSessionKey(userId, chatId, threadId);
+  const key = buildChapterKey(userId, chatId, threadId);
   const pending = pendingAsks.get(key);
   if (pending) {
     clearTimeout(pending.timer);
@@ -103,5 +103,5 @@ export function cancelAsk(userId: number, chatId?: number, threadId?: number): v
  * Get the pending question text for display.
  */
 export function getPendingQuestion(userId: number, chatId?: number, threadId?: number): string | null {
-  return pendingAsks.get(buildSessionKey(userId, chatId, threadId))?.question ?? null;
+  return pendingAsks.get(buildChapterKey(userId, chatId, threadId))?.question ?? null;
 }

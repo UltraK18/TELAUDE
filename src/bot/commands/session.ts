@@ -1,7 +1,7 @@
 import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import fs from 'fs';
-import { getUserProcess, killProcess, removeUserProcess, createUserProcess, buildSessionKey, isSessionInUse } from '../../claude/process-manager.js';
+import { getUserProcess, killProcess, removeUserProcess, createUserProcess, buildChapterKey, isSessionInUse } from '../../claude/process-manager.js';
 import { getActiveSession, getRecentSessions, getSessionById, deactivateAllUserSessions, createSession, renameSession } from '../../db/session-repo.js';
 import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
 import { config } from '../../config.js';
@@ -16,11 +16,11 @@ function escapeHtml(s: string): string {
 const sessionsMessages = new Map<string, { messageId: number; chatId: number }>();
 
 export function getSessionsMessage(userId: number, chatId?: number, threadId?: number) {
-  return sessionsMessages.get(buildSessionKey(userId, chatId, threadId));
+  return sessionsMessages.get(buildChapterKey(userId, chatId, threadId));
 }
 
 export function clearSessionsMessage(userId: number, chatId?: number, threadId?: number) {
-  sessionsMessages.delete(buildSessionKey(userId, chatId, threadId));
+  sessionsMessages.delete(buildChapterKey(userId, chatId, threadId));
 }
 
 /** Build bot DB session list text + keyboard. */
@@ -70,7 +70,7 @@ export async function sessionsCommand(ctx: Context): Promise<void> {
   const list = buildSessionList(sessions);
 
   const msg = await ctx.reply(list.text, { parse_mode: 'HTML', reply_markup: list.keyboard });
-  sessionsMessages.set(buildSessionKey(userId, chatId, threadId), { messageId: msg.message_id, chatId: ctx.chat!.id });
+  sessionsMessages.set(buildChapterKey(userId, chatId, threadId), { messageId: msg.message_id, chatId: ctx.chat!.id });
 }
 
 /** /resume — show session list (same as /sessions) */
@@ -83,8 +83,8 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
   const threadId = (ctx.callbackQuery?.message as any)?.message_thread_id ?? (ctx.message as any)?.message_thread_id ?? 0;
 
   // Prevent resuming a session that's already active in another thread
-  const currentKey = buildSessionKey(userId, chatId, threadId);
-  if (isSessionInUse(sessionId, currentKey)) {
+  const currentChapterKey = buildChapterKey(userId, chatId, threadId);
+  if (isSessionInUse(sessionId, currentChapterKey)) {
     await ctx.reply('⚠️ This session is already active in another thread.');
     return;
   }

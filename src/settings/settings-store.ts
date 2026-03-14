@@ -16,7 +16,7 @@ export interface ProjectSettings {
   disabledMcpServers: string[];
 }
 
-/** Session-level settings (per sessionKey = userId:chatId:threadId) */
+/** Session-level settings (per chapterKey = userId:chatId:threadId) */
 export interface SessionSettings {
   model: string | null;
   mode: 'default' | 'minimal';
@@ -27,7 +27,7 @@ export interface TelaudeSettingsV2 {
   version: 2;
   root: RootSettings;
   projects: Record<string, ProjectSettings>;   // key = workingDir
-  sessions: Record<string, SessionSettings>;    // key = sessionKey
+  sessions: Record<string, SessionSettings>;    // key = chapterKey
 }
 
 /** Flat settings view (used by TUI for display) */
@@ -104,13 +104,13 @@ export function getProjectSettings(workingDir: string): ProjectSettings {
 }
 
 /** Get session settings */
-export function getSessionSettings(sessionKey: string): SessionSettings {
+export function getSessionSettings(chapterKey: string): SessionSettings {
   const s = loadSettingsV2();
-  return s.sessions[sessionKey] ?? { ...DEFAULT_SESSION };
+  return s.sessions[chapterKey] ?? { ...DEFAULT_SESSION };
 }
 
 /** Resolve effective settings for a session (project + session) */
-export function resolveSettings(workingDir: string, sessionKey: string): {
+export function resolveSettings(workingDir: string, chapterKey: string): {
   disabledTools: string[];
   disabledMcpServers: string[];
   model: string | null;
@@ -118,7 +118,7 @@ export function resolveSettings(workingDir: string, sessionKey: string): {
 } {
   const s = loadSettingsV2();
   const proj = s.projects[workingDir] ?? DEFAULT_PROJECT;
-  const sess = s.sessions[sessionKey] ?? DEFAULT_SESSION;
+  const sess = s.sessions[chapterKey] ?? DEFAULT_SESSION;
   return {
     disabledTools: [...proj.disabledTools],
     disabledMcpServers: [...proj.disabledMcpServers],
@@ -136,10 +136,10 @@ export function updateProjectSettings(workingDir: string, updates: Partial<Proje
 }
 
 /** Update session settings */
-export function updateSessionSettings(sessionKey: string, updates: Partial<SessionSettings>): void {
+export function updateSessionSettings(chapterKey: string, updates: Partial<SessionSettings>): void {
   const s = loadSettingsV2();
-  const current = s.sessions[sessionKey] ?? { ...DEFAULT_SESSION };
-  s.sessions[sessionKey] = { ...current, ...updates };
+  const current = s.sessions[chapterKey] ?? { ...DEFAULT_SESSION };
+  s.sessions[chapterKey] = { ...current, ...updates };
   saveSettingsV2(s);
 }
 
@@ -171,10 +171,10 @@ export function toggleMcpServer(serverName: string, workingDir: string): boolean
   return idx < 0; // true = now disabled
 }
 
-export function setModel(model: string | null, sessionKey: string): void {
+export function setModel(model: string | null, chapterKey: string): void {
   const s = loadSettingsV2();
-  const sess = s.sessions[sessionKey] ?? { ...DEFAULT_SESSION };
+  const sess = s.sessions[chapterKey] ?? { ...DEFAULT_SESSION };
   sess.model = model;
-  s.sessions[sessionKey] = sess;
+  s.sessions[chapterKey] = sess;
   saveSettingsV2(s);
 }

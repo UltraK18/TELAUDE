@@ -79,8 +79,8 @@ function getMcpServers(): string[] {
 
 import { MODEL_OPTIONS } from '../bot/commands/model.js';
 
-function getWorkingDirForSession(sessionKey: string): string {
-  return getSessionDir(sessionKey) ?? sessionKey;
+function getWorkingDirForSession(chapterKey: string): string {
+  return getSessionDir(chapterKey) ?? chapterKey;
 }
 
 interface MenuItem {
@@ -185,9 +185,9 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
   return lines;
 }
 
-export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: string): void {
-  if (!sessionKey) return; // No session selected — nothing to edit
-  const editKey = sessionKey;
+export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: string): void {
+  if (!chapterKey) return; // No session selected — nothing to edit
+  const editKey = chapterKey;
   setSettingsOpen(true);
 
   // Load session-specific settings from V2 store

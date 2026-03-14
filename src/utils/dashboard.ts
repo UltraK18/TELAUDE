@@ -78,13 +78,27 @@ export function initDashboard(): void {
     padding: { top: 0, bottom: 0, left: 1, right: 1 },
   });
 
-  // Session info box (top-left)
-  sessionBox = blessed.box({
+  // Log area (left 33%)
+  logBox = blessed.log({
     parent: screen,
     top: 8,
     left: 0,
-    width: '50%',
-    height: '50%-4',
+    width: '33%',
+    height: '100%-11',
+    label: ' Logs ',
+    tags: true,
+    border: { type: 'line' },
+    style: { border: { fg: 208 }, label: { fg: 'green' } },
+    padding: { left: 1, right: 1 },
+  });
+
+  // Session info box (center 34%)
+  sessionBox = blessed.box({
+    parent: screen,
+    top: 8,
+    left: '33%',
+    width: '34%',
+    height: '100%-11',
     label: ' Sessions ',
     content: '{gray-fg}No active session{/gray-fg}',
     tags: true,
@@ -93,12 +107,12 @@ export function initDashboard(): void {
     padding: { left: 1 },
   });
 
-  // Schedule info box (right full height)
+  // Schedule info box (right 33%)
   scheduleBox = blessed.box({
     parent: screen,
     top: 8,
-    left: '50%',
-    width: '50%',
+    left: '67%',
+    width: '33%',
     height: '100%-11',
     label: ' Schedule ',
     content: '{gray-fg}No scheduled jobs{/gray-fg}',
@@ -106,20 +120,6 @@ export function initDashboard(): void {
     border: { type: 'line' },
     style: { border: { fg: 208 }, label: { fg: 208 } },
     padding: { left: 1 },
-  });
-
-  // Log area (bottom-left)
-  logBox = blessed.log({
-    parent: screen,
-    top: '50%+4',
-    left: 0,
-    width: '50%',
-    height: '50%-7',
-    label: ' Logs ',
-    tags: true,
-    border: { type: 'line' },
-    style: { border: { fg: 208 }, label: { fg: 'green' } },
-    padding: { left: 1, right: 1 },
   });
 
   // Status bar (bottom)

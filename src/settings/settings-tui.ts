@@ -156,12 +156,14 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
     lines.push({ text: '', itemIdx: null });
   };
 
-  pushHeader('MCP Servers');
-  for (let i = 0; i < telaudeToolStart; i++) {
-    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+  if (telaudeToolStart > 0) {
+    pushHeader('MCP Servers');
+    for (let i = 0; i < telaudeToolStart; i++) {
+      lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+    }
+    pushSpacer();
   }
 
-  pushSpacer();
   pushHeader('Telaude Tools');
   for (let i = telaudeToolStart; i < toolStart; i++) {
     lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
@@ -295,10 +297,10 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, sessionKey?: 
     if (!active) return;
     if (key.name === 'escape' || key.name === 'q') {
       active = false;
+      screen.removeListener('keypress', onKey);
       overlay.detach();
+      setSettingsOpen(false);
       screen.render();
-      // Delay flag reset so the same keypress event doesn't trigger dashboard enter
-      setTimeout(() => setSettingsOpen(false), 50);
       return;
     }
     if (key.name === 'up' || key.name === 'k') {

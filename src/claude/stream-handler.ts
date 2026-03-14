@@ -5,6 +5,7 @@ import { formatToolWithInput, formatToolStart } from './tool-formatter.js';
 import { isToolHidden } from '../api/tool-display-store.js';
 import { updateCost } from './cost-tracker.js';
 import { createSession } from '../db/session-repo.js';
+import { getTopicName } from '../db/topic-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { logger, notify, notifyError } from '../utils/logger.js';
 import { updateSession } from '../utils/dashboard.js';
@@ -93,7 +94,8 @@ export class StreamHandler {
           createSession(this.userId, sessionId, this.up.workingDir, this.up.model, this.up.chatId, this.up.threadId);
           logger.info({ userId: this.userId, sessionId }, 'Session captured');
           const sessionKey = buildSessionKey(this.userId, this.up.chatId, this.up.threadId);
-          const label = this.up.threadId > 0 ? `T:${this.up.threadId}` : 'DM';
+          const topicName = this.up.threadId > 0 ? getTopicName(this.up.chatId, this.up.threadId) : null;
+          const label = this.up.threadId > 0 ? (topicName ?? `T:${this.up.threadId}`) : 'DM';
           updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir, sessionKey, label });
         }
       });

@@ -131,6 +131,17 @@ function migrate(db: Database): void {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_received_files_user ON received_files(telegram_user_id, chat_id, thread_id)`);
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_received_files_unique ON received_files(file_unique_id, chat_id) WHERE file_unique_id IS NOT NULL`);
+
+  // Topic name cache — maps chat_id + thread_id → topic name
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS topic_names (
+      chat_id INTEGER NOT NULL,
+      thread_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (chat_id, thread_id)
+    )
+  `);
 }
 
 export function closeDb(): void {

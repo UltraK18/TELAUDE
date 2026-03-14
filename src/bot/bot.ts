@@ -12,6 +12,7 @@ import { reactionHandler } from './handlers/reaction.js';
 import { askInterceptor } from './middleware/ask-interceptor.js';
 import { staleUpdateFilter } from './middleware/stale-update-filter.js';
 import { generalTopicFilter } from './middleware/general-topic-filter.js';
+import { topicNameCache } from './middleware/topic-name-cache.js';
 import { logger } from '../utils/logger.js';
 
 export function createBot(): Bot {
@@ -26,6 +27,7 @@ export function createBot(): Bot {
   // Middleware chain
   bot.use(staleUpdateFilter);
   bot.use(generalTopicFilter);
+  bot.use(topicNameCache);
   bot.use(loggingMiddleware);
   bot.use(rateLimitMiddleware);
   bot.use(authMiddleware);

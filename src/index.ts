@@ -5,6 +5,7 @@ const _env = process.env;
 if (_env['NODE_ENV'] !== 'development') _env['NODE_ENV'] = 'production';
 process.title = 'TELAUDE';
 import { needsSetup, runSetup } from './setup.js';
+import { getTopicName as getTopicLabel } from './db/topic-repo.js';
 
 // MCP server mode: when invoked as `TELAUDE.exe --mcp`, run MCP server only
 if (process.argv.includes('--mcp')) {
@@ -367,14 +368,16 @@ async function main(): Promise<void> {
           const activeSessions = sessions.filter(s => s.is_active);
           for (const s of activeSessions) {
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const label = s.thread_id > 0 ? `T:${s.thread_id}` : 'DM';
+            const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
+            const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
             updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label });
           }
           // If no active sessions, show most recent one
           if (activeSessions.length === 0 && sessions.length > 0) {
             const s = sessions[0];
             const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const label = s.thread_id > 0 ? `T:${s.thread_id}` : 'DM';
+            const topicName = s.thread_id > 0 ? getTopicLabel(s.chat_id, s.thread_id) : null;
+            const label = s.thread_id > 0 ? (topicName ?? `T:${s.thread_id}`) : 'DM';
             updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, sessionKey: sk, label, isActive: false });
           }
         }

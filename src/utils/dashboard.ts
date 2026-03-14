@@ -225,26 +225,37 @@ export function updateSession(info: { id?: string; model?: string; dir?: string;
   if (!sessionBox) return;
   if (info.botUsername) botUsername = info.botUsername;
 
-  const key = info.sessionKey ?? '_default';
-  const current = sessionStates.get(key) ?? {};
-  if (info.id) current.id = info.id;
-  if (info.model) current.model = info.model;
-  if (info.dir) current.dir = info.dir;
-  if (info.isActive !== undefined) current.isActive = info.isActive;
-  if (info.label) current.label = info.label;
-  sessionStates.set(key, current);
+  // Only update sessionStates if there's actual session data (not just botUsername)
+  if (info.id || info.model || info.dir || info.sessionKey || info.label || info.isActive !== undefined) {
+    const key = info.sessionKey ?? '_default';
+    const current = sessionStates.get(key) ?? {};
+    if (info.id) current.id = info.id;
+    if (info.model) current.model = info.model;
+    if (info.dir) current.dir = info.dir;
+    if (info.isActive !== undefined) current.isActive = info.isActive;
+    if (info.label) current.label = info.label;
+    sessionStates.set(key, current);
+  }
 
+  renderSessionBox();
+}
+
+function renderSessionBox(): void {
+  if (!sessionBox) return;
   const lines: string[] = [];
   if (botUsername) lines.push(`Bot: {cyan-fg}@${botUsername}{/cyan-fg}`);
   lines.push('');
 
-  if (sessionStates.size === 0 || (sessionStates.size === 1 && !sessionStates.get('_default')?.id)) {
+  // Filter out _default if it has no session id (ghost entry)
+  const realSessions = [...sessionStates.entries()].filter(([k, s]) => k !== '_default' || s.id);
+
+  if (realSessions.length === 0) {
     lines.push('{gray-fg}No active session{/gray-fg}');
   } else {
-    for (const [k, s] of sessionStates) {
+    for (const [k, s] of realSessions) {
       const active = s.isActive !== false;
       const icon = active ? '{green-fg}●{/green-fg}' : '{gray-fg}○{/gray-fg}';
-      const label = s.label ?? (k === '_default' ? 'DM' : k);
+      const label = s.label ?? k;
       lines.push(`${icon} {bold}${label}{/bold}`);
       if (s.id) lines.push(`  sess:${s.id.slice(0, 8)}.. ${s.model ?? ''}`);
       if (s.dir) lines.push(`  {gray-fg}${s.dir}{/gray-fg}`);
@@ -257,8 +268,7 @@ export function updateSession(info: { id?: string; model?: string; dir?: string;
 
 export function removeSession(sessionKey: string): void {
   sessionStates.delete(sessionKey);
-  // Re-render session box
-  updateSession({});
+  renderSessionBox();
 }
 
 interface ScheduleJob {

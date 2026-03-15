@@ -9,6 +9,7 @@ import { buildChapterKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
 import { saveChapter } from '../../db/chapter-repo.js';
+import { escHtml } from '../../utils/html.js';
 
 const PAGE_SIZE = 10;
 
@@ -75,7 +76,7 @@ export function buildBrowserKeyboard(dirPath: string, page = 0): { text: string;
     keyboard.row();
   }
 
-  const text = `\uD83D\uDCC2 <code>${resolved}</code>\n\nSelect a folder or tap "Select" to use this directory.`;
+  const text = `\uD83D\uDCC2 <code>${escHtml(resolved)}</code>\n\nSelect a folder or tap "Select" to use this directory.`;
   return { text, keyboard };
 }
 
@@ -110,7 +111,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
     cancelPokeTimer(userId, chatId, threadId);
     saveChapter(userId, chatId ?? userId, threadId ?? 0, result.resolved, up.model);
 
-    await ctx.reply(`Directory changed: <code>${result.resolved}</code>`, {
+    await ctx.reply(`Directory changed: <code>${escHtml(result.resolved)}</code>`, {
       parse_mode: 'HTML',
     });
     return;
@@ -153,7 +154,7 @@ export async function pwdCommand(ctx: Context): Promise<void> {
   const up = getUserProcess(userId, chatId, threadId);
   const dir = up?.workingDir ?? config.paths.defaultWorkingDir;
 
-  await ctx.reply(`Current directory: <code>${dir}</code>`, { parse_mode: 'HTML' });
+  await ctx.reply(`Current directory: <code>${escHtml(dir ?? '')}</code>`, { parse_mode: 'HTML' });
 }
 
 export async function projectsCommand(ctx: Context): Promise<void> {
@@ -163,6 +164,6 @@ export async function projectsCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  const list = roots.map(r => `\u2022 <code>${r}</code>`).join('\n');
+  const list = roots.map(r => `\u2022 <code>${escHtml(r)}</code>`).join('\n');
   await ctx.reply(`<b>Allowed project paths:</b>\n${list}`, { parse_mode: 'HTML' });
 }

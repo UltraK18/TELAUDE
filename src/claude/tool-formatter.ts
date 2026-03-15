@@ -1,4 +1,5 @@
 import { getToolCustomIcon } from '../api/tool-display-store.js';
+import { escHtml } from '../utils/html.js';
 
 // tg-emoji wrapper for premium animated emoji
 function tge(emojiId: string, fallback: string): string {
@@ -92,10 +93,6 @@ function getToolSummary(toolName: string, params: Record<string, unknown>): stri
     default:
       return null;
   }
-}
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function truncatePath(filePath: string | undefined): string {

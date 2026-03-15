@@ -2,6 +2,7 @@ import { type Context } from 'grammy';
 import { getUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { readConversationHistory } from '../../utils/cli-sessions.js';
+import { escHtml } from '../../utils/html.js';
 
 const MAX_USER_LEN = 150;
 const MAX_ASST_LEN = 300;
@@ -12,10 +13,6 @@ function truncate(text: string, max: number): string {
   const oneLine = text.replace(/\n+/g, ' ').trim();
   if (oneLine.length <= max) return oneLine;
   return oneLine.slice(0, max) + '…';
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export async function historyCommand(ctx: Context): Promise<void> {
@@ -48,11 +45,11 @@ export async function historyCommand(ctx: Context): Promise<void> {
       const t = turns[i];
       lines.push('');
       lines.push(`<b>👤 User</b>`);
-      lines.push(escapeHtml(truncate(t.user, MAX_USER_LEN)));
+      lines.push(escHtml(truncate(t.user, MAX_USER_LEN)));
       lines.push(`<b>🤖 Claude</b>`);
       const asstText = t.assistant === '(waiting…)'
         ? '<i>(waiting…)</i>'
-        : escapeHtml(truncate(t.assistant, MAX_ASST_LEN));
+        : escHtml(truncate(t.assistant, MAX_ASST_LEN));
       lines.push(asstText);
     }
     text = lines.join('\n');

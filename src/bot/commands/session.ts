@@ -7,10 +7,7 @@ import { writeCustomTitle, readCustomTitle } from '../../utils/cli-sessions.js';
 import { config } from '../../config.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
+import { escHtml } from '../../utils/html.js';
 
 /** Track /resume list message per session context (independent of UserProcess) */
 const sessionsMessages = new Map<string, { messageId: number; chatId: number }>();
@@ -35,8 +32,8 @@ export function buildSessionList(
     const shortId = s.session_id.slice(0, 8);
     // session_name (Telaude DB) takes priority, fallback to customTitle (JSONL)
     const displayName = s.session_name || readCustomTitle(s.session_id, s.session_root) || null;
-    const nameStr = displayName ? ` <b>${escapeHtml(displayName)}</b>` : '';
-    lines.push(`${active}${nameStr} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
+    const nameStr = displayName ? ` <b>${escHtml(displayName)}</b>` : '';
+    lines.push(`${active}${nameStr} <code>${shortId}...</code> ${escHtml(s.model)} | $${s.total_cost_usd.toFixed(4)}`);
     const btnLabel = displayName
       ? `${active} ${displayName}`
       : `${active} ${shortId}... (${s.model})`;
@@ -152,7 +149,7 @@ export async function renameCommand(ctx: Context): Promise<void> {
   writeCustomTitle(session.session_id, name, session.session_root);
 
   if (name) {
-    await ctx.reply(`Session renamed to: <b>${escapeHtml(name)}</b>`, { parse_mode: 'HTML' });
+    await ctx.reply(`Session renamed to: <b>${escHtml(name)}</b>`, { parse_mode: 'HTML' });
   } else {
     await ctx.reply('Session name cleared.');
   }

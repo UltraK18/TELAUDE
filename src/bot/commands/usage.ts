@@ -1,5 +1,6 @@
 import { type Context } from 'grammy';
 import { getRecentSessions } from '../../db/session-repo.js';
+import { escHtml } from '../../utils/html.js';
 
 export async function usageCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -30,7 +31,7 @@ export async function usageCommand(ctx: Context): Promise<void> {
     totalTurns += s.total_turns;
 
     if (s.total_cost_usd > 0) {
-      const name = s.session_name ?? s.session_id.slice(0, 8);
+      const name = escHtml(s.session_name ?? s.session_id.slice(0, 8));
       const cost = s.total_cost_usd.toFixed(4);
       const tokens = formatTokens(s.total_input_tokens + s.total_output_tokens);
       lines.push(`\u2022 <code>${name}</code> $${cost} (${tokens})`);

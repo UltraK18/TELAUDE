@@ -1,9 +1,6 @@
 import fs from 'fs';
-
-function escHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 import { type Context, InlineKeyboard } from 'grammy';
+import { escHtml } from '../../utils/html.js';
 import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
 import { deleteSession, deactivateAllUserSessions, getRecentSessions } from '../../db/session-repo.js';
@@ -72,7 +69,7 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     // Replace browser with status message
     let statusMsgId: number | undefined;
     try {
-      const edited = await ctx.editMessageText(`\u23F3 Switching to <code>${result.resolved}</code>...`, { parse_mode: 'HTML' });
+      const edited = await ctx.editMessageText(`\u23F3 Switching to <code>${escHtml(result.resolved)}</code>...`, { parse_mode: 'HTML' });
       if (typeof edited !== 'boolean') statusMsgId = edited.message_id;
     } catch { /* ignore */ }
 

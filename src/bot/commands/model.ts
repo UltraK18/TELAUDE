@@ -3,6 +3,7 @@ import { getUserProcess, killProcess, buildChapterKey } from '../../claude/proce
 import { config } from '../../config.js';
 import { getActiveSession, updateSessionModel } from '../../db/session-repo.js';
 import { updateChapterSettings } from '../../settings/settings-store.js';
+import { escHtml } from '../../utils/html.js';
 
 export const MODEL_OPTIONS = [
   { label: 'Default', value: 'default', row: 0 },
@@ -17,7 +18,7 @@ export function applyModel(userId: number, chatId: number | undefined, threadId:
   const up = getUserProcess(userId, chatId, threadId);
   if (up?.isProcessing) {
     up.model = modelName;
-    return `Model will change to <b>${modelName}</b> after current task finishes.`;
+    return `Model will change to <b>${escHtml(modelName)}</b> after current task finishes.`;
   }
 
   killProcess(userId, chatId, threadId);
@@ -32,7 +33,7 @@ export function applyModel(userId: number, chatId: number | undefined, threadId:
   const chapterKey = buildChapterKey(userId, chatId, threadId);
   updateChapterSettings(chapterKey, { model: modelName });
 
-  return `Model changed: <b>${modelName}</b>\nApplied from next message.`;
+  return `Model changed: <b>${escHtml(modelName)}</b>\nApplied from next message.`;
 }
 
 export function buildModelKeyboard(currentModel: string): InlineKeyboard {
@@ -61,7 +62,7 @@ export async function modelCommand(ctx: Context): Promise<void> {
     const current = getUserProcess(userId, chatId, threadId)?.model ?? config.claude.defaultModel;
     const keyboard = buildModelKeyboard(current);
     await ctx.reply(
-      `Current model: <b>${current}</b>\nOr type: <code>/model model-name</code>`,
+      `Current model: <b>${escHtml(current)}</b>\nOr type: <code>/model model-name</code>`,
       { parse_mode: 'HTML', reply_markup: keyboard },
     );
     return;

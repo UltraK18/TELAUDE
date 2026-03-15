@@ -2,6 +2,7 @@ import { type Context } from 'grammy';
 import { InlineKeyboard } from 'grammy';
 import { getAllJobs } from '../../scheduler/cron-store.js';
 import { getNextRun } from '../../scheduler/scheduler.js';
+import { escHtml } from '../../utils/html.js';
 
 export async function scheduleCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -23,9 +24,9 @@ export async function scheduleCommand(ctx: Context): Promise<void> {
     const nextStr = next ? formatTime(next) : (job.once && job.runAt ? formatTime(new Date(job.runAt)) : '\u2014');
     const schedLabel = job.once ? '1\uD68C' : (job.schedule ?? '\u2014');
 
-    lines.push(`${status} <b>${escapeHtml(job.name)}</b>`);
+    lines.push(`${status} <b>${escHtml(job.name)}</b>`);
     lines.push(`  ${schedLabel} \u2192 next: ${nextStr}`);
-    lines.push(`  dir: <code>${escapeHtml(job.workingDir)}</code>`);
+    lines.push(`  dir: <code>${escHtml(job.workingDir)}</code>`);
     lines.push('');
 
     // Toggle pause/resume button
@@ -49,6 +50,3 @@ function formatTime(d: Date): string {
   return `${h}:${m}`;
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}

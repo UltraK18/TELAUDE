@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 import { getAllProcesses, getUserProcess } from '../../claude/process-manager.js';
 import { getActiveSession } from '../../db/session-repo.js';
 import { getCost } from '../../claude/cost-tracker.js';
+import { escHtml } from '../../utils/html.js';
 import packageJson from '../../../package.json';
 
 function getGitInfo(): { branch: string; commit: string } {
@@ -47,8 +48,8 @@ export async function statsCommand(ctx: Context): Promise<void> {
 
     sessionBlock =
       `<b>Session</b>\n` +
-      `ID: <code>${sessionId.slice(0, 8)}...</code> | ${model} | ${processing}\n` +
-      `Dir: <code>${dir}</code>\n` +
+      `ID: <code>${sessionId.slice(0, 8)}...</code> | ${escHtml(model)} | ${processing}\n` +
+      `Dir: <code>${escHtml(dir)}</code>\n` +
       `Tokens: ${formatTokens(input)} in / ${formatTokens(output)} out\n` +
       `Cost: $${totalCost.toFixed(4)} | ${turns} turns`;
   } else {

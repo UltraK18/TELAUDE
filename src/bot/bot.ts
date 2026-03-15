@@ -95,7 +95,7 @@ export function createBot(): Bot {
     { command: 'help', description: 'Command list' },
     { command: 'mode', description: 'Session mode (default/minimal)' },
     { command: 'schedule', description: 'View scheduled jobs' },
-    { command: 'usage', description: 'Token usage stats' },
+    { command: 'context', description: 'Context window usage' },
   ];
   if (process.env['NODE_ENV'] === 'development') {
     commands.push(

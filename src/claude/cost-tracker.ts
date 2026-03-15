@@ -8,6 +8,8 @@ export interface CostInfo {
   numTurns: number;
   inputTokens: number;
   outputTokens: number;
+  contextWindow: number;
+  model: string;
 }
 
 const sessionCosts = new Map<string, CostInfo>();
@@ -18,14 +20,26 @@ export function updateCost(
   totalCostUsd: number,
   numTurns: number,
   usage?: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number },
+  modelUsage?: Record<string, { contextWindow?: number; inputTokens?: number; outputTokens?: number; cacheReadInputTokens?: number; cacheCreationInputTokens?: number }>,
 ): void {
   const prev = sessionCosts.get(sessionId);
-  // input_tokens = new input only; add cache tokens for total context size
-  const turnInput = (usage?.input_tokens ?? 0)
+  // Context window usage = latest turn's total (not cumulative)
+  // input_tokens + cache_read + cache_creation = full context sent to API this turn
+  const inputTokens = (usage?.input_tokens ?? 0)
     + (usage?.cache_read_input_tokens ?? 0)
     + (usage?.cache_creation_input_tokens ?? 0);
-  const inputTokens = (prev?.inputTokens ?? 0) + turnInput;
-  const outputTokens = (prev?.outputTokens ?? 0) + (usage?.output_tokens ?? 0);
+  const outputTokens = usage?.output_tokens ?? 0;
+
+  // Extract contextWindow and model from modelUsage
+  let contextWindow = prev?.contextWindow ?? 0;
+  let model = prev?.model ?? '';
+  if (modelUsage) {
+    const modelKey = Object.keys(modelUsage)[0];
+    if (modelKey) {
+      model = modelKey;
+      contextWindow = modelUsage[modelKey]?.contextWindow ?? contextWindow;
+    }
+  }
 
   const info: CostInfo = {
     sessionId,
@@ -34,6 +48,8 @@ export function updateCost(
     numTurns,
     inputTokens,
     outputTokens,
+    contextWindow,
+    model,
   };
 
   sessionCosts.set(sessionId, info);

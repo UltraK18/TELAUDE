@@ -3,8 +3,11 @@ import path from 'path';
 import os from 'os';
 import { type Context } from 'grammy';
 import { getUserProcess, killProcess } from '../../claude/process-manager.js';
+import { stopInternalApi } from '../../api/internal-server.js';
+import { logger } from '../../utils/logger.js';
 
 const RELOAD_FLAG = path.join(os.homedir(), '.telaude', 'data', '.reload-flag');
+const RELOAD_DELAY_MS = 500; // Wait for grammY to ACK the update before exit
 
 export async function stopCommand(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -51,8 +54,14 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   fs.writeFileSync(RELOAD_FLAG, flagContent);
 
   await ctx.reply('Restarting bot process...');
-  // Use SIGTERM to trigger graceful shutdown (releases port, stops bot, etc.)
-  setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500);
+  logger.info('Reload: waiting for ACK delay');
+  // Wait for grammY to ACK the update, then release port and exit
+  setTimeout(async () => {
+    logger.info('Reload: stopping internal API');
+    await stopInternalApi();
+    logger.info('Reload: internal API stopped, exiting');
+    process.exit(0);
+  }, RELOAD_DELAY_MS);
 }
 
 export async function reloadSilentCommand(ctx: Context): Promise<void> {
@@ -68,7 +77,13 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   fs.writeFileSync(RELOAD_FLAG, [userId, '__silent__', chatId ?? userId, threadId, ''].join('\n'));
 
   await ctx.reply('Restarting bot process...');
-  setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500);
+  logger.info('Reload silent: waiting for ACK delay');
+  setTimeout(async () => {
+    logger.info('Reload silent: stopping internal API');
+    await stopInternalApi();
+    logger.info('Reload silent: internal API stopped, exiting');
+    process.exit(0);
+  }, RELOAD_DELAY_MS);
 }
 
 export function consumeReloadFlag(): { userId: number; sessionId?: string; chatId?: number; threadId?: number; message?: string } | null {

@@ -378,6 +378,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     cwd: up.workingDir,
     stdio: ['pipe', 'pipe', 'pipe'],
     env,
+    windowsHide: true,
   });
 
   const parser = new StreamParser();

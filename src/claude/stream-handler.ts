@@ -282,6 +282,7 @@ export class StreamHandler {
               costVal,
               event.num_turns ?? 0,
               event.usage,
+              event.modelUsage,
             );
           }
 

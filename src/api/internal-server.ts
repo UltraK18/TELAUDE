@@ -90,7 +90,7 @@ export async function startInternalApi(token: string): Promise<void> {
   });
 
   return new Promise<void>((resolve, reject) => {
-    server!.listen(19816, '127.0.0.1', () => {
+    server!.listen({ port: 19816, host: '127.0.0.1', exclusive: true }, () => {
       logger.info({ port: 19816 }, 'Internal API server started');
       resolve();
     });
@@ -101,10 +101,20 @@ export async function startInternalApi(token: string): Promise<void> {
 export async function stopInternalApi(): Promise<void> {
   if (!server) return;
   return new Promise<void>((resolve) => {
+    // Close all active connections immediately
+    server!.closeAllConnections?.();
     server!.close(() => {
       logger.info('Internal API server stopped');
       server = null;
       resolve();
     });
+    // Force resolve after 3s if close hangs
+    setTimeout(() => {
+      if (server) {
+        logger.warn('Internal API server close timed out, forcing');
+        server = null;
+        resolve();
+      }
+    }, 3000);
   });
 }

@@ -288,8 +288,8 @@ async function main(): Promise<void> {
   // Start all cron jobs
   startScheduler();
 
-  // Topic health checker: verify threads still exist (5-min interval)
-  const { startTopicHealthChecker, stopTopicHealthChecker } = await import('./scheduler/topic-health-checker.js');
+  // Topic health checker: disabled — Telegram API can't reliably detect deleted topics
+  // const { startTopicHealthChecker, stopTopicHealthChecker } = await import('./scheduler/topic-health-checker.js');
 
   // Check for missed jobs during downtime
   import('./scheduler/missed-jobs.js').then(({ detectMissedJobs, formatMissedJobsMessage }) => {
@@ -337,17 +337,19 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info({ signal }, 'Shutting down...');
 
+    // Release port first — critical for dev reload
+    await stopInternalApi();
+
     clearInterval(cleanupInterval);
     stopScheduler();
     stopAllPokes();
-    stopTopicHealthChecker();
+    // stopTopicHealthChecker();
 
     for (const [, up] of getAllProcesses()) {
       killProcess(up.telegramUserId, up.chatId, up.threadId);
     }
     killAllIsolated();
 
-    await stopInternalApi();
     await bot.stop();
     closeDb();
 
@@ -451,8 +453,8 @@ async function main(): Promise<void> {
 
       logger.info({ username: botInfo.username }, 'Telaude bot is running!');
 
-      // Start topic health checker (verify threads still exist)
-      startTopicHealthChecker(bot.api);
+      // Topic health checker disabled — Telegram API can't reliably detect deleted topics
+      // startTopicHealthChecker(bot.api);
 
       // Notify authorized users that bot is online
       import('./db/auth-repo.js').then(async ({ getAuthorizedUserIds }) => {

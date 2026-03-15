@@ -67,14 +67,21 @@ export function needsSetup(): boolean {
 }
 
 export async function runSetup(): Promise<void> {
+  // Clear screen and move cursor to top-left
+  process.stdout.write('\x1b[2J\x1b[H');
   print('');
-  print('\u2554' + '\u2550'.repeat(38) + '\u2557');
-  print('\u2551       Telaude - Setup               \u2551');
-  print('\u255A' + '\u2550'.repeat(38) + '\u255D');
+  print('  ████████╗███████╗██╗      █████╗ ██╗   ██╗██████╗ ███████╗');
+  print('  ╚══██╔══╝██╔════╝██║     ██╔══██╗██║   ██║██╔══██╗██╔════╝');
+  print('     ██║   █████╗  ██║     ███████║██║   ██║██║  ██║█████╗');
+  print('     ██║   ██╔══╝  ██║     ██╔══██║██║   ██║██║  ██║██╔══╝');
+  print('     ██║   ███████╗███████╗██║  ██║╚██████╔╝██████╔╝███████╗');
+  print('     ╚═╝   ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚══════╝');
+  print('');
+  print('                         - SETUP -');
   print('');
 
   // Step 1: Claude CLI auth
-  print('[1/3] Checking Claude CLI auth...');
+  print('\x1b[31m[1/3]\x1b[0m Checking Claude CLI auth...');
 
   const cliVersion = getClaudeVersion();
   if (!cliVersion) {
@@ -116,15 +123,15 @@ export async function runSetup(): Promise<void> {
   }
 
   const sub = auth.subscriptionType ? ` (${auth.subscriptionType})` : '';
-  print(`\u2713 Authenticated: ${auth.email}${sub}`);
+  print(`\x1b[31m\u2713\x1b[0m Authenticated: ${auth.email}${sub}`);
   print('');
 
   const rl = createRl();
 
   try {
     // Step 2: Telegram bot token
-    print('[2/3] Telegram Bot Token');
-    print('Enter the token from @BotFather.');
+    print('\x1b[31m[2/3]\x1b[0m Telegram Bot Token');
+    print('Enter the token from \x1b[36m@BotFather\x1b[0m');
     let botToken = '';
     while (!botToken) {
       botToken = await ask(rl, '> ');
@@ -185,11 +192,11 @@ export async function runSetup(): Promise<void> {
       const db = new Database(dbPath);
       db.exec('UPDATE auth_tokens SET is_authorized = 0');
       db.close();
-      print('\u2713 Auth reset (new credentials).');
+      print('\x1b[31m\u2713\x1b[0m \x1b[90mAuth reset (new credentials).\x1b[0m');
     }
 
-    print('\u2713 .env file created (encrypted).');
-    print('Starting bot...');
+    print('\x1b[31m\u2713\x1b[0m \x1b[90m.env file created (encrypted).\x1b[0m');
+    print('\x1b[31m[3/3]\x1b[0m Starting bot...');
     print('');
   } catch (err) {
     rl.close();

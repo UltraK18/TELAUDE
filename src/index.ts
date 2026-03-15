@@ -431,12 +431,14 @@ async function main(): Promise<void> {
       if (isFirstRun) {
         // Don't show TUI yet — wait for Telegram auth
         console.log('');
-        console.log(`  Bot online: @${botInfo.username}`);
-        console.log('');
-        console.log(`  Auth code: ${cfg.auth.password}`);
+        console.log(`\x1b[31m\u2713\x1b[0m Bot online: \x1b[36m@${botInfo.username}\x1b[0m`);
         console.log('');
         console.log('  Send this code to your bot on Telegram to authenticate.');
-        console.log('  Waiting for Telegram authentication...');
+        console.log('');
+        console.log('  \u2193\u2193\u2193 \x1b[31mauth code\x1b[0m \u2193\u2193\u2193');
+        console.log(`  ${cfg.auth.password}`);
+        console.log('');
+        console.log('  \x1b[90mWaiting for Telegram authentication...\x1b[0m');
         console.log('');
         setOnFirstAuth(startTUI);
       } else {

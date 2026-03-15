@@ -6,6 +6,7 @@ if (_env['NODE_ENV'] !== 'development') _env['NODE_ENV'] = 'production';
 process.title = 'TELAUDE';
 import { needsSetup, runSetup } from './setup.js';
 import { buildChapterLabel } from './db/topic-repo.js';
+import { escHtml } from './utils/html.js';
 
 // MCP server mode: when invoked as `TELAUDE.exe --mcp`, run MCP server only
 if (process.argv.includes('--mcp')) {
@@ -199,7 +200,7 @@ async function main(): Promise<void> {
 
         // Send report if Claude produced any text response (and nothing_to_report wasn't called)
         if (up!.lastResponseText) {
-          bot.api.sendMessage(job.chatId, `🔔 ${up!.lastResponseText}`, job.threadId > 0 ? { message_thread_id: job.threadId } : undefined)
+          bot.api.sendMessage(job.chatId, `<tg-emoji emoji-id="5458603043203327669">🔔</tg-emoji> ${escHtml(up!.lastResponseText)}`, { parse_mode: 'HTML', ...(job.threadId > 0 ? { message_thread_id: job.threadId } : undefined) })
             .catch(err => {
               logger.error({ err, userId: job.userId }, 'Failed to send cron report');
               notifyError(`Cron report failed: ${err?.description ?? err?.message ?? 'unknown'}`);

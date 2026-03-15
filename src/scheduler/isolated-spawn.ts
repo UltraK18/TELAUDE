@@ -224,7 +224,7 @@ export async function spawnIsolatedJob(
       // Send report if there's a response
       if (up.lastResponseText) {
         const threadOpts = job.threadId > 0 ? { message_thread_id: job.threadId } : undefined;
-        api.sendMessage(job.chatId, `🔔 [${job.name}] ${up.lastResponseText}`, threadOpts)
+        api.sendMessage(job.chatId, `🔕 Isolated job [${job.name}] ${up.lastResponseText}`, threadOpts)
           .catch(err => {
             logger.error({ err, jobId: job.id }, 'Failed to send isolated job report');
             notifyError(`Isolated report failed: ${err?.description ?? err?.message ?? 'unknown'}`);

@@ -18,6 +18,7 @@ import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText, MEDIA_LABELS } from './media-types.js';
 import { config } from '../../config.js';
 import { MediaGroupCollector } from './media-group-collector.js';
+import { escHtml } from '../../utils/html.js';
 import { ForwardCollector } from './forward-collector.js';
 import { setUserChat } from '../../api/route-handlers.js';
 import { logger, notify, notifyError } from '../../utils/logger.js';
@@ -309,8 +310,8 @@ function drainScheduledQueue(userId: number, api: Api): void {
 
     // Send report if Claude produced any text response (and nothing_to_report wasn't called)
     if (up.lastResponseText) {
-      const prefix = task.mode === 'poke' ? '' : '🔔 ';
-      api.sendMessage(task.chatId, `${prefix}${up.lastResponseText}`)
+      const prefix = task.mode === 'poke' ? '' : '<tg-emoji emoji-id="5458603043203327669">🔔</tg-emoji> ';
+      api.sendMessage(task.chatId, `${prefix}${escHtml(up.lastResponseText)}`, { parse_mode: 'HTML' })
         .catch(err => {
           logger.error({ err, userId }, 'Failed to send scheduled report');
           notifyError(`Scheduled report failed: ${err?.description ?? err?.message ?? 'unknown'}`);

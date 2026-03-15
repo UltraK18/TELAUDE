@@ -18,7 +18,7 @@ function encodeCwd(cwd: string): string {
   // C:\path\to\dir → C--path-to-dir (Claude Code's project folder naming)
   return cwd
     .replace(/^([A-Za-z]):[\\/]/, '$1--')  // D:\ → D--
-    .replace(/[\\/\s]/g, '-');              // \ and spaces → -
+    .replace(/[\\/\s._]/g, '-');            // \ / spaces . _ → -
 }
 
 /**

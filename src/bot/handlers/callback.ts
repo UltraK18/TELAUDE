@@ -14,6 +14,7 @@ import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { applyModel } from '../commands/model.js';
+import { saveChapter } from '../../db/chapter-repo.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
@@ -83,6 +84,7 @@ export async function callbackHandler(ctx: Context): Promise<void> {
       up.sessionId = null;
     }
     deactivateAllUserSessions(userId, chatId, threadId);
+    saveChapter(userId, chatId ?? userId, threadId ?? 0, result.resolved, up.model);
 
     logger.info({ userId, newDir: result.resolved, sessionCleared: up?.sessionId === null }, 'cd_select: directory changed');
 

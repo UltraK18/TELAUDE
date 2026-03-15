@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   const { initDb, closeDb } = await import('./db/database.js');
   const { createBot } = await import('./bot/bot.js');
   const { cleanupIdleProcesses, getAllProcesses, killProcess, killAllIsolated, getUserProcess: getUP, createUserProcess: restoreUP } = await import('./claude/process-manager.js');
+  const { getUserChapters } = await import('./db/chapter-repo.js');
   const { logger, notify, notifyError, setDashboardOutput } = await import('./utils/logger.js');
   const { initDashboard, dashboardLog, dashboardError, updateSession, updateSchedule, setStatusCheckers, stopDashboard } = await import('./utils/dashboard.js');
 
@@ -378,28 +379,36 @@ async function main(): Promise<void> {
         initDashboard();
         setDashboardOutput(dashboardLog, dashboardError);
 
-        // Restore active sessions from DB — both UP (in-memory) and TUI display
+        // Restore chapters and active sessions from DB
         updateSession({ botUsername: botInfo.username });
         for (const uid of getAuthIds()) {
+          // 1. Restore chapters (workingDir persists even without active session)
+          const chapters = getUserChapters(uid);
+          for (const ch of chapters) {
+            const sk = `${uid}:${ch.chat_id}:${ch.thread_id}`;
+            const label = buildChapterLabel(ch.chat_id, ch.thread_id, uid);
+            if (!getUP(uid, ch.chat_id, ch.thread_id)) {
+              const up = restoreUP(uid, ch.chapter_dir, ch.model ?? 'default', ch.chat_id, ch.thread_id);
+              // Try to find active session for this chapter
+              const activeSession = getActive(uid, ch.chat_id, ch.thread_id);
+              if (activeSession) {
+                up.sessionId = activeSession.session_id;
+              }
+              updateSession({ id: activeSession?.session_id, model: ch.model, dir: ch.chapter_dir, chapterKey: sk, label });
+            }
+          }
+
+          // 2. Also restore from active sessions (for chapters not in chapters table yet)
           const sessions = getRecent(uid, 20);
           const activeSessions = sessions.filter(s => s.is_active);
           for (const s of activeSessions) {
-            const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const label = buildChapterLabel(s.chat_id, s.thread_id, uid);
-            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label });
-
-            // Restore UP from DB so commands (/pwd, /cd, /resume etc.) work immediately
             if (!getUP(uid, s.chat_id, s.thread_id)) {
-              const up = restoreUP(uid, s.working_dir, s.model ?? 'default', s.chat_id, s.thread_id);
+              const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
+              const label = buildChapterLabel(s.chat_id, s.thread_id, uid);
+              const up = restoreUP(uid, s.session_root, s.model ?? 'default', s.chat_id, s.thread_id);
               up.sessionId = s.session_id;
+              updateSession({ id: s.session_id, model: s.model, dir: s.session_root, chapterKey: sk, label });
             }
-          }
-          // If no active sessions, show most recent one (display only, no UP)
-          if (activeSessions.length === 0 && sessions.length > 0) {
-            const s = sessions[0];
-            const sk = `${uid}:${s.chat_id}:${s.thread_id}`;
-            const label = buildChapterLabel(s.chat_id, s.thread_id, uid);
-            updateSession({ id: s.session_id, model: s.model, dir: s.working_dir, chapterKey: sk, label, isActive: false });
           }
         }
         refreshScheduleDashboard();
@@ -480,7 +489,7 @@ async function main(): Promise<void> {
             if (!up) {
               up = cup(
                 flag.userId,
-                dbSession?.working_dir ?? appConfig.paths.defaultWorkingDir ?? process.cwd(),
+                dbSession?.session_root ?? appConfig.paths.defaultWorkingDir ?? process.cwd(),
                 dbSession?.model ?? appConfig.claude.defaultModel,
                 chatId,
                 threadId,

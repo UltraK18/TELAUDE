@@ -288,7 +288,7 @@ export function registerAllRoutes(api: Api): void {
     if (file.telegram_user_id !== userId || file.chat_id !== chatId) {
       throw new Error('Access denied: file belongs to another chat');
     }
-    return { file: { id: file.id, type: file.file_type, name: file.file_name, path: file.file_path, size: file.file_size, workingDir: file.working_dir } };
+    return { file: { id: file.id, type: file.file_type, name: file.file_name, path: file.file_path, size: file.file_size, sessionRoot: file.session_root } };
   });
 
   // --- System info ---

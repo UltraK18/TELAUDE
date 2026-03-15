@@ -15,13 +15,5 @@ export function registerIsolatedTools(server: McpServer): void {
     }
   );
 
-  server.tool(
-    'schedule_nothing_to_report',
-    'Report that a scheduled job found nothing to report. The response will be suppressed.',
-    {},
-    async () => {
-      await mcpPost('/mcp/turn-delete', { type: 'cron' });
-      return { content: [{ type: 'text', text: 'Nothing to report — response suppressed' }] };
-    }
-  );
+  // schedule_nothing_to_report is registered in scheduling.ts (shared by main and isolated jobs)
 }

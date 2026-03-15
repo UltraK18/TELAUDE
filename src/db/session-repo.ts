@@ -4,7 +4,7 @@ export interface SessionRecord {
   id: number;
   telegram_user_id: number;
   session_id: string;
-  working_dir: string;
+  session_root: string;
   model: string;
   created_at: string;
   last_active_at: string;
@@ -21,7 +21,7 @@ export interface SessionRecord {
 export function createSession(
   userId: number,
   sessionId: string,
-  workingDir: string,
+  sessionRoot: string,
   model: string,
   chatId?: number,
   threadId?: number,
@@ -42,8 +42,8 @@ export function createSession(
     return;
   }
   getDb()
-    .prepare('INSERT INTO sessions (telegram_user_id, session_id, working_dir, model, chat_id, thread_id) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(userId, sessionId, workingDir, model, cid, tid);
+    .prepare('INSERT INTO sessions (telegram_user_id, session_id, session_root, model, chat_id, thread_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, sessionId, sessionRoot, model, cid, tid);
 }
 
 export function getActiveSession(userId: number, chatId?: number, threadId?: number): SessionRecord | undefined {
@@ -57,13 +57,13 @@ export function getActiveSession(userId: number, chatId?: number, threadId?: num
     .get(userId) as SessionRecord | undefined;
 }
 
-export function getRecentSessions(userId: number, limit = 10, workingDir?: string, chatId?: number, threadId?: number): SessionRecord[] {
+export function getRecentSessions(userId: number, limit = 10, sessionRoot?: string, chatId?: number, threadId?: number): SessionRecord[] {
   let sql = 'SELECT * FROM sessions WHERE telegram_user_id = ?';
   const params: (string | number)[] = [userId];
 
-  if (workingDir) {
-    sql += ' AND working_dir = ?';
-    params.push(workingDir);
+  if (sessionRoot) {
+    sql += ' AND session_root = ?';
+    params.push(sessionRoot);
   }
 
   if (chatId != null && threadId != null) {
@@ -101,10 +101,10 @@ export function updateSessionCost(sessionId: string, costUsd: number, turns: num
     .run(costUsd, turns, inputTokens ?? 0, outputTokens ?? 0, sessionId);
 }
 
-export function updateSessionWorkingDir(sessionId: string, workingDir: string): void {
+export function updateSessionRoot(sessionId: string, sessionRoot: string): void {
   getDb()
-    .prepare('UPDATE sessions SET working_dir = ? WHERE session_id = ?')
-    .run(workingDir, sessionId);
+    .prepare('UPDATE sessions SET session_root = ? WHERE session_id = ?')
+    .run(sessionRoot, sessionId);
 }
 
 export function deactivateSession(sessionId: string): void {

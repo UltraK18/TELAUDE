@@ -266,6 +266,11 @@ function showDeleteConfirm(scr: blessed.Widgets.Screen, chapterKey: string, labe
         deactivateAllUserSessions(userId, chatId, threadId);
       });
 
+      // Remove chapter record from DB
+      import('../db/chapter-repo.js').then(({ deleteChapter }) => {
+        deleteChapter(userId, chatId, threadId);
+      });
+
       // Remove scheduled jobs for this chapter
       Promise.all([
         import('../scheduler/cron-store.js'),

@@ -339,6 +339,9 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
       'SendMessageTool',   // swarm/agent team feature, not applicable
       'TeammateTool',      // swarm/agent team feature, not applicable
       'TeamDelete',        // swarm/agent team feature, not applicable
+      'CronCreate',        // use Telaude schedule_add instead
+      'CronDelete',        // use Telaude schedule_remove instead
+      'CronList',          // use Telaude schedule_list instead
     ];
     // Add user-disabled tools from settings
     if (settings.disabledTools.length > 0) {
@@ -361,8 +364,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     up.workingDir = fallback;
   }
 
-  logger.debug({ userId: up.telegramUserId, args, cwd: up.workingDir }, 'Spawning Claude CLI');
-  logger.info({ userId: up.telegramUserId, cwd: up.workingDir, model, upModel: up.model, settingsModel: settings.model }, 'Spawning Claude CLI');
+  logger.info({ userId: up.telegramUserId, args, cwd: up.workingDir, model, upModel: up.model, settingsModel: settings.model, disabledMcps: settings.disabledMcpServers }, 'Spawning Claude CLI');
 
   // Clean env: remove vars that cause nesting errors or OAuth contamination
   const env = { ...process.env };

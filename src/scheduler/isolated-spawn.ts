@@ -20,6 +20,7 @@ const ALLOWED_TOOLS: Record<SecurityLevel, string[]> = {
 const ALWAYS_DISALLOWED = [
   'AskUserQuestion', 'EnterPlanMode', 'ExitPlanMode', 'EnterWorktree', 'ExitWorktree',
   'SendMessageTool', 'TeammateTool', 'TeamDelete',
+  'Agent',           // sub-agents would break isolation (reads CLAUDE.md, etc.)
 ];
 
 /** Telaude MCP tools available in isolated mode */

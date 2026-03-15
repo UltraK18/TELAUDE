@@ -32,7 +32,7 @@ export async function historyCommand(ctx: Context): Promise<void> {
     return;
   }
 
-  const workingDir = up?.workingDir ?? dbSession?.working_dir ?? process.cwd();
+  const workingDir = up?.workingDir ?? dbSession?.session_root ?? process.cwd();
   const allTurns = readConversationHistory(sessionId, workingDir, 5);
   if (allTurns.length === 0) {
     await ctx.reply('No conversation history found.', { parse_mode: 'HTML' });

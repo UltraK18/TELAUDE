@@ -36,7 +36,7 @@ export async function statsCommand(ctx: Context): Promise<void> {
   if (up?.sessionId || dbSession) {
     const sessionId = up?.sessionId ?? dbSession?.session_id ?? '(none)';
     const model = up?.model ?? dbSession?.model ?? 'unknown';
-    const dir = up?.workingDir ?? dbSession?.working_dir ?? 'unknown';
+    const dir = up?.workingDir ?? dbSession?.session_root ?? 'unknown';
     const processing = up?.isProcessing ? 'processing' : 'idle';
 
     const cost = getCost(sessionId);

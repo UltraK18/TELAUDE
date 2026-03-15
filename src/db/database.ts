@@ -142,6 +142,33 @@ function migrate(db: Database): void {
       PRIMARY KEY (chat_id, thread_id)
     )
   `);
+
+  // Chapters table — persists chapter_dir across restarts
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chapters (
+      user_id INTEGER NOT NULL,
+      chat_id INTEGER NOT NULL,
+      thread_id INTEGER NOT NULL,
+      chapter_dir TEXT NOT NULL,
+      model TEXT DEFAULT 'default',
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, chat_id, thread_id)
+    )
+  `);
+
+  // Migrate sessions.working_dir → session_root (rename column)
+  const sessCols = db.query('PRAGMA table_info(sessions)').all() as { name: string }[];
+  const sessColNames = new Set(sessCols.map(c => c.name));
+  if (sessColNames.has('working_dir') && !sessColNames.has('session_root')) {
+    db.exec('ALTER TABLE sessions RENAME COLUMN working_dir TO session_root');
+  }
+
+  // Migrate received_files.working_dir → session_root
+  const rfCols2 = db.query('PRAGMA table_info(received_files)').all() as { name: string }[];
+  const rfColNames2 = new Set(rfCols2.map(c => c.name));
+  if (rfColNames2.has('working_dir') && !rfColNames2.has('session_root')) {
+    db.exec('ALTER TABLE received_files RENAME COLUMN working_dir TO session_root');
+  }
 }
 
 export function closeDb(): void {

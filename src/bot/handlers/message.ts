@@ -13,6 +13,7 @@ import {
 } from '../../claude/process-manager.js';
 import { StreamHandler } from '../../claude/stream-handler.js';
 import { getActiveSession, deactivateSession } from '../../db/session-repo.js';
+import { getChapter } from '../../db/chapter-repo.js';
 import { downloadTelegramFile } from '../../utils/file-downloader.js';
 import { extractMediaInfo, buildMediaText, MEDIA_LABELS } from './media-types.js';
 import { config } from '../../config.js';
@@ -59,17 +60,22 @@ export function enqueueScheduledTask(task: ScheduledTask): void {
 function getOrCreateUp(userId: number, chatId?: number, threadId?: number): UserProcess {
   let up = getUserProcess(userId, chatId, threadId);
   if (!up) {
-    const lastSession = getActiveSession(userId, chatId ?? userId, threadId ?? 0);
+    const cid = chatId ?? userId;
+    const tid = threadId ?? 0;
+    const chapter = getChapter(userId, cid, tid);
+    const lastSession = getActiveSession(userId, cid, tid);
     const candidates = [
-      lastSession?.working_dir,
+      chapter?.chapter_dir,        // Chapter dir takes priority (persists across /new)
+      lastSession?.session_root,   // Fallback to last session's root
       config.paths.defaultWorkingDir,
       process.cwd(),
     ];
     const workingDir = candidates.find(d => d && fs.existsSync(d)) ?? process.cwd();
+    const model = chapter?.model ?? lastSession?.model ?? config.claude.defaultModel;
     up = createUserProcess(
       userId,
       workingDir,
-      lastSession?.model ?? config.claude.defaultModel,
+      model,
       chatId,
       threadId,
     );

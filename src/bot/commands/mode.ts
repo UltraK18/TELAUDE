@@ -21,7 +21,7 @@ export async function modeCommand(ctx: Context): Promise<void> {
       return;
     }
     const candidates = [
-      lastSession.working_dir,
+      lastSession.session_root,
       config.paths.defaultWorkingDir,
       process.cwd(),
     ];

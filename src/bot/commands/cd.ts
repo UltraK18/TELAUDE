@@ -8,6 +8,7 @@ import { updateSession } from '../../utils/dashboard.js';
 import { buildChapterKey } from '../../claude/process-manager.js';
 import { config } from '../../config.js';
 import { cancelPokeTimer } from '../../scheduler/poke.js';
+import { saveChapter } from '../../db/chapter-repo.js';
 
 const PAGE_SIZE = 10;
 
@@ -107,6 +108,7 @@ export async function cdCommand(ctx: Context): Promise<void> {
     }
     deactivateAllUserSessions(userId, chatId, threadId);
     cancelPokeTimer(userId, chatId, threadId);
+    saveChapter(userId, chatId ?? userId, threadId ?? 0, result.resolved, up.model);
 
     await ctx.reply(`Directory changed: <code>${result.resolved}</code>`, {
       parse_mode: 'HTML',

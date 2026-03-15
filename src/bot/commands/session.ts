@@ -34,7 +34,7 @@ export function buildSessionList(
     const active = s.is_active ? '\uD83D\uDFE2' : '\u26AA';
     const shortId = s.session_id.slice(0, 8);
     // session_name (Telaude DB) takes priority, fallback to customTitle (JSONL)
-    const displayName = s.session_name || readCustomTitle(s.session_id, s.working_dir) || null;
+    const displayName = s.session_name || readCustomTitle(s.session_id, s.session_root) || null;
     const nameStr = displayName ? ` <b>${escapeHtml(displayName)}</b>` : '';
     lines.push(`${active}${nameStr} <code>${shortId}...</code> ${s.model} | $${s.total_cost_usd.toFixed(4)}`);
     const btnLabel = displayName
@@ -96,15 +96,15 @@ export async function resumeSession(userId: number, sessionId: string, ctx: Cont
   if (!up) {
     up = createUserProcess(
       userId,
-      session?.working_dir ?? config.paths.defaultWorkingDir ?? process.cwd(),
+      session?.session_root ?? config.paths.defaultWorkingDir ?? process.cwd(),
       session?.model ?? config.claude.defaultModel,
       chatId,
       threadId,
     );
   }
   up.sessionId = sessionId;
-  // Validate DB working_dir — fallback if path no longer exists (e.g. folder renamed)
-  const dbDir = session?.working_dir;
+  // Validate DB session_root — fallback if path no longer exists (e.g. folder renamed)
+  const dbDir = session?.session_root;
   if (dbDir && fs.existsSync(dbDir)) {
     up.workingDir = dbDir;
   } else if (dbDir) {
@@ -149,7 +149,7 @@ export async function renameCommand(ctx: Context): Promise<void> {
   renameSession(session.session_id, name);
 
   // Write custom-title record to JSONL (same as Claude Code native /rename)
-  writeCustomTitle(session.session_id, name, session.working_dir);
+  writeCustomTitle(session.session_id, name, session.session_root);
 
   if (name) {
     await ctx.reply(`Session renamed to: <b>${escapeHtml(name)}</b>`, { parse_mode: 'HTML' });

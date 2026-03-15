@@ -12,7 +12,7 @@ export interface ReceivedFile {
   file_path: string;
   file_size: number | null;
   created_at: string;
-  working_dir: string;
+  session_root: string;
 }
 
 export function addReceivedFile(params: {
@@ -25,17 +25,17 @@ export function addReceivedFile(params: {
   fileName?: string;
   filePath: string;
   fileSize?: number;
-  workingDir: string;
+  sessionRoot: string;
 }): number {
   const result = getDb()
     .prepare(`INSERT OR IGNORE INTO received_files
-      (telegram_user_id, chat_id, thread_id, file_unique_id, file_id, file_type, file_name, file_path, file_size, working_dir)
+      (telegram_user_id, chat_id, thread_id, file_unique_id, file_id, file_type, file_name, file_path, file_size, session_root)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       params.userId, params.chatId, params.threadId,
       params.fileUniqueId ?? null, params.fileId, params.fileType,
       params.fileName ?? null, params.filePath, params.fileSize ?? null,
-      params.workingDir,
+      params.sessionRoot,
     );
   // If INSERT OR IGNORE skipped (duplicate), return existing id
   if (result.changes === 0 && params.fileUniqueId) {

@@ -31,6 +31,9 @@ export interface CompletedJob {
   history: CronJobHistory[];
 }
 
+export type JobMode = 'main' | 'isolated';
+export type SecurityLevel = 'low' | 'medium' | 'high';
+
 export interface CronJob {
   id: string;
   name: string;
@@ -47,6 +50,14 @@ export interface CronJob {
   runAt?: string;
   createdAt: string;
   history: CronJobHistory[];
+  /** 'main' = runs in current session, 'isolated' = independent process */
+  mode: JobMode;
+  /** Tool access level for isolated jobs */
+  toolSecurity: SecurityLevel;
+  /** Prompt injection protection level for isolated jobs */
+  promptSecurity: SecurityLevel;
+  /** Additional MCP servers allowed in isolated mode (on top of Telaude's own) */
+  allowedMcps: string[];
 }
 
 const STORE_PATH = path.join(os.homedir(), '.telaude', 'data', 'cron-jobs.json');
@@ -97,6 +108,10 @@ export function addJob(params: {
   sessionId?: string | null;
   once?: boolean;
   runAt?: string;
+  mode?: JobMode;
+  toolSecurity?: SecurityLevel;
+  promptSecurity?: SecurityLevel;
+  allowedMcps?: string[];
 }): CronJob {
   const jobs = readStore();
   const job: CronJob = {
@@ -115,6 +130,10 @@ export function addJob(params: {
     runAt: params.runAt,
     createdAt: new Date().toISOString(),
     history: [],
+    mode: params.mode ?? 'main',
+    toolSecurity: params.toolSecurity ?? 'medium',
+    promptSecurity: params.promptSecurity ?? 'medium',
+    allowedMcps: params.allowedMcps ?? [],
   };
   jobs.push(job);
   writeStore(jobs);

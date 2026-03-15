@@ -320,6 +320,10 @@ export function registerAllRoutes(api: Api): void {
       sessionId: up?.sessionId,
       once: body.once ?? false,
       runAt: body.runAt,
+      mode: body.mode,
+      toolSecurity: body.toolSecurity,
+      promptSecurity: body.promptSecurity,
+      allowedMcps: body.allowedMcps,
     });
     scheduleJob(job.id);
     return { jobId: job.id };
@@ -455,14 +459,21 @@ export function registerAllRoutes(api: Api): void {
 
   // --- Isolated job ---
 
-  registerRoute('/mcp/isolated-escalate', async (body) => {
+  registerRoute('/mcp/escalate-to-main', async (body) => {
     const userId = body._userId as number;
-    const { chatId, threadId } = getSessionTarget(userId, body);
+    const { chatId, threadId, up } = getSessionTarget(userId, body);
     const message = body.message as string;
     if (!message) throw new Error('Missing "message" field');
 
-    // Send escalation message to the user's chat
+    // 1. Send Telegram notification
     await api.sendMessage(chatId, `🚨 ${message}`, threadOpts(threadId));
+
+    // 2. Inject into main session stdin (if active)
+    if (up?.process && up.process.stdin && !up.process.stdin.destroyed) {
+      const stdinMsg = `[Escalation from isolated job] ${message}`;
+      up.process.stdin.write(stdinMsg + '\n');
+    }
+
     return { ok: true };
   });
 

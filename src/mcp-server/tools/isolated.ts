@@ -4,37 +4,24 @@ import { mcpPost } from '../http-client.js';
 
 export function registerIsolatedTools(server: McpServer): void {
   server.tool(
-    'isolated_completed',
-    'Mark an isolated/scheduled job as completed with a summary. The summary will be sent to the user.',
+    'escalate_to_main',
+    'Escalate an urgent issue to the main session. Sends a Telegram notification AND injects the message into the main session stdin so the main Claude can act on it.',
     {
-      summary: z.string().describe('Brief summary of what the job accomplished'),
+      message: z.string().describe('Message to escalate — will be sent to Telegram and injected into main session'),
     },
-    async ({ summary }) => {
-      // This is handled by the turn-delete mechanism — just signal completion
-      await mcpPost('/mcp/turn-delete', { type: 'cron' });
-      return { content: [{ type: 'text', text: `Isolated job completed. Summary: ${summary}` }] };
+    async ({ message }) => {
+      await mcpPost('/mcp/escalate-to-main', { message });
+      return { content: [{ type: 'text', text: `Escalated to main session: ${message}` }] };
     }
   );
 
   server.tool(
-    'isolated_nothing_to_report',
-    'Signal that an isolated job found nothing to report. The turn will be cleaned up.',
+    'schedule_nothing_to_report',
+    'Report that a scheduled job found nothing to report. The response will be suppressed.',
     {},
     async () => {
       await mcpPost('/mcp/turn-delete', { type: 'cron' });
-      return { content: [{ type: 'text', text: 'Isolated job: nothing to report — turn will be cleaned up' }] };
-    }
-  );
-
-  server.tool(
-    'isolated_escalate',
-    'Escalate an urgent issue from an isolated job to the user via Telegram notification.',
-    {
-      message: z.string().describe('Urgent message to send to the user'),
-    },
-    async ({ message }) => {
-      await mcpPost('/mcp/isolated-escalate', { message });
-      return { content: [{ type: 'text', text: `Escalation sent: ${message}` }] };
+      return { content: [{ type: 'text', text: 'Nothing to report — response suppressed' }] };
     }
   );
 }

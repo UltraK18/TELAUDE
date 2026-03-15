@@ -95,6 +95,17 @@ async function main(): Promise<void> {
       if (job.threadId == null) job.threadId = target?.threadId ?? 0;
     }
 
+    // Isolated jobs run in independent process — no queueing, no main session interference
+    if (job.mode === 'isolated') {
+      const { spawnIsolatedJob } = await import('./scheduler/isolated-spawn.js');
+      const startTime = Date.now();
+      await spawnIsolatedJob(job, bot.api, () => {
+        const duration = Date.now() - startTime;
+        return { durationMs: duration };
+      });
+      return null;
+    }
+
     // Check if user is active — if so, queue the task
     if (isUserActive(job.userId)) {
       enqueueScheduledTask({
@@ -111,7 +122,7 @@ async function main(): Promise<void> {
       return null;
     }
 
-    // Spawn in silent mode
+    // Main job: spawn in silent mode
     let up = getUserProcess(job.userId, job.chatId, job.threadId);
     if (!up) {
       up = createUserProcess(job.userId, job.workingDir, job.model ?? 'default', job.chatId, job.threadId);

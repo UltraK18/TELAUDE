@@ -26,16 +26,20 @@ function nextRunStr(schedule?: string, runAt?: string): string {
 export function registerSchedulingTools(server: McpServer): void {
   server.tool(
     'schedule_add',
-    'Schedule a job. Uses system timezone. Jobs run in silent mode — output is auto-sent to user on exit. Call schedule_nothing_to_report() if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
+    'Schedule a job. Uses system timezone.\n- mode "main": runs in current conversation session (default). Output auto-sent to user.\n- mode "isolated": runs in independent process with full context isolation. Write a complete, self-contained message — no conversation history is available. Output auto-sent to user.\nCall schedule_nothing_to_report() if nothing to report. Do NOT use ask/send_file during scheduled jobs.',
     {
       name: z.string().describe('Job name'),
       schedule: z.string().optional().describe('Cron expression for recurring jobs (e.g. "0 9 * * *")'),
       runAt: z.string().optional().describe('One-time job. Prefer relative: "1m","5m","1h","30s" (no need to check current time). Also accepts local datetime. Auto-deleted after execution.'),
-      message: z.string().describe('Prompt sent to Claude when triggered'),
+      message: z.string().describe('Prompt sent to Claude when triggered. For isolated mode, include ALL necessary context — the job has no conversation history.'),
       workingDir: z.string().optional().describe('Working directory'),
       model: z.string().optional().describe('Model override'),
+      mode: z.enum(['main', 'isolated']).optional().describe('main = current session, isolated = independent process (default: main)'),
+      tool_security: z.enum(['low', 'medium', 'high']).optional().describe('Tool access level for isolated jobs. low=all tools+MCPs, medium=basic tools+limited MCP, high=no Bash+limited MCP (default: medium)'),
+      prompt_security: z.enum(['low', 'medium', 'high']).optional().describe('Prompt injection protection. low=raw message, medium=tagged isolation, high=strict guard (default: medium)'),
+      allowed_mcps: z.array(z.string()).optional().describe('Additional MCP server names to allow in isolated mode (Telaude MCP tools are always available)'),
     },
-    async ({ name, schedule, runAt, message, workingDir, model }) => {
+    async ({ name, schedule, runAt, message, workingDir, model, mode, tool_security, prompt_security, allowed_mcps }) => {
       if (!schedule && !runAt) {
         return { content: [{ type: 'text', text: 'Error: provide either schedule (recurring) or runAt (one-time)' }] };
       }
@@ -52,9 +56,10 @@ export function registerSchedulingTools(server: McpServer): void {
       }
       const once = !!resolvedRunAt;
       const finalSchedule = schedule ?? 'once';
-      const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt: resolvedRunAt, message, workingDir, model, once });
+      const result = await mcpPost('/mcp/cron/add', { name, schedule: finalSchedule, runAt: resolvedRunAt, message, workingDir, model, once, mode, toolSecurity: tool_security, promptSecurity: prompt_security, allowedMcps: allowed_mcps });
       const next = nextRunStr(schedule, resolvedRunAt);
-      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name}) — ${once ? 'once' : `recurring: ${schedule}`}\nNow: ${nowStr()} | Next: ${next}` }] };
+      const modeLabel = (mode ?? 'main') === 'isolated' ? ' [isolated]' : '';
+      return { content: [{ type: 'text', text: `Job created: ${result.jobId} (${name})${modeLabel} — ${once ? 'once' : `recurring: ${schedule}`}\nNow: ${nowStr()} | Next: ${next}` }] };
     }
   );
 

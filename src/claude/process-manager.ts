@@ -201,6 +201,14 @@ export interface SpawnOptions {
   resumeSessionId?: string;
   mode?: 'user' | 'heartbeat' | 'cron' | 'poke';
   model?: string;
+  isolated?: {
+    systemPrompt: string;
+    allowedTools: string[];
+    disallowedTools: string[];
+    mcpTools: string[];
+    /** External MCP server names to include (from ~/.claude.json) */
+    mcpServers?: string[];
+  };
 }
 
 export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { process: ChildProcess; parser: StreamParser } {
@@ -221,7 +229,12 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     args.push('--model', model);
   }
 
-  if (opts?.resumeSessionId) {
+  if (opts?.isolated) {
+    // Isolated mode: no CLAUDE.md, custom system prompt, no session persistence
+    args.push('--setting-sources', '');
+    args.push('--system-prompt', opts.isolated.systemPrompt);
+    args.push('--no-session-persistence');
+  } else if (opts?.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);
   }
 
@@ -251,9 +264,11 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     TELAUDE_THREAD_ID: String(up.threadId),
   };
 
-  // Build MCP config: telaude (inline) + global servers from ~/.claude.json & ~/.claude/settings.json
+  // Build MCP config
   const mcpServers: Record<string, unknown> = {};
-  if (!settings.disabledMcpServers.includes('telaude')) {
+
+  // Telaude MCP is always included (unless disabled in normal mode)
+  if (opts?.isolated || !settings.disabledMcpServers.includes('telaude')) {
     mcpServers.telaude = {
       command: mcpCommand,
       args: mcpArgs,
@@ -261,33 +276,40 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
     };
   }
 
-  // Load global MCP servers and include only non-disabled ones
+  // Load global MCP servers
   const globalSources = [
     path.join(os.homedir(), '.claude.json'),
     path.join(os.homedir(), '.claude', 'settings.json'),
   ];
+  const allowedMcpSet = opts?.isolated ? new Set(opts.isolated.mcpServers ?? []) : null;
+
   for (const src of globalSources) {
     try {
       if (fs.existsSync(src)) {
         const raw = JSON.parse(fs.readFileSync(src, 'utf-8'));
         if (raw.mcpServers) {
           for (const [name, cfg] of Object.entries(raw.mcpServers)) {
-            if (name !== 'telaude' && !settings.disabledMcpServers.includes(name)) {
-              // Inject TELAUDE_* env vars so external MCP servers can use the internal API
-              const serverCfg = cfg as Record<string, unknown>;
-              const existingEnv = (serverCfg.env as Record<string, string>) ?? {};
-              const merged: Record<string, unknown> = { ...serverCfg, env: { ...telaudeEnv, ...existingEnv } };
-              // Override Serena's --project to match current working directory
-              if (name === 'serena' && Array.isArray(merged.args)) {
-                const args = [...(merged.args as string[])];
-                const projIdx = args.indexOf('--project');
-                if (projIdx !== -1 && projIdx + 1 < args.length) {
-                  args[projIdx + 1] = up.workingDir;
-                  merged.args = args;
-                }
+            if (name === 'telaude') continue;
+
+            // Isolated mode: only include explicitly allowed MCPs
+            if (allowedMcpSet && !allowedMcpSet.has(name)) continue;
+            // Normal mode: exclude disabled MCPs
+            if (!allowedMcpSet && settings.disabledMcpServers.includes(name)) continue;
+
+            // Inject TELAUDE_* env vars so external MCP servers can use the internal API
+            const serverCfg = cfg as Record<string, unknown>;
+            const existingEnv = (serverCfg.env as Record<string, string>) ?? {};
+            const merged: Record<string, unknown> = { ...serverCfg, env: { ...telaudeEnv, ...existingEnv } };
+            // Override Serena's --project to match current working directory
+            if (name === 'serena' && Array.isArray(merged.args)) {
+              const mergedArgs = [...(merged.args as string[])];
+              const projIdx = mergedArgs.indexOf('--project');
+              if (projIdx !== -1 && projIdx + 1 < mergedArgs.length) {
+                mergedArgs[projIdx + 1] = up.workingDir;
+                merged.args = mergedArgs;
               }
-              mcpServers[name] = merged;
             }
+            mcpServers[name] = merged;
           }
         }
       }
@@ -300,21 +322,30 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   args.push('--strict-mcp-config');
   args.push('--mcp-config', JSON.stringify(mcpConfig));
 
-  // Disable interactive/UI tools that don't work in -p mode
-  const disallowed = [
-    'AskUserQuestion',   // auto-completes with empty answer, use MCP ask instead
-    'EnterPlanMode',     // plan mode UI, no user interaction possible
-    'ExitPlanMode',      // plan approval UI, no user interaction possible
-    'EnterWorktree',     // worktree UI management, unmanaged in headless mode
-    'SendMessageTool',   // swarm/agent team feature, not applicable
-    'TeammateTool',      // swarm/agent team feature, not applicable
-    'TeamDelete',        // swarm/agent team feature, not applicable
-  ];
-  // Add user-disabled tools from settings
-  if (settings.disabledTools.length > 0) {
-    disallowed.push(...settings.disabledTools);
+  // Disable tools
+  if (opts?.isolated) {
+    // Isolated mode: whitelist approach with --tools + --disallowedTools for non-whitelisted
+    if (opts.isolated.allowedTools.length > 0) {
+      args.push('--tools', opts.isolated.allowedTools.join(','));
+    }
+    args.push('--disallowedTools', ...opts.isolated.disallowedTools);
+  } else {
+    // Normal mode: disable interactive/UI tools that don't work in -p mode
+    const disallowed = [
+      'AskUserQuestion',   // auto-completes with empty answer, use MCP ask instead
+      'EnterPlanMode',     // plan mode UI, no user interaction possible
+      'ExitPlanMode',      // plan approval UI, no user interaction possible
+      'EnterWorktree',     // worktree UI management, unmanaged in headless mode
+      'SendMessageTool',   // swarm/agent team feature, not applicable
+      'TeammateTool',      // swarm/agent team feature, not applicable
+      'TeamDelete',        // swarm/agent team feature, not applicable
+    ];
+    // Add user-disabled tools from settings
+    if (settings.disabledTools.length > 0) {
+      disallowed.push(...settings.disabledTools);
+    }
+    args.push('--disallowedTools', ...disallowed);
   }
-  args.push('--disallowedTools', ...disallowed);
 
   args.push('-p');
 

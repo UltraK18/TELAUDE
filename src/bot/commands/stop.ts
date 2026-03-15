@@ -51,7 +51,8 @@ export async function reloadCommand(ctx: Context): Promise<void> {
   fs.writeFileSync(RELOAD_FLAG, flagContent);
 
   await ctx.reply('Restarting bot process...');
-  setTimeout(() => process.exit(0), 500);
+  // Use SIGTERM to trigger graceful shutdown (releases port, stops bot, etc.)
+  setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500);
 }
 
 export async function reloadSilentCommand(ctx: Context): Promise<void> {
@@ -67,7 +68,7 @@ export async function reloadSilentCommand(ctx: Context): Promise<void> {
   fs.writeFileSync(RELOAD_FLAG, [userId, '__silent__', chatId ?? userId, threadId, ''].join('\n'));
 
   await ctx.reply('Restarting bot process...');
-  setTimeout(() => process.exit(0), 500);
+  setTimeout(() => process.kill(process.pid, 'SIGTERM'), 500);
 }
 
 export function consumeReloadFlag(): { userId: number; sessionId?: string; chatId?: number; threadId?: number; message?: string } | null {

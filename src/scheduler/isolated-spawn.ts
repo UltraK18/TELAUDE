@@ -176,6 +176,20 @@ export async function spawnIsolatedJob(
   const wrappedMessage = wrapMessage(job.message, job.promptSecurity);
   const allowedTools = ALLOWED_TOOLS[job.toolSecurity];
 
+  logger.info({
+    jobId: job.id,
+    jobName: job.name,
+    mode: 'isolated',
+    toolSecurity: job.toolSecurity,
+    promptSecurity: job.promptSecurity,
+    allowedTools,
+    allowedMcps: job.allowedMcps,
+    workingDir: job.workingDir,
+    isolateDir,
+    model: job.model ?? 'default',
+    messagePreview: job.message.slice(0, 100),
+  }, 'Isolated job spawning');
+
   try {
     const { process: childProc, parser } = spawnClaudeProcess(up, {
       mode: 'cron',

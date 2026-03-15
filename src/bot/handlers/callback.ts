@@ -1,4 +1,8 @@
 import fs from 'fs';
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 import { type Context, InlineKeyboard } from 'grammy';
 import { resumeSession, getSessionsMessage, clearSessionsMessage, buildSessionList } from '../commands/session.js';
 import { buildBrowserKeyboard } from '../commands/cd.js';
@@ -17,6 +21,7 @@ import { applyModel } from '../commands/model.js';
 export async function callbackHandler(ctx: Context): Promise<void> {
   const data = ctx.callbackQuery?.data;
   const userId = ctx.from?.id;
+  logger.info({ userId, callbackData: data?.slice(0, 80) }, 'Callback received');
   if (!data || !userId) return;
 
   const chatId = ctx.callbackQuery?.message?.chat?.id;
@@ -234,7 +239,9 @@ async function refreshBotSessions(ctx: Context, userId: number, chatId?: number,
 }
 
 async function showCliSessions(ctx: Context, userId: number, chatId?: number, threadId?: number): Promise<void> {
+  try {
   const currentDir = getCurrentDir(userId, chatId, threadId);
+  logger.info({ currentDir }, 'showCliSessions called');
   const cliSessions = scanCliSessions(currentDir);
 
   // Exclude sessions already in bot DB
@@ -251,7 +258,9 @@ async function showCliSessions(ctx: Context, userId: number, chatId?: number, th
         'No additional CLI sessions found for this directory.',
         { reply_markup: keyboard },
       );
-    } catch { /* ignore */ }
+    } catch (err) {
+      logger.warn({ err: (err as any)?.message }, 'Failed to edit CLI sessions message');
+    }
     return;
   }
 
@@ -259,8 +268,10 @@ async function showCliSessions(ctx: Context, userId: number, chatId?: number, th
   for (const s of filtered) {
     const shortId = s.sessionId.slice(0, 8);
     const ago = formatTimeAgo(s.lastActive);
-    const nameStr = s.customTitle ? ` <b>${s.customTitle}</b>` : '';
-    lines.push(`\u26AA${nameStr} <code>${shortId}...</code> ${s.model} | ${ago}`);
+    const escTitle = s.customTitle ? escHtml(s.customTitle) : '';
+    const escModel = escHtml(s.model);
+    const nameStr = escTitle ? ` <b>${escTitle}</b>` : '';
+    lines.push(`\u26AA${nameStr} <code>${shortId}...</code> ${escModel} | ${ago}`);
     const btnLabel = s.customTitle ? s.customTitle : `${shortId}... (${s.model})`;
     keyboard
       .text(btnLabel, `${botInstanceHash}:resume:${s.sessionId}`)
@@ -274,7 +285,12 @@ async function showCliSessions(ctx: Context, userId: number, chatId?: number, th
       `<b>CLI Sessions (${filtered.length})</b>\n\n${lines.join('\n')}\n\nTap to resume. Session will be registered.`,
       { parse_mode: 'HTML', reply_markup: keyboard },
     );
-  } catch { /* ignore */ }
+  } catch (err) {
+    logger.warn({ err: (err as any)?.description ?? (err as any)?.message, count: filtered.length }, 'Failed to edit CLI sessions list');
+  }
+  } catch (err) {
+    logger.error({ err: (err as any)?.message ?? err }, 'showCliSessions crashed');
+  }
 }
 
 function formatTimeAgo(date: Date): string {

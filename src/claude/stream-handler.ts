@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import { markdownToTelegramHtml } from '../utils/markdown-to-html.js';
 import { formatToolWithInput, formatToolStart } from './tool-formatter.js';
 import { isToolHidden } from '../api/tool-display-store.js';
-import { updateCost } from './cost-tracker.js';
+import { updateCost, updateContextUsage } from './cost-tracker.js';
 import { createSession } from '../db/session-repo.js';
 import { buildChapterLabel } from '../db/topic-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
@@ -97,6 +97,12 @@ export class StreamHandler {
           const label = buildChapterLabel(this.up.chatId, this.up.threadId, this.userId);
           updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir, chapterKey, label });
         }
+      });
+
+      parser.on('assistant_usage', (usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => {
+        // Track latest per-turn usage for /context (overwrites each turn)
+        const sid = this.up.sessionId;
+        if (sid) updateContextUsage(sid, usage);
       });
 
       parser.on('text', (text: string) => {

@@ -117,6 +117,11 @@ export class StreamParser extends EventEmitter {
           this.emit('session_id', asst.session_id);
         }
 
+        // Emit per-turn usage (last one = actual context size)
+        if (asst.message.usage) {
+          this.emit('assistant_usage', asst.message.usage);
+        }
+
         const parentId = asst.parent_tool_use_id ?? null;
 
         for (const block of asst.message.content) {

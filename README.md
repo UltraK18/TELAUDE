@@ -1,4 +1,4 @@
-# Telaude
+# TELAUDE
 
 A headless orchestration bridge that securely exposes the Claude Code CLI to Telegram, transforming standard messaging interfaces into fully-featured, multi-context developer workspaces.
 

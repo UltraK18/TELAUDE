@@ -438,6 +438,10 @@ function getReplyContext(ctx: Context): string | null {
   const reply = ctx.message?.reply_to_message;
   if (!reply) return null;
 
+  // In forum topics, every message auto-replies to the topic root — skip these
+  const msg = ctx.message as any;
+  if (msg?.is_topic_message && reply.message_id === msg.message_thread_id) return null;
+
   // Determine source
   const fromBot = reply.from?.id === ctx.me.id;
   const fwdChat = reply.forward_origin?.type === 'channel'

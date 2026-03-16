@@ -1,33 +1,50 @@
 # Telaude
 
-A Telegram bot that remotely controls the Claude Code CLI.
+A headless orchestration bridge that securely exposes the Claude Code CLI to Telegram, transforming standard messaging interfaces into fully-featured, multi-context developer workspaces.
 
 Send a message via Telegram, and the server spawns a `claude -p` process, streaming the results back to your chat in real time.
 
 ## Features
 
+### Streaming & Multi-Context
 - **Real-time Streaming** — Claude responses are streamed live to Telegram with incremental edits
-- **Multi-Chapter** — Independent sessions per chat/thread (DM topics, group forums). Each chapter has its own CLI process, session, working directory, and settings
+- **Multi-Chapter Architecture** — Independent sessions per chat/thread (DM topics, group forums). Each chapter has its own CLI process, session, working directory, and settings
 - **Session Management** — Resume conversations, list sessions, rename them, and restore previous context
 - **Tool Call Visualization** — See which tools Claude is using in real time, with counters and icons
-- **MCP Server** — Built-in MCP tools for scheduling, file sending, user prompts, and more
-- **External MCP Integration** — Other MCP servers can use Telaude's Telegram messaging capabilities
-- **Cron / Scheduling** — Run scheduled tasks (recurring cron or one-shot)
-- **Poke** — Automatic follow-up when Claude goes silent
-- **Emoji Reactions** — Bidirectional reactions (user-to-bot and bot-to-user messages)
-- **Link Preview** — Auto-fetches context for URLs shared in messages (X/Twitter via fxtwitter, YouTube via noembed, generic sites via OG meta tags)
+
+### Extensibility & MCP
+- **Built-in MCP Server** — Native tools for scheduling, file sending, user prompts, and more
+- **External MCP Integration** — Other MCP servers can use Telaude's Telegram messaging capabilities via internal HTTP API
+- **Configurable Tool UI** — Tool visibility and icons are fully customizable via global or project-level settings
+
+### Proactive Agentic Workflows
+- **Cron / Scheduling** — Run scheduled tasks (recurring cron or one-shot), with isolated job mode
+- **Poke** — Automatic follow-up when Claude goes silent (sleep-aware, configurable intensity)
+- **Heartbeat** — Health check mechanism for scheduled tasks
+
+### Input & Context
+- **Media Support** — Photos, documents, audio, video, stickers, and voice notes
 - **Forward Message Support** — Forwarded messages are collected and sent as context to Claude
+- **Link Preview** — Auto-fetches context for URLs shared in messages (X/Twitter, YouTube, OG meta tags)
+- **Emoji Reactions** — Bidirectional reactions (user-to-bot and bot-to-user messages)
+
+### Monitoring & Control
 - **TUI Dashboard** — Three-column terminal dashboard (Logs | Sessions | Schedule) with keyboard-only navigation
-- **Per-Chapter Settings** — Each chapter has independent MCP, tool, and model settings via TUI (↑↓ select, Enter to edit)
-- **Topic Health Checker** — Detects deleted threads and cleans up sessions automatically
-- **File Path Validation** — send-file, send-photo, and zip-and-send routes validate paths within allowed boundaries
-- **Security** — Password authentication + OS-native encryption (Windows DPAPI / macOS Keychain / Linux machine-id)
+- **Per-Chapter Settings** — Each chapter has independent MCP, tool, and model settings via TUI
+- **Context Usage** — `/context` shows real-time token usage, model info, and cost
+
+### Security
+- **OS-Native Encryption** — Protects `.env` secrets using OS-level cryptography (Windows DPAPI / macOS Keychain / Linux machine-id)
+- **Path Validation** — File operations are restricted to allowed boundaries
+- **Authentication** — Password challenge via `/auth` before any commands are processed
 
 ## Documentation
 
 For detailed usage and configuration, see **[docs/index.md](./docs/index.md)**.
 
 ## Quick Start
+
+Ensure [Bun](https://bun.sh/) is installed.
 
 ```bash
 # Install dependencies
@@ -63,8 +80,8 @@ The setup wizard will ask for:
 | `/model [name]` | View or change the model |
 | `/budget [amount]` | View or set token budget |
 | `/mode` | Toggle session mode (default/minimal) |
+| `/context` | Context window usage (tokens/model/cost) |
 | `/schedule` | View scheduled jobs |
-| `/usage` | Token usage stats |
 
 ## Build & Run
 
@@ -144,16 +161,20 @@ Telaude automatically injects `TELAUDE_*` environment variables into all MCP ser
 
 ## Architecture
 
-```
-Telegram User
-    ↓ message
-Telaude Bot (grammY)
-    ↓ spawn
-claude -p --resume <sessionId>
-    ↓ stream-json stdout
-Telaude Stream Handler
-    ↓ edit/send
-Telegram Chat
+```text
+[ Telegram Client ]
+       │ (Message)
+       ▼
+[ Telaude Bot (grammY) ]
+       │ (Spawns isolated process per chapter)
+       ▼
+[ claude -p --resume <sessionId> ]
+       │ (Streams stdout via NDJSON)
+       ▼
+[ Telaude Stream Handler ]
+       │ (Parses chunks, applies UI formatting)
+       ▼
+[ Telegram Client ] (Real-time message edit)
 ```
 
 ## License

@@ -24,7 +24,7 @@ const BUILTIN_TOOLS = [
 const TELAUDE_MCP_TOOLS = [
   'send_file',
   'send_photo',
-  'send_sticker',
+  // 'send_sticker', // disabled: route kept for external MCP (e.g. Yvonne)
   'ask',
   'zip_and_send',
   'set_reaction',

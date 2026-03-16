@@ -38,6 +38,16 @@ Send a message via Telegram, and the server spawns a `claude -p` process, stream
 - **Path Validation** — File operations are restricted to allowed boundaries
 - **Authentication** — Password challenge via `/auth` before any commands are processed
 
+## How It Works — CLI Wrapper, Not SDK
+
+TELAUDE does **not** use the Claude Agent SDK, unofficial APIs, or OAuth token extraction. It spawns the official `claude -p` CLI as a child process and communicates via stdin/stdout — the same way you'd use it in a terminal.
+
+```
+Telegram message → child_process.spawn('claude', ['-p', ...]) → stdin/stdout → Telegram
+```
+
+This matters because Anthropic's [Terms of Service](https://autonomee.ai/blog/claude-code-terms-of-service-explained/) explicitly prohibit third-party use of subscription OAuth tokens with the Agent SDK, and have [actively blocked](https://autonomee.ai/blog/claude-code-terms-of-service-explained/) projects that do so (OpenClaw, OpenCode, Cline, Roo Code, etc.). TELAUDE avoids this entirely — it calls the CLI binary on your machine, which uses your existing Claude Code authentication as intended.
+
 ## Documentation
 
 For detailed usage and configuration, see **[docs/index.md](./docs/index.md)**.
@@ -79,7 +89,6 @@ The setup wizard will ask for:
 | `/projects` | List allowed project paths |
 | `/model [name]` | View or change the model |
 | `/budget [amount]` | View or set token budget |
-| `/mode` | Toggle session mode (default/minimal) |
 | `/context` | Context window usage (tokens/model/cost) |
 | `/schedule` | View scheduled jobs |
 

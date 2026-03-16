@@ -51,8 +51,6 @@ export interface UserProcess {
   lastUserMessageId: number | null;
   /** Queued reactions from user on bot's last text message */
   reactionQueue: { emojis: string[]; messagePreview: string } | null;
-  /** Session mode — default uses full prompts, minimal strips CLAUDE.md */
-  mode: 'default' | 'minimal';
 }
 
 const processes = new Map<string, UserProcess>();
@@ -97,7 +95,6 @@ export function createIsolatedProcess(
     stopMessage: null,
     lastUserMessageId: null,
     reactionQueue: null,
-    mode: 'default',
   };
   isolatedProcesses.set(id, up);
   isolatedCount++;
@@ -191,7 +188,6 @@ export function createUserProcess(
     stopMessage: null,
     lastUserMessageId: null,
     reactionQueue: null,
-    mode: 'default',
   };
   processes.set(key, up);
   return up;

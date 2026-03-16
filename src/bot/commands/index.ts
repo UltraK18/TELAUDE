@@ -10,7 +10,6 @@ import { budgetCommand } from './budget.js';
 import { statsCommand } from './status.js';
 import { compactCommand } from './compact.js';
 import { historyCommand } from './history.js';
-import { modeCommand } from './mode.js';
 import { scheduleCommand } from './schedule.js';
 import { contextCommand } from './context.js';
 
@@ -37,7 +36,6 @@ export function registerCommands(bot: Bot): void {
   bot.command('stats', statsCommand);
   bot.command('compact', compactCommand);
   bot.command('history', historyCommand);
-  bot.command('mode', modeCommand);
   bot.command('schedule', scheduleCommand);
   bot.command('context', contextCommand);
   // bot.command('usage', usageCommand); // disabled: -p mode doesn't support native /usage

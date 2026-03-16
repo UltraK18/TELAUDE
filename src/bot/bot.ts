@@ -93,7 +93,6 @@ export function createBot(): Bot {
     { command: 'compact', description: 'Compress context' },
     { command: 'history', description: 'Last 5 conversation turns' },
     { command: 'help', description: 'Command list' },
-    { command: 'mode', description: 'Session mode (default/minimal)' },
     { command: 'schedule', description: 'View scheduled jobs' },
     { command: 'context', description: 'Context window usage' },
   ];

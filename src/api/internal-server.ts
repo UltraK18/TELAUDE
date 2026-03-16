@@ -1,4 +1,5 @@
 import http from 'http';
+import type { Socket } from 'net';
 import { logger } from '../utils/logger.js';
 
 interface RouteHandler {
@@ -8,6 +9,7 @@ interface RouteHandler {
 let server: http.Server | null = null;
 let apiToken: string = '';
 const routes = new Map<string, RouteHandler>();
+const activeSockets = new Set<Socket>();
 
 export function registerRoute(path: string, handler: RouteHandler): void {
   routes.set(path, handler);
@@ -89,6 +91,12 @@ export async function startInternalApi(token: string): Promise<void> {
     }
   });
 
+  // Track active connections for forced cleanup on stop
+  server.on('connection', (socket: Socket) => {
+    activeSockets.add(socket);
+    socket.once('close', () => activeSockets.delete(socket));
+  });
+
   return new Promise<void>((resolve, reject) => {
     server!.listen({ port: 19816, host: '127.0.0.1', exclusive: true }, () => {
       logger.info({ port: 19816 }, 'Internal API server started');
@@ -100,21 +108,24 @@ export async function startInternalApi(token: string): Promise<void> {
 
 export async function stopInternalApi(): Promise<void> {
   if (!server) return;
+  // Destroy all active sockets so server.close() resolves immediately
+  for (const socket of activeSockets) {
+    socket.destroy();
+  }
+  activeSockets.clear();
   return new Promise<void>((resolve) => {
-    // Close all active connections immediately
-    server!.closeAllConnections?.();
     server!.close(() => {
       logger.info('Internal API server stopped');
       server = null;
       resolve();
     });
-    // Force resolve after 3s if close hangs
+    // Safety net: force resolve after 1s
     setTimeout(() => {
       if (server) {
         logger.warn('Internal API server close timed out, forcing');
         server = null;
         resolve();
       }
-    }, 3000);
+    }, 1000);
   });
 }

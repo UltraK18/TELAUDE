@@ -7,7 +7,6 @@ const SETTINGS_FILE = path.join(os.homedir(), '.telaude', 'data', 'settings.json
 /** Root-level defaults (new sessions inherit these) */
 export interface RootSettings {
   defaultModel: string;
-  defaultMode: 'default' | 'minimal';
 }
 
 /** Project-level settings (same workingDir shares these) */
@@ -19,7 +18,6 @@ export interface ProjectSettings {
 /** Session-level settings (per chapterKey = userId:chatId:threadId) */
 export interface ChapterSettings {
   model: string | null;
-  mode: 'default' | 'minimal';
 }
 
 /** Full hierarchical settings file */
@@ -39,7 +37,6 @@ export interface TelaudeSettings {
 
 const DEFAULT_ROOT: RootSettings = {
   defaultModel: 'default',
-  defaultMode: 'default',
 };
 
 const DEFAULT_PROJECT: ProjectSettings = {
@@ -49,7 +46,6 @@ const DEFAULT_PROJECT: ProjectSettings = {
 
 const DEFAULT_CHAPTER: ChapterSettings = {
   model: null,
-  mode: 'default',
 };
 
 let cached: TelaudeSettingsV2 | null = null;
@@ -114,7 +110,6 @@ export function resolveSettings(workingDir: string, chapterKey: string): {
   disabledTools: string[];
   disabledMcpServers: string[];
   model: string | null;
-  mode: 'default' | 'minimal';
 } {
   const s = loadSettingsV2();
   const proj = s.projects[workingDir] ?? DEFAULT_PROJECT;
@@ -123,7 +118,6 @@ export function resolveSettings(workingDir: string, chapterKey: string): {
     disabledTools: [...proj.disabledTools],
     disabledMcpServers: [...proj.disabledMcpServers],
     model: sess.model,
-    mode: sess.mode,
   };
 }
 

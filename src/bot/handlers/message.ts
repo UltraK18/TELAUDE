@@ -438,9 +438,10 @@ function getReplyContext(ctx: Context): string | null {
   const reply = ctx.message?.reply_to_message;
   if (!reply) return null;
 
-  // In forum topics, every message auto-replies to the topic root — skip these
+  // In forum/DM topics, every message auto-replies to the topic root service message — skip these
   const msg = ctx.message as any;
-  if (msg?.is_topic_message && reply.message_id === msg.message_thread_id) return null;
+  logger.info({ is_topic_message: msg?.is_topic_message, message_thread_id: msg?.message_thread_id, reply_message_id: reply.message_id, reply_from: reply.from?.id, reply_forum_topic_created: !!(reply as any).forum_topic_created }, 'getReplyContext debug');
+  if (msg?.is_topic_message && (reply as any).forum_topic_created) return null;
 
   // Determine source
   const fromBot = reply.from?.id === ctx.me.id;

@@ -101,6 +101,9 @@ export class StreamParser extends EventEmitter {
         if (sys.session_id) {
           this.emit('session_id', sys.session_id);
         }
+        if (sys.subtype === 'init' && sys.tools) {
+          this.emit('tools', sys.tools);
+        }
         if (sys.subtype === 'status' && (event as any).status === 'compacting') {
           this.emit('compact_start');
         }

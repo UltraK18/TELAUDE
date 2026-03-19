@@ -9,7 +9,7 @@ import { buildChapterLabel } from '../db/topic-repo.js';
 import { StreamParser, type ResultEvent } from './stream-parser.js';
 import { logger, notify, notifyError } from '../utils/logger.js';
 import { updateSession } from '../utils/dashboard.js';
-import { buildChapterKey, type UserProcess } from './process-manager.js';
+import { buildChapterKey, updateMcpToolCache, type UserProcess } from './process-manager.js';
 
 const TELEGRAM_MAX_LEN = 4000;
 const TOOL_UPDATE_INTERVAL = 1000; // 1 second between tool edits
@@ -97,6 +97,21 @@ export class StreamHandler {
           const label = buildChapterLabel(this.up.chatId, this.up.threadId, this.userId);
           updateSession({ id: sessionId, model: this.up.model, dir: this.up.workingDir, chapterKey, label });
         }
+      });
+
+      parser.on('tools', (tools: unknown[]) => {
+        // Extract external MCP tools (mcp__server__tool pattern, excluding telaude)
+        // tools is a string[] (e.g. ["Bash", "Read", "mcp__serena__find_symbol", ...])
+        const mcpTools: string[] = [];
+        for (const t of tools) {
+          const name = typeof t === 'string' ? t : (t as any)?.name;
+          if (name && typeof name === 'string' && name.startsWith('mcp__') && !name.startsWith('mcp__telaude__')) {
+            mcpTools.push(name);
+          }
+        }
+        // Update global cache (shared across chapters) + per-UP reference
+        updateMcpToolCache(mcpTools);
+        this.up.externalMcpTools = mcpTools;
       });
 
       parser.on('assistant_usage', (usage: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }) => {

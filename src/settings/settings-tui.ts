@@ -5,7 +5,7 @@ import path from 'path';
 import { type TelaudeSettings, loadSettingsV2, saveSettingsV2 } from './settings-store.js';
 import { config } from '../config.js';
 import { setSettingsOpen, getSessionDir } from '../utils/dashboard.js';
-import { getUserProcessBySessionKey } from '../claude/process-manager.js';
+import { getUserProcessBySessionKey, getMcpToolCache } from '../claude/process-manager.js';
 import { MODEL_OPTIONS } from '../bot/commands/model.js';
 
 /** Known built-in tools that can be toggled */
@@ -51,7 +51,7 @@ const BUILTIN_MCPS = [
   'plugin:figma:figma',
 ];
 
-/** Read MCP servers dynamically: config files + built-in (telaude excluded — managed via Tools tab) */
+/** Read MCP servers dynamically: config files + built-in (telaude excluded — managed via Base Tools tab) */
 function getMcpServers(): string[] {
   const servers: string[] = [];
   const sources = [
@@ -89,13 +89,12 @@ type TabId = 'model' | 'mcp' | 'tools';
 interface Tab {
   id: TabId;
   label: string;
-  row: 0 | 1; // which tab-bar row
 }
 
 const TABS: Tab[] = [
-  { id: 'model', label: 'Model', row: 0 },
-  { id: 'mcp',   label: 'MCP Servers', row: 0 },
-  { id: 'tools', label: 'Tools', row: 1 },
+  { id: 'model', label: 'Model' },
+  { id: 'mcp',   label: 'MCP Servers' },
+  { id: 'tools', label: 'Base Tools' },
 ];
 
 // ── Menu items ──
@@ -103,11 +102,25 @@ const TABS: Tab[] = [
 interface MenuItem {
   label: string;
   type: 'toggle' | 'select';
-  category: 'mcp' | 'tool' | 'telaude-tool' | 'model';
+  category: 'mcp' | 'mcp-tool' | 'tool' | 'telaude-tool' | 'model';
   key: string;
 }
 
-function buildTabItems(tabId: TabId, mcpServers: string[]): MenuItem[] {
+/** Group external MCP tools by server name */
+function groupToolsByServer(tools: string[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const fullName of tools) {
+    const parts = fullName.slice(5).split('__'); // remove "mcp__"
+    if (parts.length < 2) continue;
+    const server = parts[0];
+    const tool = parts.slice(1).join('__');
+    if (!groups.has(server)) groups.set(server, []);
+    groups.get(server)!.push(tool);
+  }
+  return groups;
+}
+
+function buildTabItems(tabId: TabId, mcpServers: string[], externalMcpTools: string[], settings: TelaudeSettings): MenuItem[] {
   const items: MenuItem[] = [];
   switch (tabId) {
     case 'model':
@@ -118,14 +131,23 @@ function buildTabItems(tabId: TabId, mcpServers: string[]): MenuItem[] {
     case 'mcp':
       for (const srv of mcpServers) {
         items.push({ label: srv, type: 'toggle', category: 'mcp', key: srv });
+        // If server is enabled, show its tools indented
+        const isDisabled = settings.disabledMcpServers.includes(srv);
+        if (!isDisabled) {
+          const serverTools = externalMcpTools.filter(t => t.startsWith(`mcp__${srv}__`));
+          for (const fullName of serverTools) {
+            const toolName = fullName.slice(5 + srv.length + 2); // remove "mcp__server__"
+            items.push({ label: toolName, type: 'toggle', category: 'mcp-tool', key: fullName });
+          }
+        }
       }
       break;
     case 'tools':
-      // Built-in tools first
+      // Built-in tools
       for (const tool of BUILTIN_TOOLS) {
         items.push({ label: tool, type: 'toggle', category: 'tool', key: tool });
       }
-      // Telaude MCP tools after
+      // Telaude MCP tools
       for (const tool of TELAUDE_MCP_TOOLS) {
         items.push({ label: tool, type: 'toggle', category: 'telaude-tool', key: `mcp__telaude__${tool}` });
       }
@@ -140,11 +162,13 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
   if (item.type === 'toggle') {
     const disabled = item.category === 'mcp'
       ? settings.disabledMcpServers.includes(item.key)
-      : settings.disabledTools.includes(item.key);
+      : settings.disabledTools.includes(item.key); // works for tool, telaude-tool, mcp-tool
     const icon = disabled
       ? '{red-fg}○{/red-fg}'
       : '{green-fg}●{/green-fg}';
-    return `${cursor}${icon} ${item.label}`;
+    // Indent MCP tools under their server
+    const indent = item.category === 'mcp-tool' ? '    ' : '';
+    return `${cursor}${indent}${icon} ${item.label}`;
   }
 
   // model select
@@ -163,7 +187,7 @@ interface LineEntry {
   itemIdx: number | null;
 }
 
-function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: number, tabId: TabId): LineEntry[] {
+function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: number, tabId: TabId, mcpServers: string[], externalMcpTools: string[]): LineEntry[] {
   const lines: LineEntry[] = [];
 
   const pushHeader = (label: string) => {
@@ -174,19 +198,42 @@ function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selecte
   };
 
   if (tabId === 'tools') {
+    const builtinEnd = BUILTIN_TOOLS.length;
     // Built-in tools section
     pushHeader('Built-in');
-    for (let i = 0; i < BUILTIN_TOOLS.length; i++) {
+    for (let i = 0; i < builtinEnd; i++) {
       lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
     }
     // Telaude tools section
     pushSpacer();
     pushHeader('Telaude');
-    for (let i = BUILTIN_TOOLS.length; i < items.length; i++) {
+    for (let i = builtinEnd; i < items.length; i++) {
       lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
     }
+  } else if (tabId === 'mcp') {
+    // MCP servers with inline tool sub-lists
+    let itemIdx = 0;
+    for (const srv of mcpServers) {
+      // Server toggle line
+      lines.push({ text: formatLine(items[itemIdx], settings, itemIdx === selectedIdx), itemIdx });
+      itemIdx++;
+      // If enabled, show tools or hint
+      const isDisabled = settings.disabledMcpServers.includes(srv);
+      if (!isDisabled) {
+        const serverTools = externalMcpTools.filter(t => t.startsWith(`mcp__${srv}__`));
+        if (serverTools.length > 0) {
+          for (const _ of serverTools) {
+            lines.push({ text: formatLine(items[itemIdx], settings, itemIdx === selectedIdx), itemIdx });
+            itemIdx++;
+          }
+        } else {
+          // No tools collected yet
+          lines.push({ text: '      {gray-fg}(requires first conversation){/gray-fg}', itemIdx: null });
+        }
+      }
+    }
   } else {
-    // Model / MCP — flat list, no sub-headers
+    // Model — flat list
     for (let i = 0; i < items.length; i++) {
       lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
     }
@@ -198,22 +245,17 @@ function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selecte
 // ── Tab bar rendering ──
 
 function renderTabBar(activeTabId: TabId, focusOnTabs: boolean): string[] {
-  const row0 = TABS.filter(t => t.row === 0);
-  const row1 = TABS.filter(t => t.row === 1);
-
-  const renderRow = (tabs: Tab[]): string => {
-    return tabs.map(t => {
-      if (t.id === activeTabId) {
-        if (focusOnTabs) {
-          return `{bold}{black-fg}{208-bg} ${t.label} {/208-bg}{/black-fg}{/bold}`;
-        }
-        return `{bold}{208-fg}[${t.label}]{/208-fg}{/bold}`;
+  const row = TABS.map(t => {
+    if (t.id === activeTabId) {
+      if (focusOnTabs) {
+        return `{bold}{black-fg}{208-bg} ${t.label} {/208-bg}{/black-fg}{/bold}`;
       }
-      return `{gray-fg} ${t.label} {/gray-fg}`;
-    }).join('  ');
-  };
+      return `{bold}{208-fg}[${t.label}]{/208-fg}{/bold}`;
+    }
+    return `{gray-fg} ${t.label} {/gray-fg}`;
+  }).join('  ');
 
-  return [renderRow(row0), renderRow(row1), '{gray-fg}─────────────────────────────────────{/gray-fg}'];
+  return [row, '{gray-fg}─────────────────────────────────────{/gray-fg}'];
 }
 
 // ── Main ──
@@ -235,6 +277,17 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
   };
 
   const mcpServers = getMcpServers();
+  // Merge: global cache (shared across chapters) + previously toggled tools from settings
+  const allTools = new Set<string>();
+  for (const [, tools] of getMcpToolCache()) {
+    for (const t of tools) allTools.add(t);
+  }
+  for (const key of settings.disabledTools) {
+    if (key.startsWith('mcp__') && !key.startsWith('mcp__telaude__')) {
+      allTools.add(key);
+    }
+  }
+  const externalMcpTools = [...allTools];
 
   // Tab state
   let activeTabIdx = 0; // index into TABS
@@ -243,7 +296,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
   let scrollTop = 0;
 
   function activeTab(): Tab { return TABS[activeTabIdx]; }
-  function activeItems(): MenuItem[] { return buildTabItems(activeTab().id, mcpServers); }
+  function activeItems(): MenuItem[] { return buildTabItems(activeTab().id, mcpServers, externalMcpTools, settings); }
 
   const overlay = blessed.box({
     parent: screen,
@@ -264,8 +317,8 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
   });
 
   function getViewportHeight(): number {
-    // height minus borders (2) minus tab bar (3 lines) minus scroll hint (1)
-    const h = (overlay.height as number) - 6;
+    // height minus borders (2) minus tab bar (2 lines) minus scroll hint (1)
+    const h = (overlay.height as number) - 5;
     return Math.max(1, h);
   }
 
@@ -273,7 +326,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
     const tab = activeTab();
     const items = activeItems();
     const selIdx = tabSelectedIdx[tab.id];
-    const lines = buildContentLines(items, settings, selIdx, tab.id);
+    const lines = buildContentLines(items, settings, selIdx, tab.id, mcpServers, externalMcpTools);
     const vh = getViewportHeight();
     const totalLines = lines.length;
 
@@ -321,14 +374,15 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
         if (idx >= 0) settings.disabledMcpServers.splice(idx, 1);
         else settings.disabledMcpServers.push(item.key);
       } else {
+        // tool, telaude-tool, mcp-tool all use disabledTools
         const idx = settings.disabledTools.indexOf(item.key);
         if (idx >= 0) settings.disabledTools.splice(idx, 1);
         else settings.disabledTools.push(item.key);
       }
     } else if (item.type === 'select') {
       settings.model = item.key;
-      const up = getUserProcessBySessionKey(editKey);
-      if (up) up.model = item.key;
+      const upRef = getUserProcessBySessionKey(editKey);
+      if (upRef) upRef.model = item.key;
     }
 
     // Save

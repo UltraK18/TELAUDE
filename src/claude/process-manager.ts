@@ -51,9 +51,32 @@ export interface UserProcess {
   lastUserMessageId: number | null;
   /** Queued reactions from user on bot's last text message */
   reactionQueue: { emojis: string[]; messagePreview: string } | null;
+  /** External MCP tool names discovered from init event (mcp__server__tool pattern) */
+  externalMcpTools: string[];
 }
 
 const processes = new Map<string, UserProcess>();
+
+// --- Global MCP tool cache (shared across chapters, populated from init events) ---
+const mcpToolCache = new Map<string, string[]>(); // server name → tool full names
+
+export function updateMcpToolCache(tools: string[]): void {
+  const byServer = new Map<string, string[]>();
+  for (const t of tools) {
+    const parts = t.slice(5).split('__'); // remove "mcp__"
+    if (parts.length < 2) continue;
+    const server = parts[0];
+    if (!byServer.has(server)) byServer.set(server, []);
+    byServer.get(server)!.push(t);
+  }
+  for (const [server, serverTools] of byServer) {
+    mcpToolCache.set(server, serverTools);
+  }
+}
+
+export function getMcpToolCache(): Map<string, string[]> {
+  return mcpToolCache;
+}
 
 // --- Isolated processes (for scheduled/cron jobs that run independently) ---
 const isolatedProcesses = new Map<string, UserProcess>();
@@ -95,6 +118,7 @@ export function createIsolatedProcess(
     stopMessage: null,
     lastUserMessageId: null,
     reactionQueue: null,
+    externalMcpTools: [],
   };
   isolatedProcesses.set(id, up);
   isolatedCount++;
@@ -188,6 +212,7 @@ export function createUserProcess(
     stopMessage: null,
     lastUserMessageId: null,
     reactionQueue: null,
+    externalMcpTools: [],
   };
   processes.set(key, up);
   return up;

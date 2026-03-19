@@ -311,7 +311,10 @@ function drainScheduledQueue(userId: number, api: Api): void {
     // Send report if Claude produced any text response (and nothing_to_report wasn't called)
     if (up.lastResponseText) {
       const prefix = task.mode === 'poke' ? '' : '<tg-emoji emoji-id="5458603043203327669">🔔</tg-emoji> ';
-      api.sendMessage(task.chatId, `${prefix}${escHtml(up.lastResponseText)}`, { parse_mode: 'HTML' })
+      api.sendMessage(task.chatId, `${prefix}${escHtml(up.lastResponseText)}`, {
+          parse_mode: 'HTML',
+          ...(task.threadId ? { message_thread_id: task.threadId } : {}),
+        })
         .catch(err => {
           logger.error({ err, userId }, 'Failed to send scheduled report');
           notifyError(`Scheduled report failed: ${err?.description ?? err?.message ?? 'unknown'}`);

@@ -6,6 +6,7 @@ import { type TelaudeSettings, loadSettingsV2, saveSettingsV2 } from './settings
 import { config } from '../config.js';
 import { setSettingsOpen, getSessionDir } from '../utils/dashboard.js';
 import { getUserProcessBySessionKey } from '../claude/process-manager.js';
+import { MODEL_OPTIONS } from '../bot/commands/model.js';
 
 /** Known built-in tools that can be toggled */
 const BUILTIN_TOOLS = [
@@ -50,7 +51,7 @@ const BUILTIN_MCPS = [
   'plugin:figma:figma',
 ];
 
-/** Read MCP servers dynamically: config files + built-in (telaude excluded — managed via Telaude Tools section) */
+/** Read MCP servers dynamically: config files + built-in (telaude excluded — managed via Tools tab) */
 function getMcpServers(): string[] {
   const servers: string[] = [];
   const sources = [
@@ -77,42 +78,59 @@ function getMcpServers(): string[] {
   return servers;
 }
 
-import { MODEL_OPTIONS } from '../bot/commands/model.js';
-
 function getWorkingDirForSession(chapterKey: string): string {
   return getSessionDir(chapterKey) ?? chapterKey;
 }
+
+// ── Tab definitions ──
+
+type TabId = 'model' | 'mcp' | 'tools';
+
+interface Tab {
+  id: TabId;
+  label: string;
+  row: 0 | 1; // which tab-bar row
+}
+
+const TABS: Tab[] = [
+  { id: 'model', label: 'Model', row: 0 },
+  { id: 'mcp',   label: 'MCP Servers', row: 0 },
+  { id: 'tools', label: 'Tools', row: 1 },
+];
+
+// ── Menu items ──
 
 interface MenuItem {
   label: string;
   type: 'toggle' | 'select';
   category: 'mcp' | 'tool' | 'telaude-tool' | 'model';
-  key: string; // server/tool name or model id
+  key: string;
 }
 
-function buildMenuItems(settings: TelaudeSettings, mcpServers: string[]): MenuItem[] {
+function buildTabItems(tabId: TabId, mcpServers: string[]): MenuItem[] {
   const items: MenuItem[] = [];
-
-  // MCP Servers section
-  for (const srv of mcpServers) {
-    items.push({ label: srv, type: 'toggle', category: 'mcp', key: srv });
+  switch (tabId) {
+    case 'model':
+      for (const m of MODEL_OPTIONS) {
+        items.push({ label: m.label, type: 'select', category: 'model', key: m.value });
+      }
+      break;
+    case 'mcp':
+      for (const srv of mcpServers) {
+        items.push({ label: srv, type: 'toggle', category: 'mcp', key: srv });
+      }
+      break;
+    case 'tools':
+      // Built-in tools first
+      for (const tool of BUILTIN_TOOLS) {
+        items.push({ label: tool, type: 'toggle', category: 'tool', key: tool });
+      }
+      // Telaude MCP tools after
+      for (const tool of TELAUDE_MCP_TOOLS) {
+        items.push({ label: tool, type: 'toggle', category: 'telaude-tool', key: `mcp__telaude__${tool}` });
+      }
+      break;
   }
-
-  // Telaude MCP Tools section
-  for (const tool of TELAUDE_MCP_TOOLS) {
-    items.push({ label: tool, type: 'toggle', category: 'telaude-tool', key: `mcp__telaude__${tool}` });
-  }
-
-  // Tools section
-  for (const tool of BUILTIN_TOOLS) {
-    items.push({ label: tool, type: 'toggle', category: 'tool', key: tool });
-  }
-
-  // Model section
-  for (const m of MODEL_OPTIONS) {
-    items.push({ label: m.label, type: 'select', category: 'model', key: m.value });
-  }
-
   return items;
 }
 
@@ -122,7 +140,7 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
   if (item.type === 'toggle') {
     const disabled = item.category === 'mcp'
       ? settings.disabledMcpServers.includes(item.key)
-      : settings.disabledTools.includes(item.key); // works for both 'tool' and 'telaude-tool'
+      : settings.disabledTools.includes(item.key);
     const icon = disabled
       ? '{red-fg}○{/red-fg}'
       : '{green-fg}●{/green-fg}';
@@ -138,17 +156,15 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
   return `${cursor}${icon} ${item.label}`;
 }
 
-/** Build a flat line list with section headers interleaved, mapping each item line to an item index */
+// ── Content lines for the active tab ──
+
 interface LineEntry {
-  text: string;        // rendered blessed markup
-  itemIdx: number | null; // null = header/spacer
+  text: string;
+  itemIdx: number | null;
 }
 
-function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: number, mcpServers: string[]): LineEntry[] {
+function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: number, tabId: TabId): LineEntry[] {
   const lines: LineEntry[] = [];
-  const telaudeToolStart = mcpServers.length;
-  const toolStart = telaudeToolStart + TELAUDE_MCP_TOOLS.length;
-  const modelStart = toolStart + BUILTIN_TOOLS.length;
 
   const pushHeader = (label: string) => {
     lines.push({ text: `{bold}{208-fg}${label}{/208-fg}{/bold}`, itemIdx: null });
@@ -157,36 +173,53 @@ function buildLines(items: MenuItem[], settings: TelaudeSettings, selectedIdx: n
     lines.push({ text: '', itemIdx: null });
   };
 
-  if (telaudeToolStart > 0) {
-    pushHeader('MCP Servers');
-    for (let i = 0; i < telaudeToolStart; i++) {
+  if (tabId === 'tools') {
+    // Built-in tools section
+    pushHeader('Built-in');
+    for (let i = 0; i < BUILTIN_TOOLS.length; i++) {
       lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
     }
+    // Telaude tools section
     pushSpacer();
-  }
-
-  pushHeader('Telaude Tools');
-  for (let i = telaudeToolStart; i < toolStart; i++) {
-    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
-  }
-
-  pushSpacer();
-  pushHeader('Claude Tools');
-  for (let i = toolStart; i < modelStart; i++) {
-    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
-  }
-
-  pushSpacer();
-  pushHeader('Model');
-  for (let i = modelStart; i < items.length; i++) {
-    lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+    pushHeader('Telaude');
+    for (let i = BUILTIN_TOOLS.length; i < items.length; i++) {
+      lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+    }
+  } else {
+    // Model / MCP — flat list, no sub-headers
+    for (let i = 0; i < items.length; i++) {
+      lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+    }
   }
 
   return lines;
 }
 
+// ── Tab bar rendering ──
+
+function renderTabBar(activeTabId: TabId, focusOnTabs: boolean): string[] {
+  const row0 = TABS.filter(t => t.row === 0);
+  const row1 = TABS.filter(t => t.row === 1);
+
+  const renderRow = (tabs: Tab[]): string => {
+    return tabs.map(t => {
+      if (t.id === activeTabId) {
+        if (focusOnTabs) {
+          return `{bold}{black-fg}{208-bg} ${t.label} {/208-bg}{/black-fg}{/bold}`;
+        }
+        return `{bold}{208-fg}[${t.label}]{/208-fg}{/bold}`;
+      }
+      return `{gray-fg} ${t.label} {/gray-fg}`;
+    }).join('  ');
+  };
+
+  return [renderRow(row0), renderRow(row1), '{gray-fg}─────────────────────────────────────{/gray-fg}'];
+}
+
+// ── Main ──
+
 export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: string): void {
-  if (!chapterKey) return; // No session selected — nothing to edit
+  if (!chapterKey) return;
   const editKey = chapterKey;
   setSettingsOpen(true);
 
@@ -202,9 +235,15 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
   };
 
   const mcpServers = getMcpServers();
-  const items = buildMenuItems(settings, mcpServers);
-  let selectedIdx = 0;
-  let scrollTop = 0; // top line index in the viewport
+
+  // Tab state
+  let activeTabIdx = 0; // index into TABS
+  let focusOnTabs = false; // true = navigating tab bar, false = navigating items
+  const tabSelectedIdx: Record<TabId, number> = { model: 0, mcp: 0, tools: 0 };
+  let scrollTop = 0;
+
+  function activeTab(): Tab { return TABS[activeTabIdx]; }
+  function activeItems(): MenuItem[] { return buildTabItems(activeTab().id, mcpServers); }
 
   const overlay = blessed.box({
     parent: screen,
@@ -212,31 +251,34 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
     left: 'center',
     width: '60%',
     height: '80%',
-    label: ` Settings [${editKey}] (↑↓ Navigate, Space/Enter Toggle, Esc Close) `,
+    label: ` Settings [${editKey}] `,
     tags: true,
     border: { type: 'line' },
     style: {
       border: { fg: 208 },
       bg: 'black',
     },
-    padding: { left: 2, right: 2, top: 1 },
+    padding: { left: 2, right: 2, top: 0 },
     keys: true,
     vi: false,
   });
 
   function getViewportHeight(): number {
-    // height minus borders (2) minus padding top (1) minus scrollbar hint line (1)
-    const h = (overlay.height as number) - 4;
+    // height minus borders (2) minus tab bar (3 lines) minus scroll hint (1)
+    const h = (overlay.height as number) - 6;
     return Math.max(1, h);
   }
 
   function render(): void {
-    const lines = buildLines(items, settings, selectedIdx, mcpServers);
+    const tab = activeTab();
+    const items = activeItems();
+    const selIdx = tabSelectedIdx[tab.id];
+    const lines = buildContentLines(items, settings, selIdx, tab.id);
     const vh = getViewportHeight();
     const totalLines = lines.length;
 
-    // Find the line index of the selected item to keep it visible
-    const selectedLineIdx = lines.findIndex((l) => l.itemIdx === selectedIdx);
+    // Keep selected item visible
+    const selectedLineIdx = lines.findIndex((l) => l.itemIdx === selIdx);
     if (selectedLineIdx >= 0) {
       if (selectedLineIdx < scrollTop) {
         scrollTop = selectedLineIdx;
@@ -248,7 +290,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
 
     const visible = lines.slice(scrollTop, scrollTop + vh).map((l) => l.text);
 
-    // Scroll indicator line
+    // Scroll indicator
     const canScrollUp = scrollTop > 0;
     const canScrollDown = scrollTop + vh < totalLines;
     let scrollHint = '';
@@ -258,12 +300,21 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
 
     if (scrollHint) visible.push(scrollHint);
 
-    overlay.setContent(visible.join('\n'));
+    // Compose: tab bar + content
+    const tabBar = renderTabBar(tab.id, focusOnTabs);
+    const output = [...tabBar, ...visible];
+
+    overlay.setContent(output.join('\n'));
     screen.render();
   }
 
   function toggle(): void {
-    const item = items[selectedIdx];
+    const tab = activeTab();
+    const items = activeItems();
+    const selIdx = tabSelectedIdx[tab.id];
+    const item = items[selIdx];
+    if (!item) return;
+
     if (item.type === 'toggle') {
       if (item.category === 'mcp') {
         const idx = settings.disabledMcpServers.indexOf(item.key);
@@ -276,11 +327,11 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
       }
     } else if (item.type === 'select') {
       settings.model = item.key;
-      // Sync UP in-memory model so next spawn uses it
       const up = getUserProcessBySessionKey(editKey);
       if (up) up.model = item.key;
     }
-    // Save to session-specific project/session in V2 store
+
+    // Save
     const sv2 = loadSettingsV2();
     sv2.projects[projKey] = {
       disabledTools: [...settings.disabledTools],
@@ -295,12 +346,19 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
     render();
   }
 
+  function switchTab(direction: -1 | 1): void {
+    activeTabIdx = (activeTabIdx + direction + TABS.length) % TABS.length;
+    scrollTop = 0;
+    render();
+  }
+
   let active = true;
-  let ignoreFirst = true; // Skip the enter keypress that opened this overlay
+  let ignoreFirst = true;
 
   function onKey(_ch: string, key: blessed.Widgets.Events.IKeyEventArg): void {
     if (!active) return;
     if (ignoreFirst) { ignoreFirst = false; return; }
+
     if (key.name === 'escape' || key.name === 'q') {
       active = false;
       screen.removeListener('keypress', onKey);
@@ -309,23 +367,58 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
       screen.render();
       return;
     }
+
+    if (focusOnTabs) {
+      // Tab bar navigation
+      if (key.name === 'left' || key.name === 'h') {
+        switchTab(-1);
+      } else if (key.name === 'right' || key.name === 'l') {
+        switchTab(1);
+      } else if (key.name === 'down' || key.name === 'j' || key.name === 'return') {
+        focusOnTabs = false;
+        render();
+      } else if (key.name === 'tab') {
+        switchTab(1);
+      }
+      return;
+    }
+
+    // Item list navigation
+    const tab = activeTab();
+    const items = activeItems();
+    const itemCount = items.length;
+
     if (key.name === 'up' || key.name === 'k') {
-      selectedIdx = (selectedIdx - 1 + items.length) % items.length;
-      render();
+      if (tabSelectedIdx[tab.id] === 0) {
+        // At top of list — move focus to tab bar
+        focusOnTabs = true;
+        render();
+      } else {
+        tabSelectedIdx[tab.id]--;
+        render();
+      }
     } else if (key.name === 'down' || key.name === 'j') {
-      selectedIdx = (selectedIdx + 1) % items.length;
+      if (tabSelectedIdx[tab.id] < itemCount - 1) {
+        tabSelectedIdx[tab.id]++;
+      }
       render();
+    } else if (key.name === 'left' || key.name === 'h') {
+      switchTab(-1);
+    } else if (key.name === 'right' || key.name === 'l') {
+      switchTab(1);
+    } else if (key.name === 'tab') {
+      switchTab(1);
     } else if (key.name === 'pageup') {
-      selectedIdx = Math.max(0, selectedIdx - getViewportHeight());
+      tabSelectedIdx[tab.id] = Math.max(0, tabSelectedIdx[tab.id] - getViewportHeight());
       render();
     } else if (key.name === 'pagedown') {
-      selectedIdx = Math.min(items.length - 1, selectedIdx + getViewportHeight());
+      tabSelectedIdx[tab.id] = Math.min(itemCount - 1, tabSelectedIdx[tab.id] + getViewportHeight());
       render();
-    } else if (key.name === 'home' || (key.name === 'g' && !key.shift)) {
-      selectedIdx = 0;
+    } else if (key.name === 'home') {
+      tabSelectedIdx[tab.id] = 0;
       render();
-    } else if (key.name === 'end' || (key.name === 'g' && key.shift)) {
-      selectedIdx = items.length - 1;
+    } else if (key.name === 'end') {
+      tabSelectedIdx[tab.id] = itemCount - 1;
       render();
     } else if (key.name === 'space' || key.name === 'return') {
       toggle();

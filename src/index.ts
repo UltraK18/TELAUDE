@@ -108,8 +108,9 @@ async function main(): Promise<void> {
       return null;
     }
 
-    // Check if user is active — if so, queue the task
-    if (isUserActive(job.userId)) {
+    // Check if the target chapter is active — if so, queue the task
+    const chapterUp = getUserProcess(job.userId, job.chatId, job.threadId);
+    if (chapterUp?.isProcessing) {
       enqueueScheduledTask({
         userId: job.userId,
         chatId: job.chatId,
@@ -221,7 +222,8 @@ async function main(): Promise<void> {
   setPokeCallback(async (userId, stdin, workingDir, sessionId, chatId, threadId) => {
     const { spawnClaudeProcess, sendMessage: sendToProcess, getUserProcess, createUserProcess } = await import('./claude/process-manager.js');
     const { StreamHandler } = await import('./claude/stream-handler.js');
-    if (isUserActive(userId)) {
+    const pokeUp = getUserProcess(userId, chatId, threadId);
+    if (pokeUp?.isProcessing) {
       enqueueScheduledTask({
         userId,
         chatId,

@@ -1,5 +1,5 @@
 import { Cron } from 'croner';
-import { getAllJobs, getJob, addHistory, removeJob, archiveJob, type CronJob } from './cron-store.js';
+import { getAllJobs, getJob, addHistory, removeJob, archiveJob, triggerOnChange, type CronJob } from './cron-store.js';
 import { logger, notify, notifyError } from '../utils/logger.js';
 
 type TriggerCallback = (job: CronJob) => Promise<string | null>;
@@ -164,6 +164,7 @@ export function scheduleJob(jobId: string): void {
   const job = getJob(jobId);
   if (job) {
     startJob(job);
+    triggerOnChange();
   }
 }
 

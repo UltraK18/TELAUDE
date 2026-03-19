@@ -18,3 +18,4 @@ CLAUDE.md
 .serena/
 *.exe
 *.zip
+scripts/gws-oauth.py

@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 
 let _onChange: (() => void) | null = null;
 export function setOnChange(cb: () => void): void { _onChange = cb; }
+export function triggerOnChange(): void { _onChange?.(); }
 
 export interface CronJobHistory {
   timestamp: string;

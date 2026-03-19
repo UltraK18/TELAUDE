@@ -43,15 +43,21 @@ export function registerSchedulingTools(server: McpServer): void {
       if (!schedule && !runAt) {
         return { content: [{ type: 'text', text: 'Error: provide either schedule (recurring) or runAt (one-time)' }] };
       }
-      // Parse relative time (e.g. "5m", "1h", "30s") into absolute datetime
+      // Parse relative time (e.g. "5m", "1h", "30s") or time-only (e.g. "09:15") into absolute datetime
       let resolvedRunAt = runAt;
       if (runAt) {
-        const match = runAt.match(/^(\d+)\s*(s|m|h)$/);
-        if (match) {
-          const val = parseInt(match[1], 10);
-          const unit = match[2];
+        const relMatch = runAt.match(/^(\d+)\s*(s|m|h)$/);
+        const timeMatch = runAt.match(/^(\d{1,2}):(\d{2})$/);
+        if (relMatch) {
+          const val = parseInt(relMatch[1], 10);
+          const unit = relMatch[2];
           const ms = unit === 's' ? val * 1000 : unit === 'm' ? val * 60000 : val * 3600000;
           resolvedRunAt = new Date(Date.now() + ms).toISOString();
+        } else if (timeMatch) {
+          const now = new Date();
+          now.setHours(parseInt(timeMatch[1], 10), parseInt(timeMatch[2], 10), 0, 0);
+          if (now.getTime() <= Date.now()) now.setDate(now.getDate() + 1);
+          resolvedRunAt = now.toISOString();
         }
       }
       const once = !!resolvedRunAt;

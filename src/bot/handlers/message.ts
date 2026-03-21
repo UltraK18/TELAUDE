@@ -31,6 +31,26 @@ import { fetchLinkPreviews } from '../../utils/link-preview.js';
 const messageQueues = new Map<string, { texts: string[] }>();
 
 /**
+ * Drain queued user messages for a chapter after a scheduled task completes.
+ * Called from cron/poke exit handlers in index.ts.
+ */
+export function drainUserMessageQueue(userId: number, chatId: number, threadId: number, api: Api): boolean {
+  const chapterKey = buildChapterKey(userId, chatId, threadId);
+  const queue = messageQueues.get(chapterKey);
+  if (!queue || queue.texts.length === 0) return false;
+
+  const up = getOrCreateUp(userId, chatId, threadId);
+  const queued = queue.texts.join('\n\n');
+  queue.texts = [];
+  messageQueues.delete(chapterKey);
+  const combined = `The user sent new messages while you were working on the previous task. IMPORTANT: You MUST address ALL of these messages in your response:\n---\n${queued}\n---`;
+  logger.info({ userId, chapterKey, queuedCount: queued.split('\n\n').length, textPreview: queued.slice(0, 120) }, 'Exit (scheduled): draining queued user messages');
+  const resumeId = up.sessionId ?? undefined;
+  up.isProcessing = true;
+  return launchAndSend(up, combined, chatId, userId, api, resumeId);
+}
+
+/**
  * Check if a user has an active Claude process running.
  * Used by scheduler to defer cron/heartbeat jobs.
  */

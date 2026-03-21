@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   // --- Scheduler ---
   const { startAll: startScheduler, stopAll: stopScheduler, setTriggerCallback } = await import('./scheduler/scheduler.js');
   const { setPokeCallback, stopAllPokes } = await import('./scheduler/poke.js');
-  const { isUserActive, enqueueScheduledTask } = await import('./bot/handlers/message.js');
+  const { isUserActive, enqueueScheduledTask, drainUserMessageQueue } = await import('./bot/handlers/message.js');
 
   // Set up the trigger callback for cron jobs
   setTriggerCallback(async (job) => {
@@ -211,7 +211,10 @@ async function main(): Promise<void> {
         up!.lastResponseText = null;
         up!.lastReportText = null;
 
-        up!.isProcessing = false;
+        // Drain queued user messages before releasing isProcessing
+        if (!drainUserMessageQueue(job.userId, job.chatId, job.threadId, bot.api)) {
+          up!.isProcessing = false;
+        }
         resolve(responseText);
       });
     });
@@ -280,8 +283,11 @@ async function main(): Promise<void> {
         up!.nothingToReport = false;
         up!.lastResponseText = null;
         up!.lastReportText = null;
-        up!.isProcessing = false;
         up!.currentMode = 'user';
+        // Drain queued user messages before releasing isProcessing
+        if (!drainUserMessageQueue(userId, chatId, threadId, bot.api)) {
+          up!.isProcessing = false;
+        }
         resolve();
       });
     });

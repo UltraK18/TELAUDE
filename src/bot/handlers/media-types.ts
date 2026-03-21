@@ -24,13 +24,13 @@ export interface MediaInfo {
 }
 
 export const MEDIA_LABELS: Record<MediaType, string> = {
-  photo: '사진',
-  document: '파일',
-  audio: '오디오',
-  voice: '음성 메시지',
-  video: '동영상',
-  video_note: '동영상 메시지',
-  sticker: '스티커',
+  photo: 'Photo',
+  document: 'File',
+  audio: 'Audio',
+  voice: 'Voice message',
+  video: 'Video',
+  video_note: 'Video message',
+  sticker: 'Sticker',
   animation: 'GIF',
 };
 
@@ -119,11 +119,11 @@ export function buildMediaText(
     const { mediaType, savedPath } = items[0];
     const label = MEDIA_LABELS[mediaType];
     return caption
-      ? `[${label} 수신: ${savedPath}]\n${caption}`
-      : `[${label} 수신: ${savedPath}]`;
+      ? `[${label} received: ${savedPath}]\n${caption}`
+      : `[${label} received: ${savedPath}]`;
   }
 
-  const header = `[미디어 그룹 수신: ${items.length}개 파일]`;
+  const header = `[Media group received: ${items.length} files]`;
   const fileList = items
     .map((item, i) => `${i + 1}. ${MEDIA_LABELS[item.mediaType]}: ${item.savedPath}`)
     .join('\n');

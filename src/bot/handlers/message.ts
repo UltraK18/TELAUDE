@@ -619,16 +619,16 @@ export async function mediaHandler(ctx: Context): Promise<void> {
       if (thumbPath) parts.push(emoji);
       if (setName) parts.push(`set: ${setName}`);
       parts.push(`sticker_id: ${media.fileId}`);
-      mediaText = `[스티커: ${parts.join(' | ')}]`;
+      mediaText = `[Sticker: ${parts.join(' | ')}]`;
     } else if (media.mediaType === 'photo') {
       try {
         const savedPath = await downloadTelegramFile(ctx.api, media.fileId, up.workingDir, media.originalFileName, media.mediaType);
-        mediaText = `[사진: ${savedPath}]`;
+        mediaText = `[Photo: ${savedPath}]`;
       } catch {
         const meta: string[] = [];
         if (media.fileSize) meta.push(`${(media.fileSize / 1024 / 1024).toFixed(1)}MB`);
         meta.push('download failed');
-        mediaText = `[사진: ${meta.join(', ')}]`;
+        mediaText = `[Photo: ${meta.join(', ')}]`;
       }
     } else {
       try {
@@ -697,7 +697,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     if (thumbPath) parts.push(emoji);
     if (setName) parts.push(`set: ${setName}`);
     parts.push(`sticker_id: ${media.fileId}`);
-    let text = `[스티커 수신: ${parts.join(' | ')}]`;
+    let text = `[Sticker received: ${parts.join(' | ')}]`;
     if (caption) text += `\n${caption}`;
     queueOrLaunch(userId, chatId, text, ctx.api, threadId);
     return;
@@ -717,7 +717,7 @@ export async function mediaHandler(ctx: Context): Promise<void> {
     if (media.originalFileName) meta.push(media.originalFileName);
     if (media.fileSize) meta.push(`${(media.fileSize / 1024 / 1024).toFixed(1)}MB`);
     meta.push('download failed — exceeds Bot API 20MB limit');
-    const fallbackText = `[${label} 수신: ${meta.join(', ')}]`;
+    const fallbackText = `[${label} received: ${meta.join(', ')}]`;
     const text = caption ? `${fallbackText}\n${caption}` : fallbackText;
     queueOrLaunch(userId, chatId, text, ctx.api, threadId);
     return;

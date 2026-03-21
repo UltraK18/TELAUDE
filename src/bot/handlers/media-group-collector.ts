@@ -128,7 +128,7 @@ export class MediaGroupCollector {
 
     if (successItems.length === 0) {
       try {
-        await group.api.sendMessage(group.chatId, '\u274C 미디어 그룹 다운로드에 실패했습니다.');
+        await group.api.sendMessage(group.chatId, '\u274C Failed to download media group.');
       } catch { /* ignore */ }
       return;
     }

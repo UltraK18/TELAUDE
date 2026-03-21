@@ -335,10 +335,10 @@ function getSleepPhase(hour: number, sleepWindow: { start: number; end: number }
   const duration = end > start ? end - start : (24 - start) + end;
   const fraction = hoursIntoSleep / duration;
 
-  if (fraction < 0.15) return 0;       // early (극초반)
-  if (fraction < 0.35) return 1;       // light (초반)
-  if (fraction < 0.7) return 2;        // mid (중반)
-  return 3;                            // deep (후반) — always skip
+  if (fraction < 0.15) return 0;       // early
+  if (fraction < 0.35) return 1;       // light
+  if (fraction < 0.7) return 2;        // mid
+  return 3;                            // deep — always skip
 }
 
 function estimateSleepWindow(userId: number): { start: number; end: number } | null {

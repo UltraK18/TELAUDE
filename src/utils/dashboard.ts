@@ -373,7 +373,7 @@ interface ScheduleJob {
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
-const DAYS_KO = ['일', '월', '화', '수', '목', '금', '토'];
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 function formatTime(d: Date): string {
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
@@ -394,18 +394,14 @@ function cronToLabel(cron: string): string {
   const [min, hour, dom, , dow] = parts;
   const time = `${pad2(Number(hour))}:${pad2(Number(min))}`;
 
-  // 매월 N일
-  if (dom !== '*') return `매월 ${dom}일 ${time}`;
-  // 매주 X요일
+  if (dom !== '*') return `monthly ${dom}th ${time}`;
   if (dow !== '*') {
     const dayIdx = Number(dow);
-    const dayName = DAYS_KO[dayIdx] ?? dow;
-    return `매주 ${dayName} ${time}`;
+    const dayName = DAYS_SHORT[dayIdx] ?? dow;
+    return `weekly ${dayName} ${time}`;
   }
-  // 매일
-  if (hour !== '*' && min !== '*') return `매일 ${time}`;
-  // 매시
-  if (hour === '*' && min !== '*') return `매시 ${min}분`;
+  if (hour !== '*' && min !== '*') return `daily ${time}`;
+  if (hour === '*' && min !== '*') return `hourly :${pad2(Number(min))}`;
   return cron;
 }
 
@@ -421,7 +417,7 @@ function formatJobLine(j: ScheduleJob, showNextRun: boolean): string {
   if (j.once) {
     const next = getNextRun(j);
     const timeStr = next ? formatTime(next) : 'once';
-    return `${status} ${j.name} {gray-fg}1회 ${timeStr}{/gray-fg}`;
+    return `${status} ${j.name} {gray-fg}once ${timeStr}{/gray-fg}`;
   }
   const label = j.schedule ? cronToLabel(j.schedule) : 'once';
   return `${status} ${j.name} {gray-fg}${label}{/gray-fg}`;

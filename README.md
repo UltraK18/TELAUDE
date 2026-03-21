@@ -8,6 +8,8 @@ Built entirely on `claude -p` (pipe mode) — leveraging the CLI's native capabi
 
 Send a message via Telegram, and the server spawns a `claude -p` process, streaming the results back to your chat in real time.
 
+![TELAUDE Demo](./preview.gif)
+
 ## Features
 
 ### Streaming & Multi-Context

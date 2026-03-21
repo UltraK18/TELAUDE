@@ -1,6 +1,8 @@
 # TELAUDE
 
-A headless orchestration bridge that securely exposes the Claude Code CLI to Telegram, transforming standard messaging interfaces into fully-featured, multi-context developer workspaces.
+An open-source headless orchestration bridge that securely exposes the Claude Code CLI to Telegram, transforming standard messaging interfaces into fully-featured, multi-context developer workspaces.
+
+Built entirely on `claude -p` (pipe mode) — leveraging the CLI's native capabilities without any SDK hacks or unofficial APIs.
 
 Send a message via Telegram, and the server spawns a `claude -p` process, streaming the results back to your chat in real time.
 
@@ -10,7 +12,8 @@ Send a message via Telegram, and the server spawns a `claude -p` process, stream
 - **Real-time Streaming** — Claude responses are streamed live to Telegram with incremental edits
 - **Multi-Chapter Architecture** — Independent sessions per chat/thread (DM topics, group forums). Each chapter has its own CLI process, session, working directory, and settings
 - **Session Management** — Resume conversations, list sessions, rename them, and restore previous context
-- **Tool Call Visualization** — See which tools Claude is using in real time, with counters and icons
+- **Tool Call Visualization** — See which tools Claude is using in real time, with superscript counters, custom icons, and animated compaction indicators
+- **Telegram-Native UX** — Tool messages auto-delete when text arrives, compaction shows animated dots, long responses auto-split at natural boundaries (code blocks > paragraphs > lines), and HTML parse failures gracefully fall back to plain text
 
 ### Extensibility & MCP
 - **Built-in MCP Server** — Native tools for scheduling, file sending, user prompts, and more
@@ -38,13 +41,15 @@ Send a message via Telegram, and the server spawns a `claude -p` process, stream
 - **Path Validation** — File operations are restricted to allowed boundaries
 - **Authentication** — Password challenge via `/auth` before any commands are processed
 
-## How It Works — CLI Wrapper, Not SDK
+## How It Works — Native CLI, Not SDK
 
 TELAUDE does **not** use the Claude Agent SDK, unofficial APIs, or OAuth token extraction. It spawns the official `claude -p` CLI as a child process and communicates via stdin/stdout — the same way you'd use it in a terminal.
 
 ```
 Telegram message → child_process.spawn('claude', ['-p', ...]) → stdin/stdout → Telegram
 ```
+
+By building on `-p` (pipe mode), TELAUDE inherits all native CLI features — session management, MCP server integration, context compaction, tool permissions, prompt caching, and more — without reimplementing any of them. Every effort is made to reflect the full native CLI experience through Telegram, while adding Telegram-native UX enhancements like real-time tool animations, smart message splitting, and interactive inline keyboards.
 
 This matters because Anthropic's [Terms of Service](https://autonomee.ai/blog/claude-code-terms-of-service-explained/) explicitly prohibit third-party use of subscription OAuth tokens with the Agent SDK, and have [actively blocked](https://autonomee.ai/blog/claude-code-terms-of-service-explained/) projects that do so (OpenClaw, OpenCode, Cline, Roo Code, etc.). TELAUDE avoids this entirely — it calls the CLI binary on your machine, which uses your existing Claude Code authentication as intended.
 
@@ -99,8 +104,10 @@ bun run build        # TypeScript build
 bun start            # Production
 bun run dev          # Development (stdin supported)
 bun run dev:watch    # Development (auto-reload, no stdin)
-bun run build:exe    # Compile single executable (TELAUDE.exe)
+bun run build:exe    # Compile single executable
 ```
+
+> **Note:** `build:exe` currently produces a Windows executable. Cross-platform binary builds (Linux, macOS) are planned but not yet tested — contributions and testing help are welcome.
 
 ## External MCP Integration
 
@@ -185,6 +192,13 @@ Telaude automatically injects `TELAUDE_*` environment variables into all MCP ser
        ▼
 [ Telegram Client ] (Real-time message edit)
 ```
+
+## Contributing
+
+TELAUDE is fully open source. Contributions, bug reports, and cross-platform testing are welcome — especially for:
+- **macOS / Linux binary builds** — `build:exe` is currently Windows-only
+- **macOS Keychain integration** — OS-native encryption needs real-device testing
+- **Terminal compatibility** — TUI input issues on non-Windows terminals (macOS, Termux)
 
 ## License
 

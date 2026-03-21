@@ -1,5 +1,7 @@
 # TELAUDE
 
+[한국어](./README.ko.md) | [日本語](./README.ja.md) | [Español](./README.es.md) | [Français](./README.fr.md)
+
 An open-source headless orchestration bridge that securely exposes the Claude Code CLI to Telegram, transforming standard messaging interfaces into fully-featured, multi-context developer workspaces.
 
 Built entirely on `claude -p` (pipe mode) — leveraging the CLI's native capabilities without any SDK hacks or unofficial APIs.

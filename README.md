@@ -195,12 +195,18 @@ Telaude automatically injects `TELAUDE_*` environment variables into all MCP ser
 [ Telegram Client ] (Real-time message edit)
 ```
 
-## Contributing
+## Planned / Help Wanted
 
-TELAUDE is fully open source. Contributions, bug reports, and cross-platform testing are welcome — especially for:
+- **Background agents** — Claude Code's background agent capability is powerful, but implementing it in pipe mode (`-p`) remains an open challenge. Ideas and contributions are welcome.
 - **macOS / Linux binary builds** — `build:exe` is currently Windows-only
 - **macOS Keychain integration** — OS-native encryption needs real-device testing
 - **Terminal compatibility** — TUI input issues on non-Windows terminals (macOS, Termux)
+
+## Contributing
+
+TELAUDE is fully open source. Contributions, bug reports, and cross-platform testing are welcome.
+
+We've opened a [discussion with the Anthropic team](https://github.com/anthropics/claude-code/issues/37045) about whether the `claude -p` pipe-mode approach is an officially supported integration pattern. Feedback and community input are appreciated.
 
 ## License
 

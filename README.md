@@ -203,3 +203,7 @@ TELAUDE is fully open source. Contributions, bug reports, and cross-platform tes
 ## License
 
 MIT
+
+---
+
+*TELAUDE was 100% built using Claude Code through Telegram — developed entirely via the system it creates.*

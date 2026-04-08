@@ -23,6 +23,7 @@ const HELP_TEXT = `<b>Telaude Commands</b>
 
 <b>Settings</b>
 /model [name] - View/change model
+/effort [level] - View/change effort (low/medium/high/max)
 /budget [amount] - View/set budget`;
 
 const DEV_SECTION = `

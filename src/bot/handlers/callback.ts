@@ -14,6 +14,7 @@ import { config } from '../../config.js';
 import { logger } from '../../utils/logger.js';
 import { botInstanceHash } from '../bot-instance.js';
 import { applyModel } from '../commands/model.js';
+import { applyEffort } from '../commands/effort.js';
 import { saveChapter } from '../../db/chapter-repo.js';
 
 export async function callbackHandler(ctx: Context): Promise<void> {
@@ -121,6 +122,18 @@ export async function callbackHandler(ctx: Context): Promise<void> {
     const result = applyModel(userId, chatId, threadId, modelName);
 
     await ctx.answerCallbackQuery({ text: `Model: ${modelName}` });
+    try {
+      await ctx.editMessageText(result, { parse_mode: 'HTML' });
+    } catch { /* message not modified — ignore */ }
+    return;
+  }
+
+  // effort:<value> — inline effort selection
+  if (data.startsWith('effort:')) {
+    const level = data.slice(7);
+    const result = applyEffort(userId, chatId, threadId, level);
+
+    await ctx.answerCallbackQuery({ text: `Effort: ${level}` });
     try {
       await ctx.editMessageText(result, { parse_mode: 'HTML' });
     } catch { /* message not modified — ignore */ }

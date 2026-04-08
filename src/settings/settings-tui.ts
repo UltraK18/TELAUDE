@@ -102,9 +102,16 @@ const TABS: Tab[] = [
 interface MenuItem {
   label: string;
   type: 'toggle' | 'select';
-  category: 'mcp' | 'mcp-tool' | 'tool' | 'telaude-tool' | 'model';
+  category: 'mcp' | 'mcp-tool' | 'tool' | 'telaude-tool' | 'model' | 'effort';
   key: string;
 }
+
+const EFFORT_OPTIONS = [
+  { label: 'Low', value: 'low' },
+  { label: 'Medium', value: 'medium' },
+  { label: 'High (default)', value: 'high' },
+  { label: 'Max', value: 'max' },
+];
 
 /** Group external MCP tools by server name */
 function groupToolsByServer(tools: string[]): Map<string, string[]> {
@@ -126,6 +133,9 @@ function buildTabItems(tabId: TabId, mcpServers: string[], externalMcpTools: str
     case 'model':
       for (const m of MODEL_OPTIONS) {
         items.push({ label: m.label, type: 'select', category: 'model', key: m.value });
+      }
+      for (const e of EFFORT_OPTIONS) {
+        items.push({ label: e.label, type: 'select', category: 'effort', key: e.value });
       }
       break;
     case 'mcp':
@@ -169,6 +179,15 @@ function formatLine(item: MenuItem, settings: TelaudeSettings, selected: boolean
     // Indent MCP tools under their server
     const indent = item.category === 'mcp-tool' ? '    ' : '';
     return `${cursor}${indent}${icon} ${item.label}`;
+  }
+
+  if (item.category === 'effort') {
+    const currentEffort = settings.effort ?? 'high';
+    const isActive = item.key === currentEffort;
+    const icon = isActive
+      ? '{green-fg}◉{/green-fg}'
+      : '{gray-fg}○{/gray-fg}';
+    return `${cursor}${icon} ${item.label}`;
   }
 
   // model select
@@ -232,9 +251,17 @@ function buildContentLines(items: MenuItem[], settings: TelaudeSettings, selecte
         }
       }
     }
-  } else {
-    // Model — flat list
-    for (let i = 0; i < items.length; i++) {
+  } else if (tabId === 'model') {
+    // Model section
+    pushHeader('Model');
+    const modelEnd = MODEL_OPTIONS.length;
+    for (let i = 0; i < modelEnd; i++) {
+      lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
+    }
+    // Effort section
+    pushSpacer();
+    pushHeader('Effort');
+    for (let i = modelEnd; i < items.length; i++) {
       lines.push({ text: formatLine(items[i], settings, i === selectedIdx), itemIdx: i });
     }
   }
@@ -274,6 +301,7 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
     disabledTools: [...proj.disabledTools],
     disabledMcpServers: [...proj.disabledMcpServers],
     model: sess?.model ?? null,
+    effort: sess?.effort ?? null,
   };
 
   const mcpServers = getMcpServers();
@@ -380,9 +408,15 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
         else settings.disabledTools.push(item.key);
       }
     } else if (item.type === 'select') {
-      settings.model = item.key;
-      const upRef = getUserProcessBySessionKey(editKey);
-      if (upRef) upRef.model = item.key;
+      if (item.category === 'effort') {
+        settings.effort = item.key;
+        const upRef = getUserProcessBySessionKey(editKey);
+        if (upRef) upRef.effort = item.key;
+      } else {
+        settings.model = item.key;
+        const upRef = getUserProcessBySessionKey(editKey);
+        if (upRef) upRef.model = item.key;
+      }
     }
 
     // Save
@@ -391,9 +425,10 @@ export function openSettingsScreen(screen: blessed.Widgets.Screen, chapterKey?: 
       disabledTools: [...settings.disabledTools],
       disabledMcpServers: [...settings.disabledMcpServers],
     };
-    if (settings.model) {
-      const current = sv2.sessions[editKey] ?? { model: null, mode: 'default' };
-      current.model = settings.model;
+    if (settings.model || settings.effort) {
+      const current = sv2.sessions[editKey] ?? { model: null, effort: null };
+      if (settings.model) current.model = settings.model;
+      if (settings.effort) current.effort = settings.effort;
       sv2.sessions[editKey] = current;
     }
     saveSettingsV2(sv2);

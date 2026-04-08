@@ -89,6 +89,7 @@ export function createBot(): Bot {
     { command: 'pwd', description: 'Current directory' },
     { command: 'projects', description: 'List allowed project paths' },
     { command: 'model', description: 'View/change model' },
+    { command: 'effort', description: 'View/change effort level' },
     { command: 'budget', description: 'Set token budget (USD)' },
     { command: 'compact', description: 'Compress context' },
     { command: 'history', description: 'Last 5 conversation turns' },

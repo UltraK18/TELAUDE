@@ -25,6 +25,7 @@ export interface UserProcess {
   sessionId: string | null;
   workingDir: string;
   model: string;
+  effort: string | null;
   isProcessing: boolean;
   lastActivity: number;
   /** Set to true when reload is requested — exit handler should re-spawn with same session */
@@ -104,6 +105,7 @@ export function createIsolatedProcess(
     sessionId: null,
     workingDir,
     model,
+    effort: null,
     isProcessing: false,
     lastActivity: Date.now(),
     reloadPending: false,
@@ -198,6 +200,7 @@ export function createUserProcess(
     sessionId: null,
     workingDir,
     model,
+    effort: null,
     isProcessing: false,
     lastActivity: Date.now(),
     reloadPending: false,
@@ -237,6 +240,7 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   const settings = resolveSettings(up.workingDir, chapterKey);
   // Priority: opts.model (scheduled tasks) > up.model (/model command) > settings.model (TUI) > fallback
   const model = opts?.model ?? up.model ?? settings.model ?? 'default';
+  const effort = up.effort ?? settings.effort;
 
   const args = [
     '--verbose',
@@ -248,6 +252,10 @@ export function spawnClaudeProcess(up: UserProcess, opts?: SpawnOptions): { proc
   // 'default' = let CLI use its native default model (currently Opus 4.6 1M)
   if (model !== 'default') {
     args.push('--model', model);
+  }
+
+  if (effort) {
+    args.push('--effort', effort);
   }
 
   if (opts?.isolated) {

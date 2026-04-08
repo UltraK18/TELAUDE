@@ -12,6 +12,7 @@ import { compactCommand } from './compact.js';
 import { historyCommand } from './history.js';
 import { scheduleCommand } from './schedule.js';
 import { contextCommand } from './context.js';
+import { effortCommand } from './effort.js';
 
 export function registerCommands(bot: Bot): void {
   bot.command('start', startCommand);
@@ -38,5 +39,6 @@ export function registerCommands(bot: Bot): void {
   bot.command('history', historyCommand);
   bot.command('schedule', scheduleCommand);
   bot.command('context', contextCommand);
+  bot.command('effort', effortCommand);
   // bot.command('usage', usageCommand); // disabled: -p mode doesn't support native /usage
 }

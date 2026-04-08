@@ -18,6 +18,7 @@ export interface ProjectSettings {
 /** Session-level settings (per chapterKey = userId:chatId:threadId) */
 export interface ChapterSettings {
   model: string | null;
+  effort: string | null;
 }
 
 /** Full hierarchical settings file */
@@ -33,6 +34,7 @@ export interface TelaudeSettings {
   disabledTools: string[];
   disabledMcpServers: string[];
   model: string | null;
+  effort: string | null;
 }
 
 const DEFAULT_ROOT: RootSettings = {
@@ -46,6 +48,7 @@ const DEFAULT_PROJECT: ProjectSettings = {
 
 const DEFAULT_CHAPTER: ChapterSettings = {
   model: null,
+  effort: null,
 };
 
 let cached: TelaudeSettingsV2 | null = null;
@@ -110,6 +113,7 @@ export function resolveSettings(workingDir: string, chapterKey: string): {
   disabledTools: string[];
   disabledMcpServers: string[];
   model: string | null;
+  effort: string | null;
 } {
   const s = loadSettingsV2();
   const proj = s.projects[workingDir] ?? DEFAULT_PROJECT;
@@ -118,6 +122,7 @@ export function resolveSettings(workingDir: string, chapterKey: string): {
     disabledTools: [...proj.disabledTools],
     disabledMcpServers: [...proj.disabledMcpServers],
     model: sess.model,
+    effort: sess.effort,
   };
 }
 

@@ -338,6 +338,7 @@ async function main(): Promise<void> {
   cleanStickerCache(); // clean on startup
   const cleanupInterval = setInterval(() => {
     cleanupIdleProcesses();
+    refreshScheduleDashboard();
   }, 60_000);
   setInterval(() => cleanStickerCache(), 24 * 60 * 60 * 1000); // daily
 
